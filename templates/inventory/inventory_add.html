@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block content %}
+{% load static %}
+<div class="content_section">
+    <form method="POST" action="">
+        {% csrf_token %}
+        <fieldset>
+            <legend class="border-bottom pd-2 mb-4 text-center">Add Product</legend>
+            
+            <div class="mb-3">
+                <label for="{{ form.name.id_for_label }}" class="form-label">Product Name</label>
+                <input type="text" name="name" class="form-control" id="{{ form.name.id_for_label }}" value="{{ form.name.value }}">
+            </div>
+            <div class="mb-3">
+                <label for="{{ form.cost.id_for_label }}" class="form-label">Cost</label>
+                <input type="number" step="0.01" name="cost" class="form-control" id="{{ form.cost.id_for_label }}" value="{{ form.cost.value }}">
+            </div>
+            <div class="mb-3">
+                <label for="{{ form.quantity_in_Stock.id_for_label }}" class="form-label">Quantity in Stock</label>
+                <input type="number" name="quantity_in_Stock" class="form-control" id="{{ form.quantity_in_Stock.id_for_label }}" value="{{ form.quantity_in_Stock.value }}">
+            </div>
+            <div class="mb-3">
+                <label for="{{ form.quantity_sold.id_for_label }}" class="form-label">Quantity Sold</label>
+                <input type="number" name="quantity_sold" class="form-control" id="{{ form.quantity_sold.id_for_label }}" value="{{ form.quantity_sold.value }}">
+            </div>
+            <div class="mb-3">
+                <label for="{{ form.description.id_for_label }}" class="form-label">Description</label>
+                <textarea name="description" class="form-control" id="{{ form.description.id_for_label }}">{{ form.description.value }}</textarea>
+            </div>
+            
+        </fieldset>
+        <div class="form-group pt-4">
+            <button type="submit" class="btn btn-outline-success">Add Product</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
