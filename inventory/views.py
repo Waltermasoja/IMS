@@ -4,12 +4,12 @@ from .models import inventory
 from django.contrib.auth.decorators import login_required
 from .forms import AddInventoryForm,UpdateInventoryForm
 from django.contrib import messages
-from django_pandas.io import read_frame
 import plotly
 import plotly.express as px
 import json
 import numpy
 import plotly.io
+from django_pandas.io import read_frame
 
 
 @login_required
@@ -35,7 +35,7 @@ def add_product(request):
             new_inventory = add_form.save(commit=False)
             new_inventory.sales = float(add_form.data['cost']) * float(add_form.data['quantity_sold'])
             new_inventory.save()
-            messages.success(request,"You have successfully added inventory")
+            messages.success(request,"Product successfully added")
             return redirect('/inventory/')
         
     else :
@@ -46,7 +46,7 @@ def add_product(request):
 def delete_inventory(request,pk):
     inventory_to_delete = get_object_or_404(inventory,pk=pk)
     inventory_to_delete.delete()
-    messages.danger(request,"You have successfully deleted product")
+    messages.warning(request,"Product deleted")
     return redirect('/inventory/')
 
 @login_required
@@ -59,7 +59,7 @@ def update_inventory(request,pk):
             inventory.cost = updateform.data['cost']
             inventory.quantity_in_Stock = updateform.data['quantity_in_Stock']
             inventory.quantity_sold = updateform.data['quantity_sold']
-            inventory_to_update.sales = float(updateform.data['cost']) *float(updateform.data['quantity_sold'])
+            inventory_to_update.sales = float(updateform.data['cost']) * float(updateform.data['quantity_sold'])
             inventory_to_update.save()
             messages.success(request,"You have successfully updated product")
             return redirect('/inventory/')
@@ -76,7 +76,7 @@ def dashboard(request):
     df = read_frame(inventories)
 
     sales_graph_data = df.groupby(by='last_sale_date',as_index=False,sort=False)['sales'].sum()
-    sales_graph = px.line(sales_graph_data,x='last_sale_date',y='sales',title='Sales Trend')
+    sales_graph = px.bar(sales_graph_data,x='last_sale_date',y='sales',title='Sales Trend')
     sales_graph = json.dumps(sales_graph,cls=plotly.utils.PlotlyJSONEncoder)
 
     best_performing_product_df = df.groupby(by='name').sum().sort_values(by='quantity_sold')
