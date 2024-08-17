@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+{% load static %}
+<div class="content_section">
+    <form method="POST" action="">
+        {% csrf_token %}
+        <fieldset>
+            <legend class="border-bottom pd-2 mb-4 text-center">Return {{inventory.name}}</legend>
+            
+            <div class="mb-3">
+                <label for="{{ form.quantity_returned.id_for_label }}" class="form-label">Quantity Returned</label>
+                <input type="number" name="quantity_returned" class="form-control" id="{{ form.quantity_returned.id_for_label }}" value="{{ form.quantity_returned.value }}">
+            </div>
+            <div class="mb-3">
+                <label for="{{ form.reason.id_for_label }}" class="form-label">Reason for Return</label>
+                <textarea name="reason" class="form-control" id="{{ form.reason.id_for_label }}">{{ form.reason.value }}</textarea>
+            </div>
+            
+        </fieldset>
+        <div class="form-group pt-4">
+            <button type="submit" class="btn btn-outline-success">Submit Return</button>
+        </div>
+    </form>
+</div>
+
+{% endblock content %}

@@ -93,8 +93,11 @@
             </div>
 
         </div>
-        <a class="btn btn-outline-success btn-sm  mb-2" href="{% url 'update_inventory' inventory.id %}">Update Inventory</a><br>
+        <a class="btn btn-outline-success btn-sm  mb-2" href="{% url 'update_inventory' inventory.id %}">Make a Sale</a><br>
+        <a class="btn btn-outline-success btn-sm mt-2" href="{% url 'returnInventory' inventory.id %}">Record a return</a><br>
+        <!-- <a class="btn btn-outline-success btn-sm mt-2" href="{% url 'damagedInventory' inventory.id %}">Record a damaged item</a><br> -->
         <a class="btn btn-outline-danger btn-sm mt-2" href="{% url 'delete_inventory' inventory.id %}">Delete Inventory</a>
+        
         
 
     </div>

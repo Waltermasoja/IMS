@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block content %}
+<div class="content_section">
+    <form method="POST" action="">
+        {% csrf_token %}
+        <fieldset>
+            <legend class="border-bottom pd-2 mb-4 text-center">Record Obsolete {{inventory.name}}</legend>
+            
+            <div class="mb-3">
+                <label for="{{ form.quantity_damaged.id_for_label }}" class="form-label">Quantity damaged</label>
+                <input type="number" name="quantity_damaged" class="form-control" id="{{ form.quantity_damaged.id_for_label }}" value="{{ form.damage_description.value }}">
+            </div>
+            <div class="mb-3">
+                <label for="{{ form.damage_description.id_for_label }}" class="form-label">Reason for Return</label>
+                <textarea name="reason" class="form-control" id="{{ form.damage_description.id_for_label }}">{{ form.damage_description.value }}</textarea>
+            </div>
+            
+        </fieldset>
+        <div class="form-group pt-4">
+            <button type="submit" class="btn btn-outline-success">Submit</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

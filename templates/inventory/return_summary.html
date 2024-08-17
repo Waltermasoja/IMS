@@ -1,0 +1,59 @@
+<!-- inventory/templates/inventory/return_summary.html -->
+
+{% extends 'base.html' %}
+{% block content %}
+{% load static %}
+<div class="content_section">
+    <h2 class="text-center">Return items Summary</h2>
+    <table class="table table-striped table-bordered">
+        <thead class="thead-dark">
+            <tr>
+                <th scope="col">Item</th>
+                <th scope="col">Quantity Returned</th>
+                <th scope="col">Reason</th>
+                <th scope="col">Return Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for return in returns %}
+                <tr>
+                    <td>{{ return.inventory_item.name }}</td>
+                    <td>{{ return.quantity_returned }}</td>
+                    <td>{{ return.reason }}</td>
+                    <td>{{ return.return_date }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <div class="alert alert-info" role="alert">
+        <p>Total Quantity Returned: <strong>{{ total_returns.total_quantity_returned }}</strong></p>
+    </div>
+
+    <div class="content_section">
+        <h2 class="text-center">Obsolete Items Summary</h2>
+        <table class="table table-striped table-bordered">
+            <thead class="thead-dark">
+                <tr>
+                    <th scope="col">Item</th>
+                    <th scope="col">Quantity Damaged</th>
+                    <th scope="col">Damage Description</th>
+                   
+                </tr>
+            </thead>
+            <tbody>
+                {% for damage in damages %}
+                    <tr>
+                        <td>{{ damage.inventory_item.name }}</td>
+                        <td>{{ damage.quantity_damaged }}</td>
+                        <td>{{ damage.damage_description }}</td>
+                       
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <!-- <div class="alert alert-info" role="alert">
+            <p>Total Quantity Damaged: <strong>{{ total_damages.total_quantity_damaged }}</strong></p>
+        </div> -->
+    <p class="text-center"><a href="{% url 'inventory' %}" class="btn btn-outline-primary">Back to Inventory List</a></p>
+</div>
+{% endblock %}
