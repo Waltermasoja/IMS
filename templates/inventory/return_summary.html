@@ -9,6 +9,8 @@
         <thead class="thead-dark">
             <tr>
                 <th scope="col">Item</th>
+                <th scope="col">Label</th>
+                <th scope="col">Size</th>
                 <th scope="col">Quantity Returned</th>
                 <th scope="col">Reason</th>
                 <th scope="col">Return Date</th>
@@ -18,6 +20,8 @@
             {% for return in returns %}
                 <tr>
                     <td>{{ return.inventory_item.name }}</td>
+                    <td>{{ return.label }}</td>
+                    <td>{{ return.size }}</td>
                     <td>{{ return.quantity_returned }}</td>
                     <td>{{ return.reason }}</td>
                     <td>{{ return.return_date }}</td>

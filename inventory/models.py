@@ -12,6 +12,8 @@ class inventory(models.Model):
     sell = models.DecimalField(max_digits=19,blank=True,decimal_places=2,default=0.00)
     cummulative_quantity_sold = models.IntegerField(default=0)
     cumulative_sales = models.DecimalField(max_digits=19, decimal_places=2, default=0.00)
+    size = models.PositiveIntegerField(default=0,blank=False,null=0)
+    label = models.TextField(max_length=255,default=None)
     
 
     def __str__(self) -> str:
@@ -22,10 +24,14 @@ class Return(models.Model):
     quantity_returned = models.IntegerField(blank=False,null=False)
     return_date = models.DateField(auto_now_add=True)
     reason = models.TextField()
+    size = models.PositiveIntegerField(default=0,blank=False,null=False)
+    label = models.TextField(max_length=255,default="")
 
     def __str__(self) -> str:
         return f'Return of {self.quantity_returned }{self.inventory_item.name}'
-from django.db import models
+    def save(self, *args, **kwargs):
+        self.size = self.inventory_item.size 
+        super(Return, self).save(*args, **kwargs)
 
 class Damaged(models.Model):
     inventory_item = models.ForeignKey('inventory', on_delete=models.CASCADE)
@@ -36,4 +42,14 @@ class Damaged(models.Model):
 
     def __str__(self):
         return f"{self.inventory_item.name} - {self.quantity_damaged} damaged"
-   
+from django.db import models
+
+class StockMovement(models.Model):
+    inventory_item = models.ForeignKey('inventory', on_delete=models.CASCADE)
+    stock_date = models.DateField(auto_now_add=True)
+    opening_stock = models.IntegerField()
+    closing_stock = models.IntegerField()
+
+    def __str__(self):
+        return f"{self.inventory_item.name} - {self.stock_date}"
+

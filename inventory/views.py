@@ -1,6 +1,6 @@
 from django.shortcuts import redirect, render,get_object_or_404
 import plotly.utils
-from .models import inventory,Return,Damaged
+from .models import inventory,Return,Damaged,StockMovement
 from django.contrib.auth.decorators import login_required
 from .forms import AddInventoryForm,UpdateInventoryForm,PeriodSummaryForm,DateRangeForm,ReturnInventoryForm,DamagedInventoryForm
 from django.contrib import messages
@@ -86,6 +86,7 @@ def update_inventory(request, pk):
             inventory_to_update.quantity_sold = updated_quantity_sold
             inventory_to_update.quantity_in_Stock -= updated_quantity_sold
             inventory_to_update.sales = updated_cost * updated_quantity_sold
+            inventory_to_update.size = inventory_to_update.size
 
             # Update cumulative fields
             inventory_to_update.cummulative_quantity_sold += updated_quantity_sold
@@ -255,3 +256,16 @@ def damagedInventory(request, pk):
         form = DamagedInventoryForm()
     
     return render(request, 'inventory/damaged_inventory.html', {'form': form, 'inventory': obsolete_inventory})
+
+@login_required
+def stock_movement_summary(request, pk):
+    inventory_items = get_object_or_404(inventory, pk=pk)
+    stock_movements = StockMovement.objects.filter(inventory_item=inventory_items).order_by('-stock_date')
+
+    context = {
+        'inventory_items': inventory_items,
+        'stock_movements': stock_movements,
+    }
+
+    return render(request, 'inventory/stock_movement_summary.html', context)
+

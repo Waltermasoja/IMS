@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Stock Movement Summary for {{ inventory_item.name }}</h2>
+
+<table class="table table-striped">
+    <thead class="thead-dark">
+        <tr>
+            <th>Date</th>
+            <th>Opening Stock</th>
+            <th>Closing Stock</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for movement in stock_movements %}
+        <tr>
+            <td>{{ movement.stock_date }}</td>
+            <td>{{ movement.opening_stock }}</td>
+            <td>{{ movement.closing_stock }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

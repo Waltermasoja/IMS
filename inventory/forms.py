@@ -5,12 +5,12 @@ from django import forms
 class AddInventoryForm(ModelForm):
     class Meta:
         model = inventory
-        fields = ['name','cost','quantity_in_Stock','quantity_sold','description']
+        fields = ['name','cost','quantity_in_Stock','quantity_sold','description','label','size']
 
 class UpdateInventoryForm(ModelForm):
     class Meta :
         model = inventory
-        fields = ['name', 'cost',  'quantity_sold','sell']
+        fields = ['name', 'cost','quantity_sold','sell','label','size']
 
 class PeriodSummaryForm(forms.Form):
     PERIOD_CHOICES = [ 
@@ -35,16 +35,6 @@ class ReturnInventoryForm(forms.ModelForm):
             raise forms.ValidationError("Quantity returned cannot be negative")
         return quaantity_returned 
 
-# class DamagedInventoryForm(forms.ModelForm):
-#     class Meta:
-#         model = Damaged
-#         fields = ['quantity_damaged','damage_description']
-
-#     def cleanQuantityReturned(self):
-#         quantity_damaged = self.cleaned_data.get('quantity_damaged')
-#         if quantity_damaged < 0 :
-#             raise forms.ValidationError("Quantity returned cannot be negative")
-#         return quantity_damaged   
 
 class DamagedInventoryForm(forms.ModelForm):
     class Meta:

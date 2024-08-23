@@ -30,10 +30,13 @@
                 <tr>
                     <th scope="col">#</th>
                     <th scope="col">Product Name</th>
+                    <th scope="col">Label</th>
+                    <th scope="col">Size</th>
                     <th scope="col">latest sales quantity</th>
                     <th scope="col">Latest sales amount</th>
                     <th scope="col">Cumulative Quantity Sold</th>
                     <th scope="col">Cumulative Sales</th>
+
                 </tr>
             </thead>
             <tbody>
@@ -41,6 +44,8 @@
                 <tr>
                     <th scope="row">{{ forloop.counter }}</th>
                     <td>{{ sale.name }}</td>
+                    <td>{{ sale.label }}</td>
+                    <td>{{ sale.size }}</td>
                     <td>{{ sale.total_quantity_sold }}</td>
                     <td>{{ sale.total_sales }}</td>
                     <td>{{ sale.cumulative_quantity_sold }}</td>

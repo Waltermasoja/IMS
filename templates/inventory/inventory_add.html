@@ -12,6 +12,15 @@
                 <input type="text" name="name" class="form-control" id="{{ form.name.id_for_label }}" value="{{ form.name.value }}">
             </div>
             <div class="mb-3">
+                <label for="{{ form.label.id_for_label }}" class="form-label">Label</label>
+                <input type="text" name="label" class="form-control" id="{{ form.label.id_for_label }}" value="{{ form.label.value }}">
+            </div>
+            <div class="mb-3">
+                <label for="{{ form.size.id_for_label }}" class="form-label">Size</label>
+                <input type="number" name="size" class="form-control" id="{{ form.size.id_for_label }}" value="{{ form.size.value }}">
+            </div>
+
+            <div class="mb-3">
                 <label for="{{ form.cost.id_for_label }}" class="form-label">Cost</label>
                 <input type="number" step="0.01" name="cost" class="form-control" id="{{ form.cost.id_for_label }}" value="{{ form.cost.value }}">
             </div>
@@ -23,6 +32,8 @@
                 <label for="{{ form.quantity_sold.id_for_label }}" class="form-label">Quantity Sold</label>
                 <input type="number" name="quantity_sold" class="form-control" id="{{ form.quantity_sold.id_for_label }}" value="{{ form.quantity_sold.value }}">
             </div>
+
+           
             <div class="mb-3">
                 <label for="{{ form.description.id_for_label }}" class="form-label">Description</label>
                 <textarea name="description" class="form-control" id="{{ form.description.id_for_label }}">{{ form.description.value }}</textarea>

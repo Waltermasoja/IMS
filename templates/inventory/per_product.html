@@ -21,6 +21,32 @@
         <div class="card m-4" style="width: 18rem;">
 
             <div class="card-body">
+                <h5 class="card-title text-center"> Size</h5>
+                <div style="font-size: 30px;" class="text-center">
+                    <!-- <span><i class="fas fa-dollar-sign"></i></span> -->
+                </div>
+                <div class="text-center">
+                    <h3>{{inventory.size}}</h3>
+                </div>
+            </div>
+            </div>
+    
+            <div class="card m-4" style="width: 18rem;">
+    
+                <div class="card-body">
+                    <h5 class="card-title text-center"> Label</h5>
+                    <div style="font-size: 30px;" class="text-center">
+                        <span><i class="fas fa-tags"></i></span>
+                    </div>
+                    <div class="text-center">
+                        <h3>{{inventory.label}}</h3>
+                    </div>
+                </div>
+                </div>
+
+        <div class="card m-4" style="width: 18rem;">
+
+            <div class="card-body">
                 <h5 class="card-title text-center"> Quantity in Stock</h5>
                 <div style="font-size: 30px;" class="text-center">
                     <span><i class="fas fa-warehouse"></i></span>
@@ -93,6 +119,8 @@
             </div>
 
         </div>
+
+         
         <a class="btn btn-outline-success btn-sm  mb-2" href="{% url 'update_inventory' inventory.id %}">Make a Sale</a><br>
         <a class="btn btn-outline-success btn-sm mt-2" href="{% url 'returnInventory' inventory.id %}">Record a return</a><br>
         <!-- <a class="btn btn-outline-success btn-sm mt-2" href="{% url 'damagedInventory' inventory.id %}">Record a damaged item</a><br> -->
