@@ -32,7 +32,6 @@ ALLOWED_HOSTS = ['127.0.0.1','ruitaiinvestments.co.zw','www.ruitaiinvestments.co
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -79,23 +78,23 @@ WSGI_APPLICATION = 'inventorySystem.wsgi.application'
 
 
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
-
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'ims_database',
-        'USER': 'Walter',
-        'PASSWORD': 'Walter6711',
-        'HOST': 'localhost',  
-        'PORT': '3306',       
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',
+#         'NAME': 'ims_database',
+#         'USER': 'Walter',
+#         'PASSWORD': 'Walter6711',
+#         'HOST': 'localhost',  
+#         'PORT': '3306',       
+#     }
+# }
 
 
 
