@@ -13,7 +13,7 @@ class inventory(models.Model):
     cummulative_quantity_sold = models.IntegerField(default=0)
     cumulative_sales = models.DecimalField(max_digits=19, decimal_places=2, default=0.00)
     size = models.PositiveIntegerField(default=0,blank=False,null=0)
-    label = models.TextField(max_length=255,default=None)
+    label = models.TextField(max_length=255,default=None,blank=True,null=True)
     
 
     def __str__(self) -> str:

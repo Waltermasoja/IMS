@@ -1,48 +1,89 @@
 {% extends 'base.html' %}
 {% block content %}
 {% load static %}
-<div class="content_section">
-    <form method="POST" action="">
-        {% csrf_token %}
-        <fieldset>
-            <legend class="border-bottom pd-2 mb-4 text-center">Add Product</legend>
+<div class="card shadow-sm">
+    <div class="card-body">
+        <form method="POST" action="">
+            {% csrf_token %}
+            <h3 class="card-title text-center mb-4">Add New Product</h3>
             
-            <div class="mb-3">
-                <label for="{{ form.name.id_for_label }}" class="form-label">Product Name</label>
-                <input type="text" name="name" class="form-control" id="{{ form.name.id_for_label }}" value="{{ form.name.value }}">
-            </div>
-            <div class="mb-3">
-                <label for="{{ form.label.id_for_label }}" class="form-label">Label</label>
-                <input type="text" name="label" class="form-control" id="{{ form.label.id_for_label }}" value="{{ form.label.value }}">
-            </div>
-            <div class="mb-3">
-                <label for="{{ form.size.id_for_label }}" class="form-label">Size</label>
-                <input type="number" name="size" class="form-control" id="{{ form.size.id_for_label }}" value="{{ form.size.value }}">
+            <div class="form-floating mb-3">
+                <input type="text" name="name" class="form-control" 
+                       id="{{ form.name.id_for_label }}" value="{{ form.name.value }}" placeholder="Product Name">
+                <label for="{{ form.name.id_for_label }}">Product Name</label>
             </div>
 
-            <div class="mb-3">
-                <label for="{{ form.cost.id_for_label }}" class="form-label">Cost</label>
-                <input type="number" step="0.01" name="cost" class="form-control" id="{{ form.cost.id_for_label }}" value="{{ form.cost.value }}">
-            </div>
-            <div class="mb-3">
-                <label for="{{ form.quantity_in_Stock.id_for_label }}" class="form-label">Quantity in Stock</label>
-                <input type="number" name="quantity_in_Stock" class="form-control" id="{{ form.quantity_in_Stock.id_for_label }}" value="{{ form.quantity_in_Stock.value }}">
-            </div>
-            <div class="mb-3">
-                <label for="{{ form.quantity_sold.id_for_label }}" class="form-label">Quantity Sold</label>
-                <input type="number" name="quantity_sold" class="form-control" id="{{ form.quantity_sold.id_for_label }}" value="{{ form.quantity_sold.value }}">
+            <div class="form-floating mb-3">
+                <input type="text" name="label" class="form-control" 
+                       id="{{ form.label.id_for_label }}" value="{{ form.label.value }}" placeholder="Label">
+                <label for="{{ form.label.id_for_label }}">Label</label>
             </div>
 
-           
-            <div class="mb-3">
-                <label for="{{ form.description.id_for_label }}" class="form-label">Description</label>
-                <textarea name="description" class="form-control" id="{{ form.description.id_for_label }}">{{ form.description.value }}</textarea>
+            <div class="form-floating mb-3">
+                <input type="number" name="size" class="form-control" 
+                       id="{{ form.size.id_for_label }}" value="{{ form.size.value }}" placeholder="Size">
+                <label for="{{ form.size.id_for_label }}">Size</label>
+            </div>
+
+            <div class="form-floating mb-3">
+                <input type="number" step="0.01" name="cost" class="form-control" 
+                       id="{{ form.cost.id_for_label }}" value="{{ form.cost.value }}" placeholder="Cost">
+                <label for="{{ form.cost.id_for_label }}">Cost</label>
+            </div>
+
+            <div class="form-floating mb-3">
+                <input type="number" name="quantity_in_Stock" class="form-control" 
+                       id="{{ form.quantity_in_Stock.id_for_label }}" value="{{ form.quantity_in_Stock.value }}" placeholder="Stock">
+                <label for="{{ form.quantity_in_Stock.id_for_label }}">Quantity in Stock</label>
+            </div>
+
+            <div class="form-floating mb-3">
+                <input type="number" name="quantity_sold" class="form-control" 
+                       id="{{ form.quantity_sold.id_for_label }}" value="{{ form.quantity_sold.value }}" placeholder="Sold">
+                <label for="{{ form.quantity_sold.id_for_label }}">Quantity Sold</label>
+            </div>
+
+            <div class="form-floating mb-4">
+                <textarea name="description" class="form-control" 
+                          id="{{ form.description.id_for_label }}" 
+                          style="height: 100px" 
+                          placeholder="Description">{{ form.description.value }}</textarea>
+                <label for="{{ form.description.id_for_label }}">Description</label>
             </div>
             
-        </fieldset>
-        <div class="form-group pt-4">
-            <button type="submit" class="btn btn-outline-success">Add Product</button>
-        </div>
-    </form>
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary btn-lg">Add Product</button>
+            </div>
+        </form>
+    </div>
 </div>
+
+<style>
+.card {
+    max-width: 500px;
+    margin: 2rem auto;
+    border-radius: 10px;
+    border: none;
+}
+
+.form-floating > label {
+    padding-left: 20px;
+}
+
+.form-control {
+    border-radius: 7px;
+    border: 1px solid #ced4da;
+}
+
+.form-control:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+}
+
+.btn-primary {
+    padding: 12px;
+    font-weight: 500;
+    border-radius: 7px;
+}
+</style>
 {% endblock %}

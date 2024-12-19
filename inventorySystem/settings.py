@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-*&gmmgruw$ra6j)8(=*m97@fs&t*n!a82461-p&z3mj&1&7(#0
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1','ruitaiinvestments.co.zw','www.ruitaiinvestments.co.zw','your-heroku-app-name.herokuapp.com']
+ALLOWED_HOSTS = ['127.0.0.1','ruitaiinvestments.co.zw','www.ruitaiinvestments.co.zw','your-heroku-app-name.herokuapp.com','192.168.13.129']
 
 
 # Application definition
@@ -80,23 +80,23 @@ WSGI_APPLICATION = 'inventorySystem.wsgi.application'
 
 
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
-
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'ims_database',
-        'USER': 'Walter',
-        'PASSWORD': 'Walter6711',
-        'HOST': 'localhost',  
-        'PORT': '3306',       
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',
+#         'NAME': 'ims_database',
+#         'USER': 'Walter',
+#         'PASSWORD': 'Walter6711',
+#         'HOST': 'localhost',  
+#         'PORT': '3306',       
+#     }
+# }
 
 
 
@@ -135,9 +135,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.0/howto/static-files/
 
 STATIC_URL = 'static/'
-STATICFILES_DIRS = (
-    os.path.join(BASE_DIR,'static'),
-)
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'static'),
+]
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
