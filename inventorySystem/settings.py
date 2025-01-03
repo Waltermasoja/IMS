@@ -27,7 +27,21 @@ SECRET_KEY = 'django-insecure-*&gmmgruw$ra6j)8(=*m97@fs&t*n!a82461-p&z3mj&1&7(#0
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1','ruitaiinvestments.co.zw','www.ruitaiinvestments.co.zw','your-heroku-app-name.herokuapp.com','192.168.13.129','ims-production-45b3.up.railway.app']
+# ... existing settings ...
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://ims-production-45b3.up.railway.app',
+    'http://127.0.0.1:8000',
+    'http://localhost:8000',
+]
+
+# If you also need to update ALLOWED_HOSTS
+ALLOWED_HOSTS = [
+    '127.0.0.1',
+    'localhost',
+    'ims-production-45b3.up.railway.app',
+    '.railway.app'  # Allows all railway.app subdomains
+]
 
 
 # Application definition
