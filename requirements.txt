@@ -13,7 +13,7 @@ django-resized==1.0.2
 django-tinymce==3.7.1
 gunicorn==21.2.0
 idna==3.6
-mysqlclient==2.2.6
+# mysqlclient==2.2.6
 numpy==1.26.4
 packaging==23.2
 pandas==2.2.3
