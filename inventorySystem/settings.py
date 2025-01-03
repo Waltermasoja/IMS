@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-*&gmmgruw$ra6j)8(=*m97@fs&t*n!a82461-p&z3mj&1&7(#0
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1','ruitaiinvestments.co.zw','www.ruitaiinvestments.co.zw','your-heroku-app-name.herokuapp.com','192.168.13.129']
+ALLOWED_HOSTS = ['127.0.0.1','ruitaiinvestments.co.zw','www.ruitaiinvestments.co.zw','your-heroku-app-name.herokuapp.com','192.168.13.129','ims-production-45b3.up.railway.app']
 
 
 # Application definition
