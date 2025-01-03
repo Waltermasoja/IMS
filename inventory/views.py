@@ -1,38 +1,32 @@
-from django.shortcuts import redirect, render,get_object_or_404
+from django.shortcuts import redirect, render, get_object_or_404
 import plotly.utils
-from .models import inventory,Return,Damaged,StockMovement
+from .models import Return, Damaged, StockMovement, Inventory
 from django.contrib.auth.decorators import login_required
-from .forms import AddInventoryForm,UpdateInventoryForm,PeriodSummaryForm,DateRangeForm,ReturnInventoryForm,DamagedInventoryForm,LoginForm
+from .forms import AddInventoryForm, UpdateInventoryForm, PeriodSummaryForm, DateRangeForm, ReturnInventoryForm, DamagedInventoryForm, LoginForm
 from django.contrib import messages
-import plotly
 import plotly.express as px
-import json
-import numpy
 import pandas as pd
-import plotly.io
-from django_pandas.io import read_frame
-from datetime import datetime,timedelta
-from django.db.models import Sum,Count
+from django.db.models import Sum
 from django.contrib.auth import login, authenticate
-
-
 
 @login_required
 def inventory_list(request):
-    inventories = inventory.objects.all()
-    context= {'title':'Inventory list',
-              'inventories':inventories}
-    return render(request,'inventory/inventory_list.html',context=context)
+    inventories = Inventory.objects.all()
+    context = {
+        'title': 'Inventory list',
+        'inventories': inventories
+    }
+    return render(request, 'inventory/inventory_list.html', context=context)
 
 @login_required
-def per_product_view(request,pk):
-    product = get_object_or_404(inventory,pk=pk)
+def per_product_view(request, pk):
+    product = get_object_or_404(Inventory, pk=pk)
     context = {
-        'inventory':product
+        'inventory': product
     }
+    return render(request, 'inventory/per_product.html', context)
 
-    return render(request,'inventory/per_product.html',context)
-@login_required 
+@login_required
 def add_product(request):
     if request.method == 'POST':
         add_form = AddInventoryForm(data=request.POST)
@@ -47,24 +41,25 @@ def add_product(request):
         add_form = AddInventoryForm()    
     
     return render(request,'inventory/inventory_add.html',{'form':add_form})
+
 @login_required
 def delete_inventory(request,pk):
-    inventory_to_delete = get_object_or_404(inventory,pk=pk)
+    inventory_to_delete = get_object_or_404(Inventory,pk=pk)
     inventory_to_delete.delete()
     messages.warning(request,"Product deleted")
     return redirect('/inventory/')
-
 
 from decimal import Decimal
 
 @login_required
 def update_inventory(request, pk):
-    inventory_to_update = get_object_or_404(inventory, pk=pk)
+    inventory_item = get_object_or_404(Inventory, id=pk)
     
     if request.method == 'POST':
-        updateform = UpdateInventoryForm(request.POST, instance=inventory_to_update)
+        updateform = UpdateInventoryForm(request.POST, instance=inventory_item)
         
         if updateform.is_valid():
+            print(updateform.cleaned_data)
             updated_quantity_sold = int(updateform.cleaned_data['quantity_sold'])
             sell = updateform.cleaned_data.get('sell', Decimal('0.00'))
             cost = updateform.cleaned_data.get('cost', Decimal('0.00'))
@@ -77,69 +72,74 @@ def update_inventory(request, pk):
             discount = (sell / Decimal('100.00')) * cost
             updated_cost = cost - discount
 
-            if inventory_to_update.quantity_in_Stock - updated_quantity_sold < 0:
+            if inventory_item.quantity_in_Stock - updated_quantity_sold < 0:
                 messages.error(request, "Not enough stock available.")
                 return render(request, 'inventory/inventory_update.html', {'form': updateform})
 
             # Update fields
-            inventory_to_update.name = updateform.cleaned_data['name']
-            inventory_to_update.cost = updated_cost
-            inventory_to_update.quantity_sold = updated_quantity_sold
-            inventory_to_update.quantity_in_Stock -= updated_quantity_sold
-            inventory_to_update.sales = updated_cost * updated_quantity_sold
-            inventory_to_update.size = inventory_to_update.size
+            inventory_item.name = updateform.cleaned_data['name']
+            inventory_item.cost = updated_cost
+            inventory_item.quantity_sold = updated_quantity_sold
+            inventory_item.quantity_in_Stock -= updated_quantity_sold
+            inventory_item.sales = updated_cost * updated_quantity_sold
+            inventory_item.size = inventory_item.size
 
             # Update cumulative fields
-            inventory_to_update.cummulative_quantity_sold += updated_quantity_sold
-            inventory_to_update.cumulative_sales += inventory_to_update.sales
+            inventory_item.cummulative_quantity_sold += updated_quantity_sold
+            inventory_item.cumulative_sales += inventory_item.sales
 
-            inventory_to_update.save()
+            inventory_item.save()
             messages.success(request, "Product successfully updated")
             return redirect('/inventory/')
+        else:
+            print("Form not valid")
     else:
-        updateform = UpdateInventoryForm(instance=inventory_to_update)
+        updateform = UpdateInventoryForm(instance=inventory_item)
     
     return render(request, 'inventory/inventory_update.html', {'form': updateform})
 
-
-
-
-
 @login_required
 def dashboard(request):
-    inventories = inventory.objects.all()
-    df = read_frame(inventories)
-    df['last_sale_date'] = pd.to_datetime(df['last_sale_date']).dt.date
-
-    sales_graph_data = df.groupby(by='last_sale_date',as_index=False,sort=False)['sales'].sum()
-    sales_graph_data['last_sale_date'] = pd.to_datetime(sales_graph_data['last_sale_date'])
-    sales_graph = px.bar(sales_graph_data,x='last_sale_date',y='sales',title='Sales Trend')
-    sales_graph = json.dumps(sales_graph,cls=plotly.utils.PlotlyJSONEncoder)
-
-
-    best_performing_product_df = df.groupby(by='name').sum().sort_values(by='quantity_sold')
-    best_performing_product = px.bar(best_performing_product_df,
-                                     x= best_performing_product_df.index,
-                                     y = best_performing_product_df.quantity_sold,
-                                     title='Best Performing Product')
+    # Get all inventory items
+    inventories = Inventory.objects.all()
     
-    best_performing_product = json.dumps(best_performing_product,cls=plotly.utils.PlotlyJSONEncoder)
-
-    most_stocked_df = df.groupby(by='name').sum().sort_values(by='quantity_in_Stock')
-    most_stocked = px.pie(most_stocked_df,
-                                     names= most_stocked_df.index,
-                                     values = most_stocked_df.quantity_in_Stock,
-                                     title='Most stocked')
+    # Convert to DataFrame
+    df = pd.DataFrame(list(inventories.values()))
     
-    most_stocked = json.dumps(most_stocked,cls=plotly.utils.PlotlyJSONEncoder)
+    # Best performing products (by sales)
+    if not df.empty and 'name' in df.columns and 'sales' in df.columns:
+        best_performing_product_df = df.nlargest(5, 'sales')[['name', 'sales']]
+        best_performing_product = px.bar(
+            best_performing_product_df,
+            x='name',
+            y='sales',
+            title='Best Performing Products'
+        )
+        best_performing_product_html = best_performing_product.to_html()
+    else:
+        best_performing_product_html = "<p>No data available for best performing products</p>"
+
+    # Most stocked products
+    if not df.empty and 'name' in df.columns and 'quantity_in_Stock' in df.columns:
+        most_stocked_df = df.nlargest(5, 'quantity_in_Stock')[['name', 'quantity_in_Stock']]
+        most_stocked = px.bar(
+            most_stocked_df,
+            x='name',
+            y='quantity_in_Stock',
+            title='Most Stocked Products'
+        )
+        most_stocked_html = most_stocked.to_html()
+    else:
+        most_stocked_html = "<p>No data available for stocked products</p>"
 
     context = {
-        'sales_graph' : sales_graph,
-        'best_performing_product': best_performing_product,
-        'most_stocked': most_stocked
+        'best_performing_product': best_performing_product_html,
+        'most_stocked': most_stocked_html,
+        'total_products': inventories.count(),
+        'low_stock': inventories.filter(quantity_in_Stock__lte=10).count(),
+        'out_of_stock': inventories.filter(quantity_in_Stock=0).count(),
     }
-
-    return render(request,'inventory/dashboard.html',context=context)
+    return render(request, 'inventory/dashboard.html', context)
 
 @login_required
 def sales_summary(request):
@@ -150,7 +150,7 @@ def sales_summary(request):
         end_date = form.cleaned_data['end_date']
         
         # Aggregate total sales and quantities per product with cumulative totals
-        sales_data = inventory.objects.filter(
+        sales_data = Inventory.objects.filter(
             last_sale_date__range=(start_date, end_date)
         ).values('name').annotate(
             total_quantity_sold=Sum('quantity_sold'),
@@ -158,32 +158,23 @@ def sales_summary(request):
             cumulative_quantity_sold=Sum('cummulative_quantity_sold'),
             cumulative_sales=Sum('cumulative_sales')
         ).order_by('name')
-
-        # Convert to DataFrame for display
-        df = pd.DataFrame(list(sales_data))
-        cumulative_sales_data = df.to_dict(orient='records')
-    
     else:
-        sales_data = inventory.objects.values('name').annotate(
+        sales_data = Inventory.objects.values('name').annotate(
             total_quantity_sold=Sum('quantity_sold'),
             total_sales=Sum('sales'),
             cumulative_quantity_sold=Sum('cummulative_quantity_sold'),
             cumulative_sales=Sum('cumulative_sales')
         ).order_by('name')
 
-        cumulative_sales_data = sales_data
-    
     context = {
         'form': form,
-        'sales_data': cumulative_sales_data
+        'sales_data': sales_data
     }
-    
     return render(request, 'inventory/sales_summary.html', context)
 
-
 @login_required
-def returnInventory(request,pk):
-    inventory_item = get_object_or_404(inventory,pk=pk)
+def returnInventory(request, pk):
+    inventory_item = get_object_or_404(Inventory, pk=pk)
     if request.method == 'POST':
         form = ReturnInventoryForm(request.POST)
         if form.is_valid():
@@ -193,14 +184,10 @@ def returnInventory(request,pk):
             inventory_item.save()
             return_instance.save()
             messages.success(request, f"Successfully returned {quantity_returned} item(s) of {inventory_item.name}")
-            return redirect('/inventory/')
-
-           
+            return redirect('inventory')
     else:
         form = ReturnInventoryForm()
-
-    return render(request,'inventory/return_inventory.html',{'form':form,'inventory':inventory_item})    
-
+    return render(request, 'inventory/return_inventory.html', {'form': form, 'inventory': inventory_item})
 
 @login_required
 def return_summary(request):
@@ -213,7 +200,6 @@ def return_summary(request):
     }
     return render(request,'inventory/return_summary.html',context)
 
-
 @login_required
 def obsolate_summary(request):
     damages = Damaged.objects.all().order_by('-return_date') 
@@ -225,49 +211,36 @@ def obsolate_summary(request):
     }
     return render(request,'inventory/damages_summary.html',context)
 
-
 @login_required
 def damagedInventory(request, pk):
-    obsolete_inventory = get_object_or_404(inventory, pk=pk)
-    
+    inventory_item = get_object_or_404(Inventory, pk=pk)
     if request.method == 'POST':
         form = DamagedInventoryForm(request.POST)
-        
         if form.is_valid():
             quantity_damaged = form.cleaned_data['quantity_damaged']
             damage_description = form.cleaned_data['damage_description']
-
-            # Create a Damaged instance
             damaged_instance = Damaged(
-                inventory_item=obsolete_inventory,
+                inventory_item=inventory_item,
                 quantity_damaged=quantity_damaged,
                 damage_description=damage_description
             )
             damaged_instance.save()
-
-            # Update the inventory
-            obsolete_inventory.quantity_in_Stock -= quantity_damaged
-            obsolete_inventory.save()
-
-            messages.success(request, f"{quantity_damaged} item(s) of {obsolete_inventory.name} successfully marked as damaged.")
-            return redirect('/inventory/')
-        else:
-            messages.error(request, "Form submission failed. Please check your input.")
+            inventory_item.quantity_in_Stock -= quantity_damaged
+            inventory_item.save()
+            messages.success(request, f"{quantity_damaged} item(s) of {inventory_item.name} successfully marked as damaged.")
+            return redirect('inventory')
     else:
         form = DamagedInventoryForm()
-    
-    return render(request, 'inventory/damaged_inventory.html', {'form': form, 'inventory': obsolete_inventory})
+    return render(request, 'inventory/damaged_inventory.html', {'form': form, 'inventory': inventory_item})
 
 @login_required
 def stock_movement_summary(request, pk):
-    inventory_items = get_object_or_404(inventory, pk=pk)
-    stock_movements = StockMovement.objects.filter(inventory_item=inventory_items).order_by('-stock_date')
-
+    inventory_item = get_object_or_404(Inventory, pk=pk)
+    stock_movements = StockMovement.objects.filter(inventory_item=inventory_item).order_by('-stock_date')
     context = {
-        'inventory_items': inventory_items,
+        'inventory_item': inventory_item,
         'stock_movements': stock_movements,
     }
-
     return render(request, 'inventory/stock_movement_summary.html', context)
 
 def login_view(request):
@@ -288,4 +261,67 @@ def login_view(request):
     else:
         form = LoginForm()
     return render(request, 'inventory_system/login.html', {'form': form})
+
+@login_required
+def add_inventory(request):
+    if request.method == 'POST':
+        form = AddInventoryForm(request.POST)
+        if form.is_valid():
+            inventory = form.save()
+            messages.success(request, f'Product "{inventory.name}" has been added successfully!')
+            return redirect('inventory')
+        else:
+            messages.error(request, 'Please correct the errors below.')
+    else:
+        form = AddInventoryForm()
+    return render(request, 'inventory/inventory_add.html', {'form': form})
+
+@login_required
+def update_inventory(request, pk):
+    inventory_item = get_object_or_404(Inventory, id=pk)
+    if request.method == 'POST':
+        form = UpdateInventoryForm(request.POST, instance=inventory_item)
+        if form.is_valid():
+            updated_item = form.save()
+            messages.success(request, f'Sale recorded for "{updated_item.name}"!')
+            return redirect('inventory')
+        else:
+            messages.error(request, 'Please correct the errors below.')
+    else:
+        form = UpdateInventoryForm(instance=inventory_item)
+    return render(request, 'inventory/inventory_update.html', {'form': form})
+
+@login_required
+def return_inventory(request, pk):
+    inventory_item = get_object_or_404(Inventory, id=pk)
+    if request.method == 'POST':
+        form = ReturnInventoryForm(request.POST)
+        if form.is_valid():
+            return_item = form.save(commit=False)
+            return_item.inventory = inventory_item
+            return_item.save()
+            messages.success(request, f'Return recorded for "{inventory_item.name}"')
+            return redirect('inventory')
+        else:
+            messages.error(request, 'Please correct the errors below.')
+    else:
+        form = ReturnInventoryForm()
+    return render(request, 'inventory/return.html', {'form': form, 'inventory': inventory_item})
+
+@login_required
+def damaged_inventory(request, pk):
+    inventory_item = get_object_or_404(Inventory, id=pk)
+    if request.method == 'POST':
+        form = DamagedInventoryForm(request.POST)
+        if form.is_valid():
+            damaged_item = form.save(commit=False)
+            damaged_item.inventory = inventory_item
+            damaged_item.save()
+            messages.success(request, f'Damage recorded for "{inventory_item.name}"')
+            return redirect('inventory')
+        else:
+            messages.error(request, 'Please correct the errors below.')
+    else:
+        form = DamagedInventoryForm()
+    return render(request, 'inventory/damaged.html', {'form': form, 'inventory': inventory_item})
 

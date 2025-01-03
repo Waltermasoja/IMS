@@ -1,55 +1,57 @@
 from django.db import models
+from django.utils import timezone
 
-class inventory(models.Model):
-    name = models.CharField(max_length=250,null=False,blank=False)
-    cost = models.DecimalField(max_digits=19,decimal_places=2,blank=False)
-    quantity_in_Stock = models.IntegerField(blank=False,null=False)
-    quantity_sold =models.IntegerField(blank=False,null=False)
-    sales = models.DecimalField(max_digits=19,decimal_places=2,blank=False)
-    stock_date = models.DateField(auto_now_add=True)
-    last_sale_date = models.DateField(auto_now=True)
-    description = models.TextField(default='stock Item')
-    sell = models.DecimalField(max_digits=19,blank=True,decimal_places=2,default=0.00)
+class Inventory(models.Model):
+    name = models.CharField(max_length=100)
+    cost = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity_in_Stock = models.IntegerField()
+    quantity_sold = models.IntegerField()
+    sales = models.DecimalField(max_digits=10, decimal_places=2)
+    last_sale_date = models.DateTimeField(default=timezone.now, null=True, blank=True)
+    description = models.TextField(blank=True)
+    label = models.CharField(max_length=50)
+    size = models.CharField(max_length=20)
     cummulative_quantity_sold = models.IntegerField(default=0)
-    cumulative_sales = models.DecimalField(max_digits=19, decimal_places=2, default=0.00)
-    size = models.PositiveIntegerField(default=0,blank=False,null=0)
-    label = models.TextField(max_length=255,default=None,blank=True,null=True)
-    
+    cumulative_sales = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    sell = models.DecimalField(max_digits=5, decimal_places=2, default=0)
 
-    def __str__(self) -> str:
+    def __str__(self):
         return self.name
-    
-class Return(models.Model):
-    inventory_item = models.ForeignKey(inventory,on_delete=models.CASCADE)
-    quantity_returned = models.IntegerField(blank=False,null=False)
-    return_date = models.DateField(auto_now_add=True)
-    reason = models.TextField()
-    size = models.PositiveIntegerField(default=0,blank=False,null=False)
-    label = models.TextField(max_length=255,default="")
 
-    def __str__(self) -> str:
-        return f'Return of {self.quantity_returned }{self.inventory_item.name}'
-    def save(self, *args, **kwargs):
-        self.size = self.inventory_item.size 
-        super(Return, self).save(*args, **kwargs)
+class Return(models.Model):
+    inventory_item = models.ForeignKey(Inventory, on_delete=models.CASCADE)
+    quantity_returned = models.IntegerField()
+    return_date = models.DateTimeField(default=timezone.now)
+    reason = models.TextField()
+
+    def __str__(self):
+        return f"{self.quantity_returned} {self.inventory_item.name}(s) returned"
 
 class Damaged(models.Model):
-    inventory_item = models.ForeignKey('inventory', on_delete=models.CASCADE)
-    quantity_damaged = models.PositiveIntegerField()
+    inventory_item = models.ForeignKey(Inventory, on_delete=models.CASCADE)
+    quantity_damaged = models.IntegerField()
     damage_description = models.TextField()
-   
-  
+    return_date = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
-        return f"{self.inventory_item.name} - {self.quantity_damaged} damaged"
-from django.db import models
+        return f"{self.quantity_damaged} {self.inventory_item.name}(s) damaged"
 
 class StockMovement(models.Model):
-    inventory_item = models.ForeignKey('inventory', on_delete=models.CASCADE)
-    stock_date = models.DateField(auto_now_add=True)
-    opening_stock = models.IntegerField()
-    closing_stock = models.IntegerField()
+    MOVEMENT_CHOICES = [
+        ('in', 'Stock In'),
+        ('out', 'Stock Out')
+    ]
+    
+    inventory_item = models.ForeignKey(Inventory, on_delete=models.CASCADE)
+    movement_type = models.CharField(
+        max_length=20, 
+        choices=MOVEMENT_CHOICES,
+        default='in'
+    )
+    quantity = models.IntegerField(default=0)
+    stock_date = models.DateTimeField(default=timezone.now)
+    notes = models.TextField(blank=True)
 
     def __str__(self):
-        return f"{self.inventory_item.name} - {self.stock_date}"
+        return f"{self.movement_type}: {self.quantity} {self.inventory_item.name}(s)"
 
