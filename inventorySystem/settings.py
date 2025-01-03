@@ -27,7 +27,6 @@ SECRET_KEY = 'django-insecure-*&gmmgruw$ra6j)8(=*m97@fs&t*n!a82461-p&z3mj&1&7(#0
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-# ... existing settings ...
 
 CSRF_TRUSTED_ORIGINS = [
     'https://ims-production-45b3.up.railway.app',
@@ -55,7 +54,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'inventory.apps.InventoryConfig',
     'crispy_forms',
-    'bootstrap4'
+    'bootstrap4',
+    'crispy_bootstrap4'
 ]
 
 MIDDLEWARE = [
@@ -159,6 +159,7 @@ STATICFILES_DIRS = [
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CRISPY_TEMPLATE_PACK = 'bootstrap4'
+CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap4"
 
-LOGIN_REDIRECT_URL = '/inventory'
+LOGIN_REDIRECT_URL = 'inventory'
 LOGIN_URL = 'login'

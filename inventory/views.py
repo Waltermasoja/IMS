@@ -2,7 +2,7 @@ from django.shortcuts import redirect, render,get_object_or_404
 import plotly.utils
 from .models import inventory,Return,Damaged,StockMovement
 from django.contrib.auth.decorators import login_required
-from .forms import AddInventoryForm,UpdateInventoryForm,PeriodSummaryForm,DateRangeForm,ReturnInventoryForm,DamagedInventoryForm
+from .forms import AddInventoryForm,UpdateInventoryForm,PeriodSummaryForm,DateRangeForm,ReturnInventoryForm,DamagedInventoryForm,LoginForm
 from django.contrib import messages
 import plotly
 import plotly.express as px
@@ -13,6 +13,7 @@ import plotly.io
 from django_pandas.io import read_frame
 from datetime import datetime,timedelta
 from django.db.models import Sum,Count
+from django.contrib.auth import login, authenticate
 
 
 
@@ -268,4 +269,23 @@ def stock_movement_summary(request, pk):
     }
 
     return render(request, 'inventory/stock_movement_summary.html', context)
+
+def login_view(request):
+    if request.method == 'POST':
+        form = LoginForm(request, data=request.POST)
+        if form.is_valid():
+            username = form.cleaned_data.get('username')
+            password = form.cleaned_data.get('password')
+            user = authenticate(username=username, password=password)
+            if user is not None:
+                login(request, user)
+                messages.success(request, f'Welcome back {username}!')
+                return redirect('inventory')  # or wherever you want to redirect after login
+            else:
+                messages.error(request, 'Invalid username or password.')
+        else:
+            messages.error(request, 'Invalid username or password.')
+    else:
+        form = LoginForm()
+    return render(request, 'inventory_system/login.html', {'form': form})
 

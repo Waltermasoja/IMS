@@ -1,9 +1,12 @@
+/* Reset and base styles */
 body {
     margin: 0;
     padding: 0;
     min-height: 100vh;
+    overflow-x: hidden;
 }
 
+/* Wrapper styles */
 .wrapper {
     display: flex;
     width: 100%;
@@ -11,35 +14,55 @@ body {
     min-height: 100vh;
 }
 
+/* Sidebar styles */
 #sidebar {
     min-width: 250px !important;
     max-width: 250px !important;
     min-height: 100vh !important;
+    background: #343a40 !important;
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
     padding: 20px !important;
-    z-index: 999 !important;
+    z-index: 1000 !important;
 }
 
+/* Content styles */
 #content {
-    margin-top: 100px !important;
-    margin-left: 250px;
-    width: 100%;
-    padding: 20px;
+    width: calc(100% - 250px) !important;
+    margin-left: 250px !important;
+    padding: 20px !important;
+    min-height: 100vh !important;
 }
 
-.sidebar-header {
+/* Sidebar navigation styles */
+#sidebar .sidebar-header {
     padding-bottom: 20px;
+}
+
+#sidebar ul.components {
+    padding: 20px 0;
 }
 
 #sidebar ul li a {
     padding: 10px;
     display: block;
+    color: #fff !important;
     text-decoration: none;
 }
 
 #sidebar ul li a:hover {
-    background: #343a40;
+    background: #495057;
+    color: #fff;
+}
+
+/* Make sure sidebar is visible on mobile */
+@media (max-width: 768px) {
+    #sidebar {
+        margin-left: 0 !important;
+    }
+    #content {
+        margin-left: 0 !important;
+    }
 }
 

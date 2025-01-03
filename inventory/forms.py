@@ -1,6 +1,7 @@
 from django.forms import ModelForm
 from .models import inventory,Return,Damaged
 from django import forms
+from django.contrib.auth.forms import AuthenticationForm
 
 class AddInventoryForm(ModelForm):
     class Meta:
@@ -46,3 +47,9 @@ class DamagedInventoryForm(forms.ModelForm):
         if quantity_damaged < 0:
             raise forms.ValidationError("Quantity damaged cannot be negative")
         return quantity_damaged
+
+class LoginForm(AuthenticationForm):
+    username = forms.CharField(widget=forms.TextInput(
+        attrs={'class': 'form-control', 'placeholder': 'Username'}))
+    password = forms.CharField(widget=forms.PasswordInput(
+        attrs={'class': 'form-control', 'placeholder': 'Password'}))
