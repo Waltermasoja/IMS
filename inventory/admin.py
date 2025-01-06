@@ -1,4 +1,4 @@
 from django.contrib import admin
-from .models import inventory
+from .models import Inventory
 
-admin.site.register(inventory)
+admin.site.register(Inventory)

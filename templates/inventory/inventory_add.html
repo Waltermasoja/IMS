@@ -5,36 +5,110 @@
 <div class="container-fluid">
     <div class="card shadow-sm">
         <div class="card-body">
-            <h3 class="card-title mb-4">Add New Product</h3>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h3 class="card-title">Add New Product</h3>
+            </div>
 
             {% include 'inventory/includes/form_errors.html' %}
 
-            <form method="post">
+            <form method="post" class="needs-validation">
                 {% csrf_token %}
-                {% for field in form %}
-                    <div class="mb-3">
-                        <label for="{{ field.id_for_label }}" class="form-label">
-                            {{ field.label }}
-                        </label>
-                        {{ field|addclass:'form-control' }}
-                        {% if field.help_text %}
-                            <small class="form-text text-muted">{{ field.help_text }}</small>
-                        {% endif %}
-                        {% if field.errors %}
-                            <div class="invalid-feedback d-block">
-                                {% for error in field.errors %}
-                                    {{ error }}
-                                {% endfor %}
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="{{ form.name.id_for_label }}" class="form-label">Product Name</label>
+                            {{ form.name|addclass:'form-control' }}
+                            {% if form.name.errors %}
+                                <div class="invalid-feedback d-block">{{ form.name.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.bought_from.id_for_label }}" class="form-label">Bought From</label>
+                            {{ form.bought_from|addclass:'form-control' }}
+                            {% if form.bought_from.errors %}
+                                <div class="invalid-feedback d-block">{{ form.bought_from.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.purchase_price.id_for_label }}" class="form-label">Purchase Price</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                {{ form.purchase_price|addclass:'form-control' }}
                             </div>
-                        {% endif %}
+                            {% if form.purchase_price.errors %}
+                                <div class="invalid-feedback d-block">{{ form.purchase_price.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.selling_price.id_for_label }}" class="form-label">Selling Price</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                {{ form.selling_price|addclass:'form-control' }}
+                            </div>
+                            {% if form.selling_price.errors %}
+                                <div class="invalid-feedback d-block">{{ form.selling_price.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.quantity_in_Stock.id_for_label }}" class="form-label">Initial Stock</label>
+                            {{ form.quantity_in_Stock|addclass:'form-control' }}
+                            {% if form.quantity_in_Stock.errors %}
+                                <div class="invalid-feedback d-block">{{ form.quantity_in_Stock.errors }}</div>
+                            {% endif %}
+                        </div>
                     </div>
-                {% endfor %}
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-plus-circle me-2"></i>Add Product
-                </button>
-                <a href="{% url 'inventory' %}" class="btn btn-secondary ms-2">
-                    <i class="fas fa-times-circle me-2"></i>Cancel
-                </a>
+
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="{{ form.label.id_for_label }}" class="form-label">Label</label>
+                            {{ form.label|addclass:'form-control' }}
+                            {% if form.label.errors %}
+                                <div class="invalid-feedback d-block">{{ form.label.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.size.id_for_label }}" class="form-label">Size</label>
+                            {{ form.size|addclass:'form-control' }}
+                            {% if form.size.errors %}
+                                <div class="invalid-feedback d-block">{{ form.size.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="{{ form.description.id_for_label }}" class="form-label">Description</label>
+                            {{ form.description|addclass:'form-control' }}
+                            {% if form.description.errors %}
+                                <div class="invalid-feedback d-block">{{ form.description.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="form-check">
+                                {{ form.on_sale|addclass:'form-check-input' }}
+                                <label class="form-check-label" for="{{ form.on_sale.id_for_label }}">
+                                    On Sale
+                                </label>
+                            </div>
+                            {% if form.on_sale.errors %}
+                                <div class="invalid-feedback d-block">{{ form.on_sale.errors }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus-circle me-2"></i>Add Product
+                    </button>
+                    <a href="{% url 'inventory' %}" class="btn btn-outline-secondary ms-2">
+                        <i class="fas fa-times-circle me-2"></i>Cancel
+                    </a>
+                </div>
             </form>
         </div>
     </div>
@@ -44,6 +118,17 @@
 .card {
     border: none;
     border-radius: 15px;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.card-body {
+    padding: 2rem;
+}
+
+.form-control {
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    border: 1px solid #ced4da;
 }
 
 .form-control:focus {
@@ -51,14 +136,36 @@
     box-shadow: 0 0 0 0.2rem rgba(0, 136, 204, 0.25);
 }
 
+.input-group-text {
+    background-color: #f8f9fa;
+    border-radius: 8px 0 0 8px;
+}
+
 .invalid-feedback {
-    color: #dc3545;
     font-size: 0.875rem;
+    color: #dc3545;
 }
 
 .btn {
-    padding: 0.5rem 1rem;
+    padding: 0.75rem 1.5rem;
     border-radius: 8px;
+    font-weight: 500;
+}
+
+.btn-primary {
+    background-color: var(--primary-blue);
+    border-color: var(--primary-blue);
+}
+
+.btn-primary:hover {
+    background-color: var(--dark-blue);
+    border-color: var(--dark-blue);
+}
+
+.form-label {
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 0.5rem;
 }
 </style>
 {% endblock %}

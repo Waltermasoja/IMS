@@ -1,13 +1,16 @@
 from django.db import models
 from django.utils import timezone
 
-class inventory(models.Model):
+class Inventory(models.Model):
+    bought_from = models.CharField(max_length=100)
     name = models.CharField(max_length=100)
-    cost = models.DecimalField(max_digits=10, decimal_places=2)
+    purchase_price = models.DecimalField(max_digits=10, decimal_places=2)
+    selling_price = models.DecimalField(max_digits=10, decimal_places=2)
     quantity_in_Stock = models.IntegerField()
     description = models.TextField(blank=True)
     label = models.CharField(max_length=50)
     size = models.CharField(max_length=20)
+    on_sale = models.BooleanField(default=True)
     created_date = models.DateTimeField(auto_now_add=True)
     last_updated = models.DateTimeField(auto_now=True)
     last_sale_date = models.DateTimeField(null=True, blank=True)
@@ -50,7 +53,7 @@ class Sales(models.Model):
         return f"Sale of {self.quantity_sold} {self.inventory_item.name}(s) on {self.sale_date.date()}"
 
 class Return(models.Model):
-    inventory_item = models.ForeignKey(inventory,on_delete=models.CASCADE)
+    inventory_item = models.ForeignKey(Inventory,on_delete=models.CASCADE)
     quantity_returned = models.IntegerField(blank=False,null=False)
     return_date = models.DateField(auto_now_add=True)
     reason = models.TextField()
@@ -75,7 +78,7 @@ class Damaged(models.Model):
 from django.db import models
 
 class StockMovement(models.Model):
-    inventory_item = models.ForeignKey(inventory, on_delete=models.CASCADE)
+    inventory_item = models.ForeignKey(Inventory, on_delete=models.CASCADE)
     movement_type = models.CharField(max_length=3, choices=[('IN', 'In'), ('OUT', 'Out')])
     quantity = models.IntegerField(blank=True,null=True)
     reason = models.CharField(max_length=200,blank=True,null=True)
@@ -86,4 +89,10 @@ class StockMovement(models.Model):
 
     class Meta:
         ordering = ['-stock_date']
+
+class missing_inventory(models.Model):
+    inventory_item = models.ForeignKey(Inventory, on_delete=models.CASCADE)
+    quantity_missing = models.IntegerField()
+    missing_date = models.DateTimeField(auto_now_add=True)
+    reason = models.TextField()
 

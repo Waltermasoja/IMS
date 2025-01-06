@@ -1,6 +1,6 @@
 from django.shortcuts import redirect, render,get_object_or_404
 import plotly.utils
-from .models import inventory, Return, Damaged, StockMovement, Sales
+from .models import Inventory, Return, Damaged, StockMovement, Sales, missing_inventory
 from django.contrib.auth.decorators import login_required
 from .forms import AddInventoryForm,UpdateInventoryForm,PeriodSummaryForm,DateRangeForm,ReturnInventoryForm,DamagedInventoryForm,LoginForm
 from django.contrib import messages
@@ -22,12 +22,12 @@ from django.utils import timezone
 
 @login_required
 def inventory_list(request):
-    inventories = inventory.objects.all()
+    inventories = Inventory.objects.all()
     
-    # Annotate each inventory item with its sales data
+    # Renamed annotations to avoid conflicts with model properties
     inventories = inventories.annotate(
-        sales_amount=Sum('sales_records__total_amount'),
-        latest_sale=Max('sales_records__sale_date')
+        total_sales_amount=Sum('sales_records__total_amount'),  # Changed from sales_amount
+        latest_sale_date=Max('sales_records__sale_date')       # Changed from latest_sale
     )
     
     context = {
@@ -37,7 +37,7 @@ def inventory_list(request):
 
 @login_required
 def per_product_view(request,pk):
-    product = get_object_or_404(inventory,pk=pk)
+    product = get_object_or_404(Inventory,pk=pk)
     context = {
         'inventory':product
     }
@@ -46,12 +46,12 @@ def per_product_view(request,pk):
 @login_required 
 def add_product(request):
     if request.method == 'POST':
-        add_form = AddInventoryForm(request.POST)
-        if add_form.is_valid():
-            new_inventory = add_form.save(commit=False)
+        form = AddInventoryForm(request.POST)
+        if form.is_valid():
+            new_inventory = form.save(commit=False)
             new_inventory.save()
             
-            # Create stock movement record with correct field names
+            # Create stock movement record
             StockMovement.objects.create(
                 inventory_item=new_inventory,
                 movement_type='IN',
@@ -59,18 +59,18 @@ def add_product(request):
                 reason='Initial Stock'
             )
             
-            messages.success(request, 'Product added successfully!')
+            messages.success(request, f'Product "{new_inventory.name}" added successfully!')
             return redirect('inventory')
     else:
-        add_form = AddInventoryForm()
+        form = AddInventoryForm()
     
     return render(request, 'inventory/inventory_add.html', {
-        'form': add_form,
-        'title': 'Add Product'
+        'form': form,
+        'title': 'Add New Product'
     })
 @login_required
 def delete_inventory(request,pk):
-    inventory_to_delete = get_object_or_404(inventory,pk=pk)
+    inventory_to_delete = get_object_or_404(Inventory,pk=pk)
     inventory_to_delete.delete()
     messages.warning(request,"Product deleted")
     return redirect('/inventory/')
@@ -80,7 +80,7 @@ from decimal import Decimal
 
 @login_required
 def update_inventory(request, pk):
-    inventory_item = get_object_or_404(inventory, pk=pk)
+    inventory_item = get_object_or_404(Inventory, pk=pk)
     
     if request.method == 'POST':
         form = UpdateInventoryForm(request.POST)
@@ -112,7 +112,7 @@ def update_inventory(request, pk):
             return redirect('inventory')
     else:
         initial_data = {
-            'sale_price': inventory_item.cost,  # Set initial sale price to cost
+            'sale_price': inventory_item.selling_price,  # Set initial sale price to cost
             'quantity_sold': 1,  # Default quantity
             'discount_applied': 0  # Default discount
         }
@@ -130,7 +130,7 @@ def update_inventory(request, pk):
 @login_required
 def dashboard(request):
     # Get all inventory items
-    inventories = inventory.objects.all()
+    inventories = Inventory.objects.all()
     
     # Get sales data
     sales_data = Sales.objects.all()
@@ -249,7 +249,7 @@ def sales_summary(request):
 
 @login_required
 def returnInventory(request,pk):
-    inventory_item = get_object_or_404(inventory,pk=pk)
+    inventory_item = get_object_or_404(Inventory,pk=pk)
     if request.method == 'POST':
         form = ReturnInventoryForm(request.POST)
         if form.is_valid():
@@ -294,7 +294,7 @@ def obsolate_summary(request):
 
 @login_required
 def damagedInventory(request, pk):
-    obsolete_inventory = get_object_or_404(inventory, pk=pk)
+    obsolete_inventory = get_object_or_404(Inventory, pk=pk)
     
     if request.method == 'POST':
         form = DamagedInventoryForm(request.POST)
@@ -326,7 +326,7 @@ def damagedInventory(request, pk):
 
 @login_required
 def stock_movement_summary(request, pk):
-    inventory_items = get_object_or_404(inventory, pk=pk)
+    inventory_items = get_object_or_404(Inventory, pk=pk)
     stock_movements = StockMovement.objects.filter(inventory_item=inventory_items).order_by('-stock_date')
 
     context = {
@@ -351,7 +351,7 @@ def login_view(request):
 
 def search(request):
     query = request.GET.get('q')
-    results = inventory.objects.filter(name__icontains=query)
+    results = Inventory.objects.filter(name__icontains=query)
     return render(request, 'inventory/search_results.html', {'results': results})
 
 @login_required
@@ -363,7 +363,7 @@ def logout_view(request):
 def search_results(request):
     query = request.GET.get('q', '')
     if query:
-        results = inventory.objects.filter(
+        results = Inventory.objects.filter(
             Q(name__icontains=query) |
             Q(description__icontains=query) |
             Q(label__icontains=query) |

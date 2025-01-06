@@ -41,17 +41,17 @@
                                     <span class="badge bg-success">{{ inventory.quantity_in_Stock }} in Stock</span>
                                 {% endif %}
                             </td>
-                            <td>${{ inventory.cost }}</td>
+                            <td>${{ inventory.selling_price }}</td>
                             <td>
-                                {% if inventory.sales_amount %}
-                                    ${{ inventory.sales_amount|floatformat:2 }}
+                                {% if inventory.total_sales_amount %}
+                                    ${{ inventory.total_sales_amount|floatformat:2 }}
                                 {% else %}
                                     $0.00
                                 {% endif %}
                             </td>
                             <td>
-                                {% if inventory.latest_sale %}
-                                    {{ inventory.latest_sale|date:"M d, Y" }}
+                                {% if inventory.latest_sale_date %}
+                                    {{ inventory.latest_sale_date|date:"M d, Y" }}
                                 {% else %}
                                     No sales yet
                                 {% endif %}
