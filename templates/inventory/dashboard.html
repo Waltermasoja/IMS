@@ -1,50 +1,51 @@
-{% extends '../base.html' %}
+{% extends 'base.html' %}
 
 {% block content %}
-<div class="content_section">
-    <div class="row mx-auto justify-content-center">
-
-        <div class="card m-4" style="width: 90%;">
-
-            <div class="card-body">
-                <div id="chart1">
-
+<div class="container-fluid">
+    <!-- Stats Cards Row -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Products</h5>
+                    <h2 class="card-text">{{ total_products }}</h2>
                 </div>
             </div>
         </div>
-
-        <div class="card m-4" style="width: 90%;">
-
-            <div class="card-body">
-                <div id="chart2">
-
+        <div class="col-md-4">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <h5 class="card-title">Low Stock Items</h5>
+                    <h2 class="card-text">{{ low_stock }}</h2>
                 </div>
             </div>
         </div>
-
-        <div class="card m-4" style="width: 90%;">
-
-            <div class="card-body">
-                <div id="chart3">
-
+        <div class="col-md-4">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Out of Stock</h5>
+                    <h2 class="card-text">{{ out_of_stock }}</h2>
                 </div>
             </div>
         </div>
+    </div>
 
-
+    <!-- Graphs Row -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    {{ best_performing_product|safe }}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    {{ most_stocked|safe }}
+                </div>
+            </div>
+        </div>
     </div>
 </div>
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-<script type="text/javascript">
-    
-    graph1 = {{sales_graph | safe}}
-    Plotly.plot('chart1',graph1, {})
-    
-    graph2 = {{best_performing_product | safe}}
-    Plotly.plot('chart2',graph2, {})
-
-    graph3 = {{ most_stocked | safe}}
-    Plotly.plot('chart3',graph3, {})
-
-</script>
 {% endblock %}

@@ -17,7 +17,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.shortcuts import redirect
-from inventory.views import login_view
+from inventory.views import login_view, logout_view
 from django.contrib.auth import views as auth_views
 
 def redirect_to_login(request):
@@ -28,5 +28,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('inventory/', include('inventory.urls')),
     path('login/', login_view, name='login'),
-    path('logout/', auth_views.LogoutView.as_view(next_page='login'), name='logout'),
+    path('logout/', logout_view, name='logout'),
 ]

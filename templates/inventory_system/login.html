@@ -1,39 +1,126 @@
-{% extends 'base.html' %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Stock Management System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    {% load static %}
+    <style>
+        :root {
+            --primary-blue: #0088cc;
+            --light-blue: #e3f2fd;
+            --dark-blue: #004466;
+            --accent-blue: #66c2ff;
+        }
 
-{% block content %}
-<div class="card shadow-sm">
-    <div class="card-body">
-        <h3 class="card-title text-center mb-4">Login</h3>
+        body {
+            background: linear-gradient(135deg, var(--light-blue), var(--accent-blue));
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .login-header h1 {
+            color: var(--primary-blue);
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .login-header p {
+            color: #666;
+            margin-bottom: 0;
+        }
+
+        .form-floating {
+            margin-bottom: 1rem;
+        }
+
+        .form-control:focus {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 0.2rem rgba(0, 136, 204, 0.25);
+        }
+
+        .btn-login {
+            background: var(--primary-blue);
+            border: none;
+            padding: 0.8rem;
+            font-size: 1.1rem;
+            font-weight: 500;
+            width: 100%;
+            margin-top: 1rem;
+        }
+
+        .btn-login:hover {
+            background: var(--dark-blue);
+        }
+
+        .alert {
+            border-radius: 10px;
+            margin-bottom: 1rem;
+        }
+
+        .brand-logo {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 1rem;
+        }
+
+        .form-icon {
+            color: var(--primary-blue);
+            margin-right: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-header">
+            <!-- <img src="{% static 'images/logo.png' %}" alt="Logo" class="brand-logo"> -->
+            <h1>Welcome Back</h1>
+            <p>Please login to continue</p>
+        </div>
+
         {% if messages %}
             {% for message in messages %}
-                <div class="alert alert-{{ message.tags }}">
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
                     {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
             {% endfor %}
         {% endif %}
+
         <form method="POST">
             {% csrf_token %}
             <div class="form-floating mb-3">
-                {{ form.username }}
-                <label for="{{ form.username.id_for_label }}">Username</label>
+                <input type="text" class="form-control" id="username" name="username" placeholder="Username" required>
+                <label for="username"><i class="fas fa-user form-icon"></i>Username</label>
             </div>
             <div class="form-floating mb-3">
-                {{ form.password }}
-                <label for="{{ form.password.id_for_label }}">Password</label>
+                <input type="password" class="form-control" id="password" name="password" placeholder="Password" required>
+                <label for="password"><i class="fas fa-lock form-icon"></i>Password</label>
             </div>
-            <div class="d-grid gap-2 mt-3">
-                <button type="submit" class="btn btn-primary btn-lg">Login</button>
-            </div>
+            <button type="submit" class="btn btn-primary btn-login">
+                <i class="fas fa-sign-in-alt me-2"></i>Login
+            </button>
         </form>
     </div>
-</div>
 
-<style>
-.card {
-    max-width: 400px;
-    margin: 2rem auto;
-    border-radius: 10px;
-    border: none;
-}
-</style>
-{% endblock %}
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

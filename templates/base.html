@@ -12,47 +12,77 @@
 </head>
 
 <body>
+  <!-- Top Navigation Bar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#">Stock Management System</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#topNavbar">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="topNavbar">
+        <!-- Search Bar -->
+        <form class="d-flex mx-auto" action="{% url 'search_results' %}" method="GET">
+          <div class="input-group">
+            <input class="form-control" type="search" name="q" placeholder="Search inventory..." 
+                   aria-label="Search" value="{{ request.GET.q|default:'' }}">
+            <button class="btn btn-outline-light" type="submit">
+              <i class="fas fa-search"></i>
+            </button>
+          </div>
+        </form>
+        
+        <!-- User Profile -->
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
+              <img src="{% if user.profile.image %}{{ user.profile.image.url }}{% else %}{% static 'images/default-profile.png' %}{% endif %}"
+                   alt="Profile" class="rounded-circle profile-img">
+              <span class="ms-2">{{ user.username }}</span>
+            </a>
+            <ul class="dropdown-menu dropdown-menu-end">
+              <li><a class="dropdown-item" href="#"><i class="fas fa-user me-2"></i>Profile</a></li>
+              <li><a class="dropdown-item" href="#"><i class="fas fa-cog me-2"></i>Settings</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li>
+                <form action="{% url 'logout' %}" method="post" id="logout-form">
+                  {% csrf_token %}
+                  <a class="dropdown-item" href="#" onclick="document.getElementById('logout-form').submit();">
+                    <i class="fas fa-sign-out-alt me-2"></i>Logout
+                  </a>
+                </form>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
   <div class="wrapper">
     <!-- Sidebar -->
-    <nav id="sidebar" class="bg-dark">
-      <div class="sidebar-header">
-        <h3 class="text-white">Stock Management System</h3>
-      </div>
-
+    <nav id="sidebar">
       <ul class="list-unstyled components">
         <li>
-          <a href="{% url 'inventory' %}" class="nav-link text-white">
-            <i class="fas fa-home"></i> Home
+          <a href="{% url 'dashboard' %}">
+            <i class="fas fa-chart-line me-2"></i>Dashboard
           </a>
         </li>
         <li>
-          <a href="{% url 'add_inventory' %}" class="nav-link text-white">
-            <i class="fas fa-plus"></i> Add Inventory
+          <a href="{% url 'inventory' %}">
+            <i class="fas fa-boxes me-2"></i>Inventory
           </a>
         </li>
         <li>
-          <a href="{% url 'dashboard' %}" class="nav-link text-white">
-            <i class="fas fa-chart-line"></i> Inventory Dashboard
+          <a href="{% url 'add_inventory' %}">
+            <i class="fas fa-plus-circle me-2"></i>Add Product
           </a>
         </li>
         <li>
-          <a href="{% url 'sales_summary' %}" class="nav-link text-white">
-            <i class="fas fa-file-invoice-dollar"></i> Sales Report
-          </a>
-        </li>
-        <li>
-          <a href="{% url 'return_summary' %}" class="nav-link text-white">
-            <i class="fas fa-undo"></i> Returns Report
+          <a href="{% url 'sales_summary' %}">
+            <i class="fas fa-chart-bar me-2"></i>Sales Summary
           </a>
         </li>
       </ul>
-
-      <form method="post" action="{% url 'logout' %}" class="mt-auto">
-        {% csrf_token %}
-        <button type="submit" class="btn btn-link nav-link text-white">
-          <i class="fa fa-sign-out"></i> Logout
-        </button>
-      </form>
     </nav>
 
     <!-- Page Content -->
@@ -64,7 +94,7 @@
       </div>
       {% endfor %}
       {% endif %}
-      
+
       {% block content %}
       {% endblock %}
     </div>

@@ -1,9 +1,24 @@
+:root {
+    --primary-blue: #0088cc;
+    --light-blue: #e3f2fd;
+    --dark-blue: #004466;
+    --accent-blue: #66c2ff;
+    --sidebar-blue: #005580;
+}
+
 /* Reset and base styles */
 body {
     margin: 0;
     padding: 0;
     min-height: 100vh;
     overflow-x: hidden;
+    background-color: #f8fbff;
+}
+
+/* Navbar styles */
+.navbar {
+    height: 60px;
+    background: var(--primary-blue) !important;
 }
 
 /* Wrapper styles */
@@ -11,20 +26,21 @@ body {
     display: flex;
     width: 100%;
     align-items: stretch;
-    min-height: 100vh;
+    padding-top: 60px;
+    min-height: calc(100vh - 60px);
 }
 
 /* Sidebar styles */
 #sidebar {
     min-width: 250px !important;
     max-width: 250px !important;
-    min-height: 100vh !important;
-    background: #343a40 !important;
+    min-height: 100% !important;
+    background: var(--sidebar-blue) !important;
     position: fixed !important;
-    top: 0 !important;
+    top: 60px !important;
     left: 0 !important;
     padding: 20px !important;
-    z-index: 1000 !important;
+    z-index: 999 !important;
 }
 
 /* Content styles */
@@ -32,37 +48,157 @@ body {
     width: calc(100% - 250px) !important;
     margin-left: 250px !important;
     padding: 20px !important;
-    min-height: 100vh !important;
+    min-height: 100% !important;
 }
 
 /* Sidebar navigation styles */
-#sidebar .sidebar-header {
-    padding-bottom: 20px;
-}
-
-#sidebar ul.components {
-    padding: 20px 0;
-}
-
 #sidebar ul li a {
     padding: 10px;
     display: block;
     color: #fff !important;
     text-decoration: none;
+    transition: all 0.3s;
 }
 
 #sidebar ul li a:hover {
-    background: #495057;
-    color: #fff;
+    background: var(--accent-blue);
+    color: var(--dark-blue) !important;
 }
 
-/* Make sure sidebar is visible on mobile */
+/* Profile image in navbar */
+.profile-img {
+    width: 32px;
+    height: 32px;
+    object-fit: cover;
+    border: 2px solid #fff;
+}
+
+/* Search bar styling */
+.input-group {
+    width: 300px;
+}
+
+.input-group input {
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.input-group input::placeholder {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.input-group .btn {
+    background: var(--accent-blue);
+    color: white;
+    border: none;
+}
+
+.input-group .btn:hover {
+    background: var(--dark-blue);
+}
+
+/* Dashboard card styles */
+.card {
+    background: white;
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Stats cards */
+.bg-primary {
+    background: linear-gradient(45deg, var(--primary-blue), var(--accent-blue)) !important;
+}
+
+.bg-warning {
+    background: linear-gradient(45deg, var(--accent-blue), var(--light-blue)) !important;
+}
+
+.bg-danger {
+    background: linear-gradient(45deg, var(--dark-blue), var(--primary-blue)) !important;
+}
+
+/* Dropdown menu styling */
+.dropdown-menu {
+    background-color: white;
+    border: none;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.dropdown-item:hover {
+    background-color: var(--light-blue);
+}
+
+.dropdown-item i {
+    color: var(--primary-blue);
+}
+
+/* Table styling */
+.table {
+    background: white;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.table thead {
+    background: var(--primary-blue);
+    color: white;
+}
+
+.table-hover tbody tr:hover {
+    background-color: var(--light-blue);
+}
+
+/* Button styling */
+.btn-primary {
+    background-color: var(--primary-blue);
+    border-color: var(--primary-blue);
+}
+
+.btn-primary:hover {
+    background-color: var(--dark-blue);
+    border-color: var(--dark-blue);
+}
+
+/* Alert styling */
+.alert {
+    border-radius: 10px;
+    border: none;
+}
+
+.alert-success {
+    background-color: var(--light-blue);
+    color: var(--dark-blue);
+}
+
+/* Form styling */
+.form-control:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 0.2rem rgba(0, 136, 204, 0.25);
+}
+
+/* Responsive adjustments */
 @media (max-width: 768px) {
     #sidebar {
-        margin-left: 0 !important;
+        margin-left: -250px !important;
     }
     #content {
         margin-left: 0 !important;
+        width: 100% !important;
+    }
+    .input-group {
+        width: 100%;
+        margin: 10px 0;
+    }
+    .navbar-nav {
+        margin-top: 10px;
     }
 }
 
