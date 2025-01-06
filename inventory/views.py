@@ -1,6 +1,6 @@
 from django.shortcuts import redirect, render,get_object_or_404
 import plotly.utils
-from .models import inventory, Return, Damaged, StockMovement
+from .models import inventory, Return, Damaged, StockMovement, Sales
 from django.contrib.auth.decorators import login_required
 from .forms import AddInventoryForm,UpdateInventoryForm,PeriodSummaryForm,DateRangeForm,ReturnInventoryForm,DamagedInventoryForm,LoginForm
 from django.contrib import messages
@@ -12,19 +12,28 @@ import pandas as pd
 import plotly.io
 from django_pandas.io import read_frame
 from datetime import datetime,timedelta
-from django.db.models import Sum,Count
+from django.db.models import Sum,Count,Max
 from django.contrib.auth import login, authenticate, logout
 import plotly.graph_objects as go
 from django.db.models import Q
+from django.utils import timezone
 
 
 
 @login_required
 def inventory_list(request):
     inventories = inventory.objects.all()
-    context= {'title':'Inventory list',
-              'inventories':inventories}
-    return render(request,'inventory/inventory_list.html',context=context)
+    
+    # Annotate each inventory item with its sales data
+    inventories = inventories.annotate(
+        sales_amount=Sum('sales_records__total_amount'),
+        latest_sale=Max('sales_records__sale_date')
+    )
+    
+    context = {
+        'inventories': inventories
+    }
+    return render(request, 'inventory/inventory_list.html', context)
 
 @login_required
 def per_product_view(request,pk):
@@ -37,18 +46,28 @@ def per_product_view(request,pk):
 @login_required 
 def add_product(request):
     if request.method == 'POST':
-        add_form = AddInventoryForm(data=request.POST)
+        add_form = AddInventoryForm(request.POST)
         if add_form.is_valid():
             new_inventory = add_form.save(commit=False)
-            new_inventory.sales = float(add_form.data['cost']) * float(add_form.data['quantity_sold'])
             new_inventory.save()
-            messages.success(request,"Product successfully added")
-            return redirect('/inventory/')
-        
-    else :
-        add_form = AddInventoryForm()    
+            
+            # Create stock movement record with correct field names
+            StockMovement.objects.create(
+                inventory_item=new_inventory,
+                movement_type='IN',
+                quantity=new_inventory.quantity_in_Stock,
+                reason='Initial Stock'
+            )
+            
+            messages.success(request, 'Product added successfully!')
+            return redirect('inventory')
+    else:
+        add_form = AddInventoryForm()
     
-    return render(request,'inventory/inventory_add.html',{'form':add_form})
+    return render(request, 'inventory/inventory_add.html', {
+        'form': add_form,
+        'title': 'Add Product'
+    })
 @login_required
 def delete_inventory(request,pk):
     inventory_to_delete = get_object_or_404(inventory,pk=pk)
@@ -61,47 +80,48 @@ from decimal import Decimal
 
 @login_required
 def update_inventory(request, pk):
-    inventory_to_update = get_object_or_404(inventory, pk=pk)
+    inventory_item = get_object_or_404(inventory, pk=pk)
     
     if request.method == 'POST':
-        updateform = UpdateInventoryForm(request.POST, instance=inventory_to_update)
+        form = UpdateInventoryForm(request.POST)
         
-        if updateform.is_valid():
-            updated_quantity_sold = int(updateform.cleaned_data['quantity_sold'])
-            sell = updateform.cleaned_data.get('sell', Decimal('0.00'))
-            cost = updateform.cleaned_data.get('cost', Decimal('0.00'))
+        if form.is_valid():
+            quantity_sold = form.cleaned_data['quantity_sold']
+            sale_price = form.cleaned_data['sale_price']
+            discount = form.cleaned_data['discount_applied']
 
-            # Ensure correct values
-            sell = Decimal(sell) if sell is not None else Decimal('0.00')
-            cost = Decimal(cost) if cost is not None else Decimal('0.00')
-
-            # Calculate discount and updated cost
-            discount = (sell / Decimal('100.00')) * cost
-            updated_cost = cost - discount
-
-            if inventory_to_update.quantity_in_Stock - updated_quantity_sold < 0:
+            # Check if enough stock is available
+            if inventory_item.quantity_in_Stock - quantity_sold < 0:
                 messages.error(request, "Not enough stock available.")
-                return render(request, 'inventory/inventory_update.html', {'form': updateform})
+                return render(request, 'inventory/inventory_update.html', {'form': form})
 
-            # Update fields
-            inventory_to_update.name = updateform.cleaned_data['name']
-            inventory_to_update.cost = updated_cost
-            inventory_to_update.quantity_sold = updated_quantity_sold
-            inventory_to_update.quantity_in_Stock -= updated_quantity_sold
-            inventory_to_update.sales = updated_cost * updated_quantity_sold
-            inventory_to_update.size = inventory_to_update.size
+            # Create new sale record
+            sale = Sales.objects.create(
+                inventory_item=inventory_item,
+                quantity_sold=quantity_sold,
+                sale_price=sale_price,
+                discount_applied=discount,
+                sale_date=timezone.now()
+            )
 
-            # Update cumulative fields
-            inventory_to_update.cummulative_quantity_sold += updated_quantity_sold
-            inventory_to_update.cumulative_sales += inventory_to_update.sales
+            # Update inventory stock
+            inventory_item.quantity_in_Stock -= quantity_sold
+            inventory_item.save()
 
-            inventory_to_update.save()
-            messages.success(request, "Product successfully updated")
-            return redirect('/inventory/')
+            messages.success(request, "Sale successfully recorded")
+            return redirect('inventory')
     else:
-        updateform = UpdateInventoryForm(instance=inventory_to_update)
+        initial_data = {
+            'sale_price': inventory_item.cost,  # Set initial sale price to cost
+            'quantity_sold': 1,  # Default quantity
+            'discount_applied': 0  # Default discount
+        }
+        form = UpdateInventoryForm(initial=initial_data)
     
-    return render(request, 'inventory/inventory_update.html', {'form': updateform})
+    return render(request, 'inventory/inventory_update.html', {
+        'form': form,
+        'inventory': inventory_item
+    })
 
 
 
@@ -111,6 +131,9 @@ def update_inventory(request, pk):
 def dashboard(request):
     # Get all inventory items
     inventories = inventory.objects.all()
+    
+    # Get sales data
+    sales_data = Sales.objects.all()
     
     # Create empty figures for when there's no data
     empty_fig = go.Figure()
@@ -129,20 +152,17 @@ def dashboard(request):
         }]
     )
     
-    # Convert to DataFrame and fix data types
-    df = pd.DataFrame(list(inventories.values()))
-    
     # Best performing products (by sales)
-    if not df.empty and 'name' in df.columns and 'sales' in df.columns:
-        # Convert sales to numeric, replacing any invalid values with 0
-        df['sales'] = pd.to_numeric(df['sales'], errors='coerce').fillna(0)
+    if sales_data.exists():
+        sales_df = pd.DataFrame(list(Sales.objects.values('inventory_item__name')
+                              .annotate(total_sales=Sum('total_amount'))
+                              .order_by('-total_sales')[:5]))
         
-        best_performing_product_df = df.nlargest(5, 'sales')[['name', 'sales']]
-        if not best_performing_product_df.empty:
+        if not sales_df.empty:
             best_performing_product = px.bar(
-                best_performing_product_df,
-                x='name',
-                y='sales',
+                sales_df,
+                x='inventory_item__name',
+                y='total_sales',
                 title='Best Performing Products',
                 height=400,
                 template='plotly_white'
@@ -156,14 +176,13 @@ def dashboard(request):
         best_performing_product = empty_fig
 
     # Most stocked products
-    if not df.empty and 'name' in df.columns and 'quantity_in_Stock' in df.columns:
-        # Convert quantity_in_Stock to numeric
-        df['quantity_in_Stock'] = pd.to_numeric(df['quantity_in_Stock'], errors='coerce').fillna(0)
+    if inventories.exists():
+        stock_df = pd.DataFrame(list(inventories.values('name', 'quantity_in_Stock')
+                              .order_by('-quantity_in_Stock')[:5]))
         
-        most_stocked_df = df.nlargest(5, 'quantity_in_Stock')[['name', 'quantity_in_Stock']]
-        if not most_stocked_df.empty:
+        if not stock_df.empty:
             most_stocked = px.bar(
-                most_stocked_df,
+                stock_df,
                 x='name',
                 y='quantity_in_Stock',
                 title='Most Stocked Products',
@@ -196,33 +215,33 @@ def sales_summary(request):
         start_date = form.cleaned_data['start_date']
         end_date = form.cleaned_data['end_date']
         
-        # Aggregate total sales and quantities per product with cumulative totals
-        sales_data = inventory.objects.filter(
-            last_sale_date__range=(start_date, end_date)
-        ).values('name').annotate(
-            total_quantity_sold=Sum('quantity_sold'),
-            total_sales=Sum('sales'),
-            cumulative_quantity_sold=Sum('cummulative_quantity_sold'),
-            cumulative_sales=Sum('cumulative_sales')
-        ).order_by('name')
-
-        # Convert to DataFrame for display
-        df = pd.DataFrame(list(sales_data))
-        cumulative_sales_data = df.to_dict(orient='records')
-    
+        # Get sales data within date range
+        sales_data = Sales.objects.filter(
+            sale_date__date__range=(start_date, end_date)
+        ).values('inventory_item__name').annotate(
+            total_quantity=Sum('quantity_sold'),
+            total_sales=Sum('total_amount'),
+            total_discount=Sum('discount_applied')
+        ).order_by('-total_sales')
     else:
-        sales_data = inventory.objects.values('name').annotate(
-            total_quantity_sold=Sum('quantity_sold'),
-            total_sales=Sum('sales'),
-            cumulative_quantity_sold=Sum('cummulative_quantity_sold'),
-            cumulative_sales=Sum('cumulative_sales')
-        ).order_by('name')
-
-        cumulative_sales_data = sales_data
+        # Get all sales data if no date range specified
+        sales_data = Sales.objects.values('inventory_item__name').annotate(
+            total_quantity=Sum('quantity_sold'),
+            total_sales=Sum('total_amount'),
+            total_discount=Sum('discount_applied')
+        ).order_by('-total_sales')
+    
+    # Calculate totals
+    totals = {
+        'total_quantity': sum(item['total_quantity'] for item in sales_data),
+        'total_sales': sum(item['total_sales'] for item in sales_data),
+        'total_discount': sum(item['total_discount'] for item in sales_data)
+    }
     
     context = {
         'form': form,
-        'sales_data': cumulative_sales_data
+        'sales_data': sales_data,
+        'totals': totals
     }
     
     return render(request, 'inventory/sales_summary.html', context)

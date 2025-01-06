@@ -1,55 +1,41 @@
-from django.forms import ModelForm
-from .models import inventory,Return,Damaged
 from django import forms
-from django.contrib.auth.forms import AuthenticationForm
+from django.forms import ModelForm
+from .models import inventory, Return, Damaged, Sales
 
 class AddInventoryForm(ModelForm):
     class Meta:
         model = inventory
-        fields = ['name','cost','quantity_in_Stock','quantity_sold','description','label','size']
+        fields = ['name', 'cost', 'quantity_in_Stock', 'description', 'label', 'size']
 
 class UpdateInventoryForm(ModelForm):
-    class Meta :
-        model = inventory
-        fields = ['name', 'cost','quantity_sold','sell','label','size']
+    class Meta:
+        model = Sales
+        fields = ['quantity_sold', 'sale_price', 'discount_applied']
 
-class PeriodSummaryForm(forms.Form):
-    PERIOD_CHOICES = [ 
-        ('day','Day'),
-        ('month','Month'),
-        ('year','Year'),
-    ]
-    period = forms.ChoiceField(choices= PERIOD_CHOICES)
-
-class DateRangeForm(forms.Form):
-    start_date = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
-    end_date = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['sale_price'].label = "Sale Price"
+        self.fields['quantity_sold'].label = "Quantity to Sell"
+        self.fields['discount_applied'].label = "Discount (%)"
 
 class ReturnInventoryForm(forms.ModelForm):
     class Meta:
         model = Return
-        fields = ['quantity_returned','reason']
-
-    def cleanQuantityReturned(self):
-        quaantity_returned = self.cleaned_data.get('quantity_returned')
-        if quaantity_returned < 0 :
-            raise forms.ValidationError("Quantity returned cannot be negative")
-        return quaantity_returned 
-
+        fields = ['quantity_returned', 'reason']
 
 class DamagedInventoryForm(forms.ModelForm):
     class Meta:
         model = Damaged
         fields = ['quantity_damaged', 'damage_description']
 
-    def clean_quantity_damaged(self):
-        quantity_damaged = self.cleaned_data.get('quantity_damaged')
-        if quantity_damaged < 0:
-            raise forms.ValidationError("Quantity damaged cannot be negative")
-        return quantity_damaged
+class LoginForm(forms.Form):
+    username = forms.CharField()
+    password = forms.CharField(widget=forms.PasswordInput)
 
-class LoginForm(AuthenticationForm):
-    username = forms.CharField(widget=forms.TextInput(
-        attrs={'class': 'form-control', 'placeholder': 'Username'}))
-    password = forms.CharField(widget=forms.PasswordInput(
-        attrs={'class': 'form-control', 'placeholder': 'Password'}))
+class PeriodSummaryForm(forms.Form):
+    start_date = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
+    end_date = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
+
+class DateRangeForm(forms.Form):
+    start_date = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
+    end_date = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))

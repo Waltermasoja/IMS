@@ -1,0 +1,20 @@
+{% if form.errors %}
+<div class="alert alert-danger">
+    <h5 class="alert-heading">Please correct the following errors:</h5>
+    <ul class="mb-0">
+        {% for field, errors in form.errors.items %}
+            {% for error in errors %}
+                <li>{{ field|title }}: {{ error }}</li>
+            {% endfor %}
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if form.non_field_errors %}
+<div class="alert alert-danger">
+    {% for error in form.non_field_errors %}
+        <p class="mb-0">{{ error }}</p>
+    {% endfor %}
+</div>
+{% endif %} 
