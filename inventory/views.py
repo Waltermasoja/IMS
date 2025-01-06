@@ -28,7 +28,7 @@ def inventory_list(request):
 
 @login_required
 def per_product_view(request,pk):
-    product = get_object_or_404(Inventory,pk=pk)
+    product = get_object_or_404(inventory,pk=pk)
     context = {
         'inventory':product
     }
@@ -51,7 +51,7 @@ def add_product(request):
     return render(request,'inventory/inventory_add.html',{'form':add_form})
 @login_required
 def delete_inventory(request,pk):
-    inventory_to_delete = get_object_or_404(Inventory,pk=pk)
+    inventory_to_delete = get_object_or_404(inventory,pk=pk)
     inventory_to_delete.delete()
     messages.warning(request,"Product deleted")
     return redirect('/inventory/')
@@ -61,7 +61,7 @@ from decimal import Decimal
 
 @login_required
 def update_inventory(request, pk):
-    inventory_to_update = get_object_or_404(Inventory, pk=pk)
+    inventory_to_update = get_object_or_404(inventory, pk=pk)
     
     if request.method == 'POST':
         updateform = UpdateInventoryForm(request.POST, instance=inventory_to_update)
@@ -110,7 +110,7 @@ def update_inventory(request, pk):
 @login_required
 def dashboard(request):
     # Get all inventory items
-    inventories = Inventory.objects.all()
+    inventories = inventory.objects.all()
     
     # Create empty figures for when there's no data
     empty_fig = go.Figure()
@@ -197,7 +197,7 @@ def sales_summary(request):
         end_date = form.cleaned_data['end_date']
         
         # Aggregate total sales and quantities per product with cumulative totals
-        sales_data = Inventory.objects.filter(
+        sales_data = inventory.objects.filter(
             last_sale_date__range=(start_date, end_date)
         ).values('name').annotate(
             total_quantity_sold=Sum('quantity_sold'),
@@ -211,7 +211,7 @@ def sales_summary(request):
         cumulative_sales_data = df.to_dict(orient='records')
     
     else:
-        sales_data = Inventory.objects.values('name').annotate(
+        sales_data = inventory.objects.values('name').annotate(
             total_quantity_sold=Sum('quantity_sold'),
             total_sales=Sum('sales'),
             cumulative_quantity_sold=Sum('cummulative_quantity_sold'),
@@ -230,7 +230,7 @@ def sales_summary(request):
 
 @login_required
 def returnInventory(request,pk):
-    inventory_item = get_object_or_404(Inventory,pk=pk)
+    inventory_item = get_object_or_404(inventory,pk=pk)
     if request.method == 'POST':
         form = ReturnInventoryForm(request.POST)
         if form.is_valid():
@@ -275,7 +275,7 @@ def obsolate_summary(request):
 
 @login_required
 def damagedInventory(request, pk):
-    obsolete_inventory = get_object_or_404(Inventory, pk=pk)
+    obsolete_inventory = get_object_or_404(inventory, pk=pk)
     
     if request.method == 'POST':
         form = DamagedInventoryForm(request.POST)
@@ -307,7 +307,7 @@ def damagedInventory(request, pk):
 
 @login_required
 def stock_movement_summary(request, pk):
-    inventory_items = get_object_or_404(Inventory, pk=pk)
+    inventory_items = get_object_or_404(inventory, pk=pk)
     stock_movements = StockMovement.objects.filter(inventory_item=inventory_items).order_by('-stock_date')
 
     context = {
