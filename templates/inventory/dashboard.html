@@ -1,51 +1,194 @@
 {% extends 'base.html' %}
+{% load static %}
+
+{% block extra_head %}
+<!-- Preload critical assets -->
+<link rel="preload" href="https://cdn.plot.ly/plotly-2.24.1.min.js" as="script">
+<script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <!-- Stats Cards Row -->
+    <!-- Summary Section -->
     <div class="row mb-4">
-        <div class="col-md-4">
-            <div class="card bg-primary text-white">
+        <div class="col-12">
+            <h4 class="text-muted mb-3">Overview</h4>
+        </div>
+        <!-- Summary Cards -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100">
                 <div class="card-body">
-                    <h5 class="card-title">Total Products</h5>
-                    <h2 class="card-text">{{ total_products }}</h2>
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Products</div>
+                            <div class="h5 mb-0 font-weight-bold">{{ total_products }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-boxes fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card bg-warning text-dark">
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100">
                 <div class="card-body">
-                    <h5 class="card-title">Low Stock Items</h5>
-                    <h2 class="card-text">{{ low_stock }}</h2>
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Low Stock Items</div>
+                            <div class="h5 mb-0 font-weight-bold">{{ low_stock }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-triangle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-4">
-            <div class="card bg-danger text-white">
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100">
                 <div class="card-body">
-                    <h5 class="card-title">Out of Stock</h5>
-                    <h2 class="card-text">{{ out_of_stock }}</h2>
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Out of Stock</div>
+                            <div class="h5 mb-0 font-weight-bold">{{ out_of_stock }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-times-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Total Sales</div>
+                            <div class="h5 mb-0 font-weight-bold">${{ total_sales|default:"0" }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Graphs Row -->
+    <!-- Charts Section -->
     <div class="row">
-        <div class="col-md-6">
-            <div class="card shadow-sm mb-4">
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Best Performing Products</h6>
+                </div>
                 <div class="card-body">
-                    {{ best_performing_product|safe }}
+                    <div id="best_performing_chart" class="chart-container"></div>
                 </div>
             </div>
         </div>
-        <div class="col-md-6">
-            <div class="card shadow-sm mb-4">
+
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Most Stocked Products</h6>
+                </div>
                 <div class="card-body">
-                    {{ most_stocked|safe }}
+                    <div id="most_stocked_chart" class="chart-container"></div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Debug Data -->
+<div style="display: none;">
+    <pre id="debug-best-performing">{{ best_performing_product|safe }}</pre>
+    <pre id="debug-most-stocked">{{ most_stocked|safe }}</pre>
+</div>
+
+<style>
+.chart-container {
+    height: 400px;
+    width: 100%;
+}
+
+.no-data-message {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    color: #666;
+    font-size: 1.2rem;
+    text-align: center;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px dashed #dee2e6;
+}
+</style>
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    try {
+        console.log('Starting chart initialization...');
+        
+        // Get the data
+        const bestPerformingElement = document.getElementById('debug-best-performing');
+        const mostStockedElement = document.getElementById('debug-most-stocked');
+        
+        console.log('Raw best performing data:', bestPerformingElement.textContent);
+        console.log('Raw most stocked data:', mostStockedElement.textContent);
+
+        // Parse the data
+        const bestPerformingData = JSON.parse(bestPerformingElement.textContent);
+        const mostStockedData = JSON.parse(mostStockedElement.textContent);
+
+        console.log('Parsed best performing data:', bestPerformingData);
+        console.log('Parsed most stocked data:', mostStockedData);
+
+        // Basic layout
+        const layout = {
+            autosize: true,
+            height: 400,
+            margin: {l: 50, r: 50, t: 50, b: 50},
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)'
+        };
+
+        // Create charts
+        if (bestPerformingData.data[0].x.length > 0) {
+            Plotly.newPlot('best_performing_chart', bestPerformingData.data, layout);
+        } else {
+            document.getElementById('best_performing_chart').innerHTML = 
+                '<div class="no-data-message">No Data to Display</div>';
+        }
+
+        if (mostStockedData.data[0].x.length > 0) {
+            Plotly.newPlot('most_stocked_chart', mostStockedData.data, layout);
+        } else {
+            document.getElementById('most_stocked_chart').innerHTML = 
+                '<div class="no-data-message">No Data to Display</div>';
+        }
+
+        // Handle resize
+        window.addEventListener('resize', function() {
+            Plotly.Plots.resize('best_performing_chart');
+            Plotly.Plots.resize('most_stocked_chart');
+        });
+
+    } catch (error) {
+        console.error('Error initializing charts:', error);
+        const errorMessage = '<div class="no-data-message">Error Loading Chart</div>';
+        document.getElementById('best_performing_chart').innerHTML = errorMessage;
+        document.getElementById('most_stocked_chart').innerHTML = errorMessage;
+    }
+});
+</script>
+{% endblock %}
 {% endblock %}

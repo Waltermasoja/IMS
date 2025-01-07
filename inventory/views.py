@@ -17,6 +17,8 @@ from django.contrib.auth import login, authenticate, logout
 import plotly.graph_objects as go
 from django.db.models import Q
 from django.utils import timezone
+from django.core.cache import cache
+from django.views.decorators.http import condition
 
 
 
@@ -127,85 +129,130 @@ def update_inventory(request, pk):
 
 
 
+def get_dashboard_etag(request):
+    return f"dashboard-{cache.get('dashboard_version', '1.0')}"
+
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return str(obj)
+        return super(DecimalEncoder, self).default(obj)
+
 @login_required
+@condition(etag_func=get_dashboard_etag)
 def dashboard(request):
-    # Get all inventory items
-    inventories = Inventory.objects.all()
-    
-    # Get sales data
-    sales_data = Sales.objects.all()
-    
-    # Create empty figures for when there's no data
-    empty_fig = go.Figure()
-    empty_fig.update_layout(
-        title="No Data Available",
-        xaxis_title="No Data",
-        yaxis_title="No Data",
-        height=400,
-        margin=dict(t=30, l=10, r=10, b=30),
-        annotations=[{
-            'text': "No data available to display",
-            'xref': "paper",
-            'yref': "paper",
-            'showarrow': False,
-            'font': {'size': 20}
-        }]
-    )
-    
-    # Best performing products (by sales)
-    if sales_data.exists():
-        sales_df = pd.DataFrame(list(Sales.objects.values('inventory_item__name')
-                              .annotate(total_sales=Sum('total_amount'))
-                              .order_by('-total_sales')[:5]))
-        
-        if not sales_df.empty:
-            best_performing_product = px.bar(
-                sales_df,
-                x='inventory_item__name',
-                y='total_sales',
-                title='Best Performing Products',
-                height=400,
-                template='plotly_white'
-            )
-            best_performing_product.update_layout(
-                margin=dict(t=30, l=10, r=10, b=30)
-            )
-        else:
-            best_performing_product = empty_fig
-    else:
-        best_performing_product = empty_fig
+    try:
+        # Dashboard statistics
+        total_products = Inventory.objects.count()
+        low_stock = Inventory.objects.filter(quantity_in_Stock__lte=10).count()
+        out_of_stock = Inventory.objects.filter(quantity_in_Stock=0).count()
+        total_sales = Sales.objects.aggregate(total=Sum('total_amount'))['total'] or 0
 
-    # Most stocked products
-    if inventories.exists():
-        stock_df = pd.DataFrame(list(inventories.values('name', 'quantity_in_Stock')
-                              .order_by('-quantity_in_Stock')[:5]))
+        # Best Performing Products Chart
+        best_performing = list(Sales.objects.values('inventory_item__name')
+                             .annotate(total_sales=Sum('total_amount'))
+                             .order_by('-total_sales')[:5])
         
-        if not stock_df.empty:
-            most_stocked = px.bar(
-                stock_df,
-                x='name',
-                y='quantity_in_Stock',
-                title='Most Stocked Products',
-                height=400,
-                template='plotly_white'
-            )
-            most_stocked.update_layout(
-                margin=dict(t=30, l=10, r=10, b=30)
-            )
-        else:
-            most_stocked = empty_fig
-    else:
-        most_stocked = empty_fig
+        best_performing_data = {
+            'data': [{
+                'type': 'bar',
+                'x': [item['inventory_item__name'] for item in best_performing] if best_performing else ['No Data'],
+                'y': [float(item['total_sales']) for item in best_performing] if best_performing else [0],
+                'marker': {'color': '#0d6efd'}
+            }],
+            'layout': {
+                'title': 'Top 5 Products by Sales',
+                'xaxis': {'title': 'Products'},
+                'yaxis': {'title': 'Total Sales ($)'},
+                'annotations': [] if best_performing else [{
+                    'text': 'No Data to Display',
+                    'xref': 'paper',
+                    'yref': 'paper',
+                    'showarrow': False,
+                    'font': {
+                        'size': 20,
+                        'color': 'grey'
+                    },
+                    'x': 0.5,
+                    'y': 0.5
+                }]
+            }
+        }
 
-    context = {
-        'best_performing_product': best_performing_product.to_html(),
-        'most_stocked': most_stocked.to_html(),
-        'total_products': inventories.count(),
-        'low_stock': inventories.filter(quantity_in_Stock__lte=10).count(),
-        'out_of_stock': inventories.filter(quantity_in_Stock=0).count(),
-    }
-    
-    return render(request, 'inventory/dashboard.html', context)
+        # Most Stocked Products Chart
+        most_stocked = list(Inventory.objects.values('name', 'quantity_in_Stock')
+                           .order_by('-quantity_in_Stock')[:5])
+        
+        most_stocked_data = {
+            'data': [{
+                'type': 'bar',
+                'x': [item['name'] for item in most_stocked] if most_stocked else ['No Data'],
+                'y': [item['quantity_in_Stock'] for item in most_stocked] if most_stocked else [0],
+                'marker': {'color': '#1cc88a'}
+            }],
+            'layout': {
+                'title': 'Top 5 Most Stocked Products',
+                'xaxis': {'title': 'Products'},
+                'yaxis': {'title': 'Quantity in Stock'},
+                'annotations': [] if most_stocked else [{
+                    'text': 'No Data to Display',
+                    'xref': 'paper',
+                    'yref': 'paper',
+                    'showarrow': False,
+                    'font': {
+                        'size': 20,
+                        'color': 'grey'
+                    },
+                    'x': 0.5,
+                    'y': 0.5
+                }]
+            }
+        }
+
+        context = {
+            'total_products': total_products,
+            'low_stock': low_stock,
+            'out_of_stock': out_of_stock,
+            'total_sales': total_sales,
+            'best_performing_product': json.dumps(best_performing_data, cls=DecimalEncoder),
+            'most_stocked': json.dumps(most_stocked_data)
+        }
+
+        return render(request, 'inventory/dashboard.html', context)
+
+    except Exception as e:
+        print(f"Error in dashboard view: {str(e)}")
+        empty_chart_data = {
+            'data': [{
+                'type': 'bar',
+                'x': ['No Data'],
+                'y': [0]
+            }],
+            'layout': {
+                'annotations': [{
+                    'text': 'No Data to Display',
+                    'xref': 'paper',
+                    'yref': 'paper',
+                    'showarrow': False,
+                    'font': {
+                        'size': 20,
+                        'color': 'grey'
+                    },
+                    'x': 0.5,
+                    'y': 0.5
+                }]
+            }
+        }
+        
+        context = {
+            'total_products': 0,
+            'low_stock': 0,
+            'out_of_stock': 0,
+            'total_sales': 0,
+            'best_performing_product': json.dumps(empty_chart_data),
+            'most_stocked': json.dumps(empty_chart_data)
+        }
+        return render(request, 'inventory/dashboard.html', context)
 
 @login_required
 def sales_summary(request):

@@ -1,24 +1,172 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>Stock Movement Summary for {{ inventory_item.name }}</h2>
+<div class="container-fluid">
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h3 class="card-title mb-1">Stock Movement Summary</h3>
+                    <p class="text-muted mb-0">{{ inventory_item.name }}</p>
+                </div>
+                <a href="{% url 'inventory' %}" class="btn btn-outline-primary">
+                    <i class="fas fa-arrow-left me-2"></i>Back to Inventory
+                </a>
+            </div>
 
-<table class="table table-striped">
-    <thead class="thead-dark">
-        <tr>
-            <th>Date</th>
-            <th>Opening Stock</th>
-            <th>Closing Stock</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for movement in stock_movements %}
-        <tr>
-            <td>{{ movement.stock_date }}</td>
-            <td>{{ movement.opening_stock }}</td>
-            <td>{{ movement.closing_stock }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
+            {% if stock_movements %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Movement Type</th>
+                            <th>Quantity</th>
+                            <th>Opening Stock</th>
+                            <th>Closing Stock</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for movement in stock_movements %}
+                        <tr>
+                            <td>{{ movement.stock_date|date:"M d, Y H:i" }}</td>
+                            <td>
+                                {% if movement.movement_type == 'IN' %}
+                                    <span class="badge bg-success">Stock In</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark">Stock Out</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if movement.movement_type == 'IN' %}
+                                    <span class="text-success">+{{ movement.quantity }}</span>
+                                {% else %}
+                                    <span class="text-danger">-{{ movement.quantity }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ movement.opening_stock }}</td>
+                            <td>{{ movement.closing_stock }}</td>
+                            <td>
+                                <span class="text-muted">{{ movement.reason }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr>
+                            <td colspan="3"><strong>Current Stock Level</strong></td>
+                            <td colspan="3">
+                                {% if inventory_item.quantity_in_Stock == 0 %}
+                                    <span class="badge bg-danger">Out of Stock</span>
+                                {% elif inventory_item.quantity_in_Stock <= 10 %}
+                                    <span class="badge bg-warning text-dark">Low Stock ({{ inventory_item.quantity_in_Stock }})</span>
+                                {% else %}
+                                    <span class="badge bg-success">{{ inventory_item.quantity_in_Stock }} in Stock</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
+                <h4 class="text-muted">No Stock Movements</h4>
+                <p class="text-muted">This product has no recorded stock movements yet.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Product Details Card -->
+    <div class="card shadow-sm mt-4">
+        <div class="card-body">
+            <h4 class="card-title mb-4">Product Details</h4>
+            <div class="row">
+                <div class="col-md-6">
+                    <table class="table table-sm">
+                        <tr>
+                            <th class="w-50">Product Name:</th>
+                            <td>{{ inventory_item.name }}</td>
+                        </tr>
+                        <tr>
+                            <th>Label:</th>
+                            <td><span class="badge bg-info">{{ inventory_item.label }}</span></td>
+                        </tr>
+                        <tr>
+                            <th>Size:</th>
+                            <td>{{ inventory_item.size }}</td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <table class="table table-sm">
+                        <tr>
+                            <th class="w-50">Purchase Price:</th>
+                            <td>${{ inventory_item.purchase_price }}</td>
+                        </tr>
+                        <tr>
+                            <th>Selling Price:</th>
+                            <td>${{ inventory_item.selling_price }}</td>
+                        </tr>
+                        <tr>
+                            <th>Status:</th>
+                            <td>
+                                {% if inventory_item.on_sale %}
+                                    <span class="badge bg-success">On Sale</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Regular Price</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.card {
+    border: none;
+    border-radius: 15px;
+    margin-bottom: 1rem;
+}
+
+.table th {
+    background-color: var(--light-blue);
+    color: var(--dark-blue);
+}
+
+.table td {
+    vertical-align: middle;
+}
+
+.badge {
+    font-weight: 500;
+    padding: 0.5em 0.8em;
+}
+
+.table-hover tbody tr:hover {
+    background-color: var(--light-blue);
+}
+
+.text-success {
+    color: #28a745 !important;
+}
+
+.text-danger {
+    color: #dc3545 !important;
+}
+
+.table-sm th,
+.table-sm td {
+    padding: 0.5rem;
+}
+
+.card-title {
+    color: var(--dark-blue);
+}
+</style>
 {% endblock %}

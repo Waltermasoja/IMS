@@ -70,6 +70,9 @@
                                     <a href="{% url 'damagedInventory' inventory.id %}" class="btn btn-sm btn-outline-danger" title="Report Damage">
                                         <i class="fas fa-exclamation-triangle"></i>
                                     </a>
+                                    <a href="{% url 'stock_movement_summary' inventory.id %}" class="btn btn-sm btn-outline-info" title="Stock Movement">
+                                        <i class="fas fa-exchange-alt"></i>
+                                    </a>
                                 </div>
                             </td>
                         </tr>
