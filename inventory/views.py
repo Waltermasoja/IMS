@@ -19,6 +19,13 @@ from django.db.models import Q
 from django.utils import timezone
 from django.core.cache import cache
 from django.views.decorators.http import condition
+from django.db.models import Sum, Count, F, ExpressionWrapper, DecimalField, Q
+from django.db.models.functions import TruncMonth, Coalesce, ExtractMonth
+from django.utils import timezone
+from datetime import timedelta
+from .models import Inventory, Sales, Return, Damaged
+import json
+import calendar
 
 
 
@@ -129,130 +136,79 @@ def update_inventory(request, pk):
 
 
 
-def get_dashboard_etag(request):
-    return f"dashboard-{cache.get('dashboard_version', '1.0')}"
+# def get_dashboard_etag(request):
+#     return f"dashboard-{cache.get('dashboard_version', '1.0')}"
 
-class DecimalEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Decimal):
-            return str(obj)
-        return super(DecimalEncoder, self).default(obj)
+# class DecimalEncoder(json.JSONEncoder):
+#     def default(self, obj):
+#         if isinstance(obj, Decimal):
+#             return str(obj)
+#         return super(DecimalEncoder, self).default(obj)
 
 @login_required
-@condition(etag_func=get_dashboard_etag)
+# @condition(etag_func=get_dashboard_etag)
 def dashboard(request):
-    try:
-        # Dashboard statistics
-        total_products = Inventory.objects.count()
-        low_stock = Inventory.objects.filter(quantity_in_Stock__lte=10).count()
-        out_of_stock = Inventory.objects.filter(quantity_in_Stock=0).count()
-        total_sales = Sales.objects.aggregate(total=Sum('total_amount'))['total'] or 0
+    # Calculate metrics
+    total_products = Inventory.objects.count()
+    total_sales = Sales.objects.aggregate(total=Sum('total_amount'))['total'] or 0
+    sales_growth = calculate_sales_growth()  # Assume this function is defined
+    # product_growth = calculate_product_growth()  # Assume this function is defined
 
-        # Best Performing Products Chart
-        best_performing = list(Sales.objects.values('inventory_item__name')
-                             .annotate(total_sales=Sum('total_amount'))
-                             .order_by('-total_sales')[:5])
-        
-        best_performing_data = {
-            'data': [{
-                'type': 'bar',
-                'x': [item['inventory_item__name'] for item in best_performing] if best_performing else ['No Data'],
-                'y': [float(item['total_sales']) for item in best_performing] if best_performing else [0],
-                'marker': {'color': '#0d6efd'}
-            }],
-            'layout': {
-                'title': 'Top 5 Products by Sales',
-                'xaxis': {'title': 'Products'},
-                'yaxis': {'title': 'Total Sales ($)'},
-                'annotations': [] if best_performing else [{
-                    'text': 'No Data to Display',
-                    'xref': 'paper',
-                    'yref': 'paper',
-                    'showarrow': False,
-                    'font': {
-                        'size': 20,
-                        'color': 'grey'
-                    },
-                    'x': 0.5,
-                    'y': 0.5
-                }]
-            }
-        }
+    # Prepare data for charts
+    monthly_sales_data = get_monthly_sales_data()  # Assume this function is defined
+    # product_performance_data = get_product_performance_data()  # Assume this function is defined
 
-        # Most Stocked Products Chart
-        most_stocked = list(Inventory.objects.values('name', 'quantity_in_Stock')
-                           .order_by('-quantity_in_Stock')[:5])
-        
-        most_stocked_data = {
-            'data': [{
-                'type': 'bar',
-                'x': [item['name'] for item in most_stocked] if most_stocked else ['No Data'],
-                'y': [item['quantity_in_Stock'] for item in most_stocked] if most_stocked else [0],
-                'marker': {'color': '#1cc88a'}
-            }],
-            'layout': {
-                'title': 'Top 5 Most Stocked Products',
-                'xaxis': {'title': 'Products'},
-                'yaxis': {'title': 'Quantity in Stock'},
-                'annotations': [] if most_stocked else [{
-                    'text': 'No Data to Display',
-                    'xref': 'paper',
-                    'yref': 'paper',
-                    'showarrow': False,
-                    'font': {
-                        'size': 20,
-                        'color': 'grey'
-                    },
-                    'x': 0.5,
-                    'y': 0.5
-                }]
-            }
-        }
+    context = {
+        'total_products': total_products,
+        'total_sales': total_sales,
+        'sales_growth': sales_growth,
+        # 'product_growth': product_growth,
+        'monthly_sales_data': monthly_sales_data,
+        # 'product_performance_data': product_performance_data,
+    }
+    return render(request, 'inventory/dashboard.html', context)
 
-        context = {
-            'total_products': total_products,
-            'low_stock': low_stock,
-            'out_of_stock': out_of_stock,
-            'total_sales': total_sales,
-            'best_performing_product': json.dumps(best_performing_data, cls=DecimalEncoder),
-            'most_stocked': json.dumps(most_stocked_data)
-        }
+def calculate_growth_percentage(model, date_field):
+    # Implementation for calculating growth percentage
+    today = timezone.now()
+    previous_month = today.replace(day=1) - timedelta(days=1)
+    previous_month_start = previous_month.replace(day=1)
+    previous_month_end = previous_month.replace(day=calendar.monthrange(previous_month.year, previous_month.month)[1])
+    
+    # Changed created_at to created_date
+    inventory_count = model.objects.filter(created_date__date__range=(previous_month_start, previous_month_end)).count()
+    current_month_count = model.objects.filter(created_date__date__range=(today.replace(day=1), today)).count()
+    
+    if inventory_count == 0:
+        return 100
+    growth_percentage = ((current_month_count - inventory_count) / inventory_count) * 100
+    return round(growth_percentage, 2)
 
-        return render(request, 'inventory/dashboard.html', context)
 
-    except Exception as e:
-        print(f"Error in dashboard view: {str(e)}")
-        empty_chart_data = {
-            'data': [{
-                'type': 'bar',
-                'x': ['No Data'],
-                'y': [0]
-            }],
-            'layout': {
-                'annotations': [{
-                    'text': 'No Data to Display',
-                    'xref': 'paper',
-                    'yref': 'paper',
-                    'showarrow': False,
-                    'font': {
-                        'size': 20,
-                        'color': 'grey'
-                    },
-                    'x': 0.5,
-                    'y': 0.5
-                }]
-            }
-        }
-        
-        context = {
-            'total_products': 0,
-            'low_stock': 0,
-            'out_of_stock': 0,
-            'total_sales': 0,
-            'best_performing_product': json.dumps(empty_chart_data),
-            'most_stocked': json.dumps(empty_chart_data)
-        }
-        return render(request, 'inventory/dashboard.html', context)
+def calculate_sales_growth():
+    # Implementation for calculating sales growth
+    today = timezone.now()
+    thirty_days_ago = today - timedelta(days=30)
+    previous_month = today.replace(day=1) - timedelta(days=1)
+    previous_month_start = previous_month.replace(day=1)
+    previous_month_end = previous_month.replace(day=calendar.monthrange(previous_month.year, previous_month.month)[1])
+    sales_data = Sales.objects.filter(sale_date__date__range=(previous_month_start, previous_month_end))
+    total_sales = sales_data.aggregate(total=Sum('total_amount'))['total'] or 0
+    current_month_sales = Sales.objects.filter(sale_date__date__range=(today.replace(day=1), today)).aggregate(total=Sum('total_amount'))['total'] or 0
+    if total_sales == 0:
+        return 100
+    sales_growth = ((current_month_sales - total_sales) / total_sales) * 100
+    return round(sales_growth, 2)
+
+def get_monthly_sales_data():
+    # Dummy data for the last 6 months
+    months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
+    dummy_sales = [1500, 2300, 1800, 2500, 2100, 2800]  # Example sales figures
+    
+    return {
+        'labels': months,
+        'series': [dummy_sales]  # Chartist expects series as an array of arrays
+    }
 
 @login_required
 def sales_summary(request):
@@ -426,4 +382,95 @@ def search_results(request):
     }
     return render(request, 'inventory/search_results.html', context)
 
+@login_required
+def new_dashboard(request):
+    # Get current date and last 6 months
+    end_date = timezone.now()
+    start_date = end_date - timedelta(days=180)
+    
+    # Calculate metrics
+    metrics = {
+        'total_products': Inventory.objects.count(),
+        'total_sales': float(Sales.objects.aggregate(total=Sum('total_amount'))['total'] or 0),
+        'low_stock': Inventory.objects.filter(quantity_in_Stock__lte=10).count(),
+        'out_of_stock': Inventory.objects.filter(quantity_in_Stock=0).count(),
+    }
+    
+    # Get monthly sales data
+    monthly_sales = (Sales.objects
+        .filter(sale_date__range=(start_date, end_date))
+        .annotate(month=TruncMonth('sale_date'))
+        .values('month')
+        .annotate(total=Sum('total_amount'))
+        .order_by('month'))
+    
+    # Get top selling products
+    top_products = (Sales.objects
+        .values('inventory_item__name')
+        .annotate(total_sales=Sum('total_amount'))
+        .order_by('-total_sales')[:5])
+    
+    # Get recent sales
+    recent_sales = Sales.objects.select_related('inventory_item').order_by('-sale_date')[:10]
+    
+    # Format data for charts
+    sales_data = {
+        'months': [sale['month'].strftime("%b %Y") for sale in monthly_sales],
+        'values': [float(sale['total']) for sale in monthly_sales]
+    }
+    
+    products_data = {
+        'names': [product['inventory_item__name'] for product in top_products],
+        'values': [float(product['total_sales']) for product in top_products]
+    }
+    
+    context = {
+        'metrics': metrics,
+        'sales_data': json.dumps(sales_data),
+        'products_data': json.dumps(products_data),
+        'recent_sales': recent_sales,
+    }
+    
+    return render(request, 'inventory/new_dashboard.html', context)
 
+def calculate_growth_percentage(model, date_field):
+    # Implementation for calculating growth percentage
+    today = timezone.now()
+    previous_month = today.replace(day=1) - timedelta(days=1)
+    previous_month_start = previous_month.replace(day=1)
+    previous_month_end = previous_month.replace(day=calendar.monthrange(previous_month.year, previous_month.month)[1])
+    
+    # Changed created_at to created_date
+    inventory_count = model.objects.filter(created_date__date__range=(previous_month_start, previous_month_end)).count()
+    current_month_count = model.objects.filter(created_date__date__range=(today.replace(day=1), today)).count()
+    
+    if inventory_count == 0:
+        return 100
+    growth_percentage = ((current_month_count - inventory_count) / inventory_count) * 100
+    return round(growth_percentage, 2)
+
+
+def calculate_sales_growth():
+    # Implementation for calculating sales growth
+    today = timezone.now()
+    thirty_days_ago = today - timedelta(days=30)
+    previous_month = today.replace(day=1) - timedelta(days=1)
+    previous_month_start = previous_month.replace(day=1)
+    previous_month_end = previous_month.replace(day=calendar.monthrange(previous_month.year, previous_month.month)[1])
+    sales_data = Sales.objects.filter(sale_date__date__range=(previous_month_start, previous_month_end))
+    total_sales = sales_data.aggregate(total=Sum('total_amount'))['total'] or 0
+    current_month_sales = Sales.objects.filter(sale_date__date__range=(today.replace(day=1), today)).aggregate(total=Sum('total_amount'))['total'] or 0
+    if total_sales == 0:
+        return 100
+    sales_growth = ((current_month_sales - total_sales) / total_sales) * 100
+    return round(sales_growth, 2)
+
+def get_monthly_sales_data():
+    # Dummy data for the last 6 months
+    months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
+    dummy_sales = [1500, 2300, 1800, 2500, 2100, 2800]  # Example sales figures
+    
+    return {
+        'labels': months,
+        'series': [dummy_sales]  # Chartist expects series as an array of arrays
+    }

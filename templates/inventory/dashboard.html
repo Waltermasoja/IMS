@@ -2,193 +2,174 @@
 {% load static %}
 
 {% block extra_head %}
-<!-- Preload critical assets -->
-<link rel="preload" href="https://cdn.plot.ly/plotly-2.24.1.min.js" as="script">
-<script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
-{% endblock %}
-
-{% block content %}
-<div class="container-fluid">
-    <!-- Summary Section -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <h4 class="text-muted mb-3">Overview</h4>
-        </div>
-        <!-- Summary Cards -->
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-primary shadow h-100">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Products</div>
-                            <div class="h5 mb-0 font-weight-bold">{{ total_products }}</div>
-                        </div>
-                        <div class="col-auto">
-                            <i class="fas fa-boxes fa-2x text-gray-300"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-warning shadow h-100">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Low Stock Items</div>
-                            <div class="h5 mb-0 font-weight-bold">{{ low_stock }}</div>
-                        </div>
-                        <div class="col-auto">
-                            <i class="fas fa-exclamation-triangle fa-2x text-gray-300"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-danger shadow h-100">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Out of Stock</div>
-                            <div class="h5 mb-0 font-weight-bold">{{ out_of_stock }}</div>
-                        </div>
-                        <div class="col-auto">
-                            <i class="fas fa-times-circle fa-2x text-gray-300"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-success shadow h-100">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Total Sales</div>
-                            <div class="h5 mb-0 font-weight-bold">${{ total_sales|default:"0" }}</div>
-                        </div>
-                        <div class="col-auto">
-                            <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Charts Section -->
-    <div class="row">
-        <div class="col-xl-6 col-lg-6 mb-4">
-            <div class="card shadow h-100">
-                <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Best Performing Products</h6>
-                </div>
-                <div class="card-body">
-                    <div id="best_performing_chart" class="chart-container"></div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-xl-6 col-lg-6 mb-4">
-            <div class="card shadow h-100">
-                <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Most Stocked Products</h6>
-                </div>
-                <div class="card-body">
-                    <div id="most_stocked_chart" class="chart-container"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Debug Data -->
-<div style="display: none;">
-    <pre id="debug-best-performing">{{ best_performing_product|safe }}</pre>
-    <pre id="debug-most-stocked">{{ most_stocked|safe }}</pre>
-</div>
-
+<!-- Load Plotly.js -->
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 <style>
 .chart-container {
     height: 400px;
-    width: 100%;
+    position: relative;
+    margin: 20px 0;
+    padding: 15px;
 }
 
 .no-data-message {
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
     height: 100%;
-    color: #666;
-    font-size: 1.2rem;
+    color: #858796;
+    font-size: 1rem;
     text-align: center;
-    background: #f8f9fa;
-    border-radius: 8px;
-    border: 1px dashed #dee2e6;
+}
+
+.card {
+    margin-bottom: 24px;
+    border: none;
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+}
+
+.card-header {
+    background-color: #f8f9fc;
+    border-bottom: 1px solid #e3e6f0;
+}
+
+.download-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 1000;
 }
 </style>
+{% endblock %}
 
-{% block extra_js %}
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-xl-6 col-lg-6">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h6 class="m-0 font-weight-bold text-primary">Best Performing Products</h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" id="best_performing_chart">
+                        <!-- Chart will be rendered here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-6 col-lg-6">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h6 class="m-0 font-weight-bold text-primary">Most Stocked Products</h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" id="most_stocked_chart">
+                        <!-- Chart will be rendered here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     try {
-        console.log('Starting chart initialization...');
-        
-        // Get the data
-        const bestPerformingElement = document.getElementById('debug-best-performing');
-        const mostStockedElement = document.getElementById('debug-most-stocked');
-        
-        console.log('Raw best performing data:', bestPerformingElement.textContent);
-        console.log('Raw most stocked data:', mostStockedElement.textContent);
+        const bestPerformingData = JSON.parse('{{ best_performing_product|safe }}');
+        const mostStockedData = JSON.parse('{{ most_stocked|safe }}');
 
-        // Parse the data
-        const bestPerformingData = JSON.parse(bestPerformingElement.textContent);
-        const mostStockedData = JSON.parse(mostStockedElement.textContent);
+        function createPlotlyChart(data, containerId, title, color) {
+            if (!data || !data.length) {
+                document.getElementById(containerId).innerHTML = `
+                    <div class="no-data-message">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>No data available</span>
+                    </div>`;
+                return;
+            }
 
-        console.log('Parsed best performing data:', bestPerformingData);
-        console.log('Parsed most stocked data:', mostStockedData);
+            const trace = {
+                x: data.map(item => item.name),
+                y: data.map(item => item.value),
+                type: 'bar',
+                marker: {
+                    color: color
+                }
+            };
 
-        // Basic layout
-        const layout = {
-            autosize: true,
-            height: 400,
-            margin: {l: 50, r: 50, t: 50, b: 50},
-            paper_bgcolor: 'rgba(0,0,0,0)',
-            plot_bgcolor: 'rgba(0,0,0,0)'
-        };
+            const layout = {
+                title: {
+                    text: title,
+                    font: {
+                        size: 16,
+                        color: '#4e73df'
+                    }
+                },
+                height: 400,
+                margin: {
+                    l: 50,
+                    r: 50,
+                    t: 30,
+                    b: 100
+                },
+                xaxis: {
+                    tickangle: -45
+                },
+                yaxis: {
+                    tickformat: title.includes('Sales') ? '$,.2f' : ',d'
+                },
+                bargap: 0.3,
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                showlegend: false
+            };
+
+            const config = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+                toImageButtonOptions: {
+                    format: 'png',
+                    filename: containerId,
+                    height: 500,
+                    width: 700,
+                    scale: 2
+                }
+            };
+
+            Plotly.newPlot(containerId, [trace], layout, config);
+        }
 
         // Create charts
-        if (bestPerformingData.data[0].x.length > 0) {
-            Plotly.newPlot('best_performing_chart', bestPerformingData.data, layout);
-        } else {
-            document.getElementById('best_performing_chart').innerHTML = 
-                '<div class="no-data-message">No Data to Display</div>';
-        }
-
-        if (mostStockedData.data[0].x.length > 0) {
-            Plotly.newPlot('most_stocked_chart', mostStockedData.data, layout);
-        } else {
-            document.getElementById('most_stocked_chart').innerHTML = 
-                '<div class="no-data-message">No Data to Display</div>';
-        }
-
-        // Handle resize
-        window.addEventListener('resize', function() {
-            Plotly.Plots.resize('best_performing_chart');
-            Plotly.Plots.resize('most_stocked_chart');
-        });
+        createPlotlyChart(
+            bestPerformingData, 
+            'best_performing_chart', 
+            'Best Performing Products (Sales)', 
+            '#4e73df'
+        );
+        
+        createPlotlyChart(
+            mostStockedData, 
+            'most_stocked_chart', 
+            'Most Stocked Products', 
+            '#1cc88a'
+        );
 
     } catch (error) {
-        console.error('Error initializing charts:', error);
-        const errorMessage = '<div class="no-data-message">Error Loading Chart</div>';
-        document.getElementById('best_performing_chart').innerHTML = errorMessage;
-        document.getElementById('most_stocked_chart').innerHTML = errorMessage;
+        console.error('Error creating charts:', error);
+        const charts = document.querySelectorAll('.chart-container');
+        charts.forEach(container => {
+            container.innerHTML = `
+                <div class="no-data-message">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Error loading chart</span>
+                </div>`;
+        });
     }
 });
 </script>
-{% endblock %}
 {% endblock %}
