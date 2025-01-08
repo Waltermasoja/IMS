@@ -67,5 +67,10 @@ class PeriodSummaryForm(forms.Form):
     end_date = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
 
 class DateRangeForm(forms.Form):
-    start_date = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
-    end_date = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
+    start_date = forms.DateField(required=False, widget=forms.TextInput(attrs={'type': 'date'}))
+    end_date = forms.DateField(required=False, widget=forms.TextInput(attrs={'type': 'date'}))
+
+    def __init__(self, *args, **kwargs):
+        super(DateRangeForm, self).__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.update({'class': 'form-control'})

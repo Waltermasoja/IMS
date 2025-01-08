@@ -1,175 +1,252 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block extra_head %}
-<!-- Load Plotly.js -->
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-<style>
-.chart-container {
-    height: 400px;
-    position: relative;
-    margin: 20px 0;
-    padding: 15px;
-}
-
-.no-data-message {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    height: 100%;
-    color: #858796;
-    font-size: 1rem;
-    text-align: center;
-}
-
-.card {
-    margin-bottom: 24px;
-    border: none;
-    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
-}
-
-.card-header {
-    background-color: #f8f9fc;
-    border-bottom: 1px solid #e3e6f0;
-}
-
-.download-btn {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    z-index: 1000;
-}
-</style>
+{% block extra_css %}
+    <link href="https://cdn.jsdelivr.net/npm/apexcharts@3.35.0/dist/apexcharts.css" rel="stylesheet">
+    <style>
+        .metric-card {
+            border-radius: 10px;
+            border: none;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+        .metric-card:hover {
+            transform: translateY(-5px);
+        }
+        .chart-card {
+            border-radius: 10px;
+            border: none;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+        }
+        .chart-container {
+            min-height: 400px;
+        }
+        .recent-sales {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+    </style>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-xl-6 col-lg-6">
-            <div class="card shadow">
-                <div class="card-header">
-                    <h6 class="m-0 font-weight-bold text-primary">Best Performing Products</h6>
-                </div>
+<div class="container-fluid py-4">
+    <!-- Metrics Row -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card metric-card bg-primary text-white h-100">
                 <div class="card-body">
-                    <div class="chart-container" id="best_performing_chart">
-                        <!-- Chart will be rendered here -->
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-uppercase mb-1">Total Products</h6>
+                            <h2 class="mb-0">{{ metrics.total_products }}</h2>
+                        </div>
+                        <div class="icon-shape bg-white text-primary rounded-circle shadow-sm p-3">
+                            <i class="fas fa-boxes fa-2x"></i>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-
-        <div class="col-xl-6 col-lg-6">
-            <div class="card shadow">
-                <div class="card-header">
-                    <h6 class="m-0 font-weight-bold text-primary">Most Stocked Products</h6>
-                </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card metric-card bg-success text-white h-100">
                 <div class="card-body">
-                    <div class="chart-container" id="most_stocked_chart">
-                        <!-- Chart will be rendered here -->
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-uppercase mb-1">Total Sales</h6>
+                            <h2 class="mb-0">${{ metrics.total_sales|floatformat:2 }}</h2>
+                        </div>
+                        <div class="icon-shape bg-white text-success rounded-circle shadow-sm p-3">
+                            <i class="fas fa-dollar-sign fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card metric-card bg-warning text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-uppercase mb-1">Low Stock Items</h6>
+                            <h2 class="mb-0">{{ metrics.low_stock }}</h2>
+                        </div>
+                        <div class="icon-shape bg-white text-warning rounded-circle shadow-sm p-3">
+                            <i class="fas fa-exclamation-triangle fa-2x"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card metric-card bg-danger text-white h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-uppercase mb-1">Out of Stock</h6>
+                            <h2 class="mb-0">{{ metrics.out_of_stock }}</h2>
+                        </div>
+                        <div class="icon-shape bg-white text-danger rounded-circle shadow-sm p-3">
+                            <i class="fas fa-times-circle fa-2x"></i>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-</div>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    try {
-        const bestPerformingData = JSON.parse('{{ best_performing_product|safe }}');
-        const mostStockedData = JSON.parse('{{ most_stocked|safe }}');
-
-        function createPlotlyChart(data, containerId, title, color) {
-            if (!data || !data.length) {
-                document.getElementById(containerId).innerHTML = `
-                    <div class="no-data-message">
-                        <i class="fas fa-chart-bar"></i>
-                        <span>No data available</span>
-                    </div>`;
-                return;
-            }
-
-            const trace = {
-                x: data.map(item => item.name),
-                y: data.map(item => item.value),
-                type: 'bar',
-                marker: {
-                    color: color
-                }
-            };
-
-            const layout = {
-                title: {
-                    text: title,
-                    font: {
-                        size: 16,
-                        color: '#4e73df'
-                    }
-                },
-                height: 400,
-                margin: {
-                    l: 50,
-                    r: 50,
-                    t: 30,
-                    b: 100
-                },
-                xaxis: {
-                    tickangle: -45
-                },
-                yaxis: {
-                    tickformat: title.includes('Sales') ? '$,.2f' : ',d'
-                },
-                bargap: 0.3,
-                paper_bgcolor: 'rgba(0,0,0,0)',
-                plot_bgcolor: 'rgba(0,0,0,0)',
-                showlegend: false
-            };
-
-            const config = {
-                responsive: true,
-                displayModeBar: true,
-                displaylogo: false,
-                modeBarButtonsToRemove: ['lasso2d', 'select2d'],
-                toImageButtonOptions: {
-                    format: 'png',
-                    filename: containerId,
-                    height: 500,
-                    width: 700,
-                    scale: 2
-                }
-            };
-
-            Plotly.newPlot(containerId, [trace], layout, config);
-        }
-
-        // Create charts
-        createPlotlyChart(
-            bestPerformingData, 
-            'best_performing_chart', 
-            'Best Performing Products (Sales)', 
-            '#4e73df'
-        );
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <div class="col-xl-8 mb-4">
+            <div class="card chart-card h-100">
+                <div class="card-header bg-transparent">
+                    <h5 class="mb-0">Monthly Sales Trend</h5>
+                </div>
+                <div class="card-body">
+                    <div id="monthly-sales-chart" class="chart-container"></div>
+                </div>
+            </div>
+        </div>
         
-        createPlotlyChart(
-            mostStockedData, 
-            'most_stocked_chart', 
-            'Most Stocked Products', 
-            '#1cc88a'
-        );
+        <div class="col-xl-4 mb-4">
+            <div class="card chart-card h-100">
+                <div class="card-header bg-transparent">
+                    <h5 class="mb-0">Top Selling Products</h5>
+                </div>
+                <div class="card-body">
+                    <div id="products-chart" class="chart-container"></div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-    } catch (error) {
-        console.error('Error creating charts:', error);
-        const charts = document.querySelectorAll('.chart-container');
-        charts.forEach(container => {
-            container.innerHTML = `
-                <div class="no-data-message">
-                    <i class="fas fa-chart-bar"></i>
-                    <span>Error loading chart</span>
-                </div>`;
-        });
-    }
-});
-</script>
+    <!-- Recent Sales Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card chart-card">
+                <div class="card-header bg-transparent">
+                    <h5 class="mb-0">Recent Sales</h5>
+                </div>
+                <div class="card-body recent-sales">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Quantity</th>
+                                <th>Amount</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sale in recent_sales %}
+                            <tr>
+                                <td>{{ sale.inventory_item.name }}</td>
+                                <td>{{ sale.quantity_sold }}</td>
+                                <td>${{ sale.total_amount|floatformat:2 }}</td>
+                                <td>{{ sale.sale_date|date:"M d, Y" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
+
+{% block extra_javascript %}
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.35.0/dist/apexcharts.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Parse the data from Django
+        const salesData = JSON.parse('{{ sales_data|escapejs }}');
+        const productsData = JSON.parse('{{ products_data|escapejs }}');
+        
+        // Monthly Sales Chart
+        const salesOptions = {
+            series: [{
+                name: 'Sales',
+                data: salesData.values
+            }],
+            chart: {
+                type: 'area',
+                height: 350,
+                toolbar: {
+                    show: false
+                }
+            },
+            dataLabels: {
+                enabled: false
+            },
+            stroke: {
+                curve: 'smooth',
+                width: 2
+            },
+            xaxis: {
+                categories: salesData.months
+            },
+            yaxis: {
+                labels: {
+                    formatter: function(val) {
+                        return '$' + val.toFixed(2);
+                    }
+                }
+            },
+            tooltip: {
+                y: {
+                    formatter: function(val) {
+                        return '$' + val.toFixed(2);
+                    }
+                }
+            },
+            fill: {
+                type: 'gradient',
+                gradient: {
+                    shadeIntensity: 1,
+                    opacityFrom: 0.7,
+                    opacityTo: 0.9,
+                    stops: [0, 90, 100]
+                }
+            }
+        };
+        
+        // Products Chart
+        const productsOptions = {
+            series: productsData.values,
+            chart: {
+                type: 'donut',
+                height: 350
+            },
+            labels: productsData.names,
+            responsive: [{
+                breakpoint: 480,
+                options: {
+                    chart: {
+                        width: 200
+                    },
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }],
+            tooltip: {
+                y: {
+                    formatter: function(val) {
+                        return '$' + val.toFixed(2);
+                    }
+                }
+            }
+        };
+
+        // Create the charts
+        const salesChart = new ApexCharts(document.querySelector("#monthly-sales-chart"), salesOptions);
+        const productsChart = new ApexCharts(document.querySelector("#products-chart"), productsOptions);
+        
+        salesChart.render();
+        productsChart.render();
+    });
+</script>
+{% endblock %} 

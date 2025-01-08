@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-
+{% load custom_filters %}
 {% block content %}
 <div class="container-fluid">
     <div class="card shadow-sm">
@@ -15,6 +15,25 @@
             </div>
 
             {% if stock_movements %}
+
+            <form method="GET" class="mb-4">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Start Date</label>
+                        {{ form.start_date|addclass:'form-control' }}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">End Date</label>
+                        {{ form.end_date|addclass:'form-control' }}
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-filter me-2"></i>Filter
+                        </button>
+                    </div>
+                </div>
+            </form>
+
             <div class="table-responsive">
                 <table class="table table-hover">
                     <thead>
@@ -22,33 +41,33 @@
                             <th>Date</th>
                             <th>Movement Type</th>
                             <th>Quantity</th>
-                            <th>Opening Stock</th>
-                            <th>Closing Stock</th>
+                            <th>Opening Balance</th>
+                            <th>Closing Balance</th>
                             <th>Reason</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for movement in stock_movements %}
+                        {% for item in stock_movements %}
                         <tr>
-                            <td>{{ movement.stock_date|date:"M d, Y H:i" }}</td>
+                            <td>{{ item.movement.stock_date|date:"M d, Y H:i" }}</td>
                             <td>
-                                {% if movement.movement_type == 'IN' %}
-                                    <span class="badge bg-success">Stock In</span>
+                                {% if item.movement.movement_type == 'IN' %}
+                                <span class="badge bg-success">STOCK IN</span>
                                 {% else %}
-                                    <span class="badge bg-warning text-dark">Stock Out</span>
+                                <span class="badge bg-warning text-dark">STOCK OUT</span>
                                 {% endif %}
                             </td>
                             <td>
-                                {% if movement.movement_type == 'IN' %}
-                                    <span class="text-success">+{{ movement.quantity }}</span>
+                                {% if item.movement.movement_type == 'IN' %}
+                                <span class="text-success">+{{ item.movement.quantity }}</span>
                                 {% else %}
-                                    <span class="text-danger">-{{ movement.quantity }}</span>
+                                <span class="text-danger">-{{ item.movement.quantity }}</span>
                                 {% endif %}
                             </td>
-                            <td>{{ movement.opening_stock }}</td>
-                            <td>{{ movement.closing_stock }}</td>
+                            <td>{{ item.opening_balance }}</td>
+                            <td>{{ item.closing_balance }}</td>
                             <td>
-                                <span class="text-muted">{{ movement.reason }}</span>
+                                <span class="text-muted">{{ item.movement.reason }}</span>
                             </td>
                         </tr>
                         {% endfor %}
@@ -58,11 +77,11 @@
                             <td colspan="3"><strong>Current Stock Level</strong></td>
                             <td colspan="3">
                                 {% if inventory_item.quantity_in_Stock == 0 %}
-                                    <span class="badge bg-danger">Out of Stock</span>
+                                <span class="badge bg-danger">Out of Stock</span>
                                 {% elif inventory_item.quantity_in_Stock <= 10 %}
-                                    <span class="badge bg-warning text-dark">Low Stock ({{ inventory_item.quantity_in_Stock }})</span>
+                                <span class="badge bg-warning text-dark">Low Stock: {{inventory_item.quantity_in_Stock}}</span>
                                 {% else %}
-                                    <span class="badge bg-success">{{ inventory_item.quantity_in_Stock }} in Stock</span>
+                                <span class="badge bg-success">{{ inventory_item.quantity_in_Stock }} in Stock</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -114,9 +133,9 @@
                             <th>Status:</th>
                             <td>
                                 {% if inventory_item.on_sale %}
-                                    <span class="badge bg-success">On Sale</span>
+                                <span class="badge bg-success">On Sale</span>
                                 {% else %}
-                                    <span class="badge bg-secondary">Regular Price</span>
+                                <span class="badge bg-secondary">Regular Price</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -128,45 +147,45 @@
 </div>
 
 <style>
-.card {
-    border: none;
-    border-radius: 15px;
-    margin-bottom: 1rem;
-}
+    .card {
+        border: none;
+        border-radius: 15px;
+        margin-bottom: 1rem;
+    }
 
-.table th {
-    background-color: var(--light-blue);
-    color: var(--dark-blue);
-}
+    .table th {
+        background-color: var(--light-blue);
+        color: var(--dark-blue);
+    }
 
-.table td {
-    vertical-align: middle;
-}
+    .table td {
+        vertical-align: middle;
+    }
 
-.badge {
-    font-weight: 500;
-    padding: 0.5em 0.8em;
-}
+    .badge {
+        font-weight: 500;
+        padding: 0.5em 0.8em;
+    }
 
-.table-hover tbody tr:hover {
-    background-color: var(--light-blue);
-}
+    .table-hover tbody tr:hover {
+        background-color: var(--light-blue);
+    }
 
-.text-success {
-    color: #28a745 !important;
-}
+    .text-success {
+        color: #28a745 !important;
+    }
 
-.text-danger {
-    color: #dc3545 !important;
-}
+    .text-danger {
+        color: #dc3545 !important;
+    }
 
-.table-sm th,
-.table-sm td {
-    padding: 0.5rem;
-}
+    .table-sm th,
+    .table-sm td {
+        padding: 0.5rem;
+    }
 
-.card-title {
-    color: var(--dark-blue);
-}
+    .card-title {
+        color: var(--dark-blue);
+    }
 </style>
 {% endblock %}

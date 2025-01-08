@@ -14,14 +14,16 @@ class Inventory(models.Model):
     created_date = models.DateTimeField(auto_now_add=True)
     last_updated = models.DateTimeField(auto_now=True)
     last_sale_date = models.DateTimeField(null=True, blank=True)
+    sales_record = models.ManyToManyField('Sales', related_name='inventory_items', blank=True)
 
     @property
     def total_sales(self):
-        return self.sales_set.aggregate(total=models.Sum('total_amount'))['total'] or 0
+        return self.sales_records.aggregate(total=models.Sum('total_amount'))['total'] or 0
 
     @property
     def total_quantity_sold(self):
-        return self.sales_set.aggregate(total=models.Sum('quantity_sold'))['total'] or 0
+        return self.sales_records.aggregate(total=models.Sum('quantity_sold'))['total'] or 0
+
 
     def __str__(self):
         return self.name

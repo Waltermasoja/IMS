@@ -26,6 +26,7 @@ from datetime import timedelta
 from .models import Inventory, Sales, Return, Damaged
 import json
 import calendar
+from django.urls import reverse
 
 
 
@@ -50,8 +51,10 @@ def per_product_view(request,pk):
     context = {
         'inventory':product
     }
+    print(product.last_sale_date)
 
     return render(request,'inventory/per_product.html',context)
+
 @login_required 
 def add_product(request):
     if request.method == 'POST':
@@ -88,7 +91,7 @@ def delete_inventory(request,pk):
 from decimal import Decimal
 
 @login_required
-def update_inventory(request, pk):
+def make_sale(request, pk):
     inventory_item = get_object_or_404(Inventory, pk=pk)
     
     if request.method == 'POST':
@@ -111,6 +114,17 @@ def update_inventory(request, pk):
                 sale_price=sale_price,
                 discount_applied=discount,
                 sale_date=timezone.now()
+            )
+            inventory_item.last_sale_date = timezone.now()
+            inventory_item.save()
+
+
+            # Create stock movement record
+            StockMovement.objects.create(
+                inventory_item=inventory_item,
+                movement_type='OUT',
+                quantity=quantity_sold,
+                reason='Sale'
             )
 
             # Update inventory stock
@@ -147,68 +161,7 @@ def update_inventory(request, pk):
 
 @login_required
 # @condition(etag_func=get_dashboard_etag)
-def dashboard(request):
-    # Calculate metrics
-    total_products = Inventory.objects.count()
-    total_sales = Sales.objects.aggregate(total=Sum('total_amount'))['total'] or 0
-    sales_growth = calculate_sales_growth()  # Assume this function is defined
-    # product_growth = calculate_product_growth()  # Assume this function is defined
 
-    # Prepare data for charts
-    monthly_sales_data = get_monthly_sales_data()  # Assume this function is defined
-    # product_performance_data = get_product_performance_data()  # Assume this function is defined
-
-    context = {
-        'total_products': total_products,
-        'total_sales': total_sales,
-        'sales_growth': sales_growth,
-        # 'product_growth': product_growth,
-        'monthly_sales_data': monthly_sales_data,
-        # 'product_performance_data': product_performance_data,
-    }
-    return render(request, 'inventory/dashboard.html', context)
-
-def calculate_growth_percentage(model, date_field):
-    # Implementation for calculating growth percentage
-    today = timezone.now()
-    previous_month = today.replace(day=1) - timedelta(days=1)
-    previous_month_start = previous_month.replace(day=1)
-    previous_month_end = previous_month.replace(day=calendar.monthrange(previous_month.year, previous_month.month)[1])
-    
-    # Changed created_at to created_date
-    inventory_count = model.objects.filter(created_date__date__range=(previous_month_start, previous_month_end)).count()
-    current_month_count = model.objects.filter(created_date__date__range=(today.replace(day=1), today)).count()
-    
-    if inventory_count == 0:
-        return 100
-    growth_percentage = ((current_month_count - inventory_count) / inventory_count) * 100
-    return round(growth_percentage, 2)
-
-
-def calculate_sales_growth():
-    # Implementation for calculating sales growth
-    today = timezone.now()
-    thirty_days_ago = today - timedelta(days=30)
-    previous_month = today.replace(day=1) - timedelta(days=1)
-    previous_month_start = previous_month.replace(day=1)
-    previous_month_end = previous_month.replace(day=calendar.monthrange(previous_month.year, previous_month.month)[1])
-    sales_data = Sales.objects.filter(sale_date__date__range=(previous_month_start, previous_month_end))
-    total_sales = sales_data.aggregate(total=Sum('total_amount'))['total'] or 0
-    current_month_sales = Sales.objects.filter(sale_date__date__range=(today.replace(day=1), today)).aggregate(total=Sum('total_amount'))['total'] or 0
-    if total_sales == 0:
-        return 100
-    sales_growth = ((current_month_sales - total_sales) / total_sales) * 100
-    return round(sales_growth, 2)
-
-def get_monthly_sales_data():
-    # Dummy data for the last 6 months
-    months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
-    dummy_sales = [1500, 2300, 1800, 2500, 2100, 2800]  # Example sales figures
-    
-    return {
-        'labels': months,
-        'series': [dummy_sales]  # Chartist expects series as an array of arrays
-    }
 
 @login_required
 def sales_summary(request):
@@ -261,6 +214,14 @@ def returnInventory(request,pk):
             inventory_item.quantity_in_Stock += quantity_returned
             inventory_item.save()
             return_instance.save()
+
+            # Create stock movement record
+            StockMovement.objects.create(
+                inventory_item=inventory_item,
+                movement_type='IN',
+                quantity=quantity_returned,
+                reason='Return'
+            )
             messages.success(request, f"Successfully returned {quantity_returned} item(s) of {inventory_item.name}")
             return redirect('/inventory/')
 
@@ -329,14 +290,38 @@ def damagedInventory(request, pk):
 
 @login_required
 def stock_movement_summary(request, pk):
-    inventory_items = get_object_or_404(Inventory, pk=pk)
-    stock_movements = StockMovement.objects.filter(inventory_item=inventory_items).order_by('-stock_date')
+    inventory_item = get_object_or_404(Inventory, pk=pk)
+    form = DateRangeForm(request.GET or None)
+    
+    stock_movements = StockMovement.objects.filter(inventory_item=inventory_item).order_by('stock_date')
+    
+    if form.is_valid():
+        start_date = form.cleaned_data['start_date']
+        end_date = form.cleaned_data['end_date']
+        stock_movements = stock_movements.filter(stock_date__range=(start_date, end_date))
+
+    # Calculate running balance for each movement
+    running_balance = 0
+    movements_with_balance = []
+    
+    for movement in stock_movements:
+        opening_balance = running_balance
+        if movement.movement_type == 'IN':
+            running_balance += movement.quantity
+        else:
+            running_balance -= movement.quantity
+            
+        movements_with_balance.append({
+            'movement': movement,
+            'opening_balance': opening_balance,
+            'closing_balance': running_balance
+        })
 
     context = {
-        'inventory_items': inventory_items,
-        'stock_movements': stock_movements,
+        'inventory_item': inventory_item,
+        'stock_movements': movements_with_balance,
+        'form': form
     }
-
     return render(request, 'inventory/stock_movement_summary.html', context)
 
 def login_view(request):
@@ -382,8 +367,18 @@ def search_results(request):
     }
     return render(request, 'inventory/search_results.html', context)
 
+# def get_dashboard_etag(request):
+#     return f"dashboard-{cache.get('dashboard_version', '1.0')}"
+
+# class DecimalEncoder(json.JSONEncoder):
+#     def default(self, obj):
+#         if isinstance(obj, Decimal):
+#             return str(obj)
+#         return super(DecimalEncoder, self).default(obj)
+
 @login_required
-def new_dashboard(request):
+# @condition(etag_func=get_dashboard_etag)
+def dashboard(request):
     # Get current date and last 6 months
     end_date = timezone.now()
     start_date = end_date - timedelta(days=180)
@@ -431,7 +426,7 @@ def new_dashboard(request):
         'recent_sales': recent_sales,
     }
     
-    return render(request, 'inventory/new_dashboard.html', context)
+    return render(request, 'inventory/dashboard.html', context)
 
 def calculate_growth_percentage(model, date_field):
     # Implementation for calculating growth percentage

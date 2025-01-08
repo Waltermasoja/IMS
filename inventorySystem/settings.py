@@ -55,7 +55,8 @@ INSTALLED_APPS = [
     'inventory.apps.InventoryConfig',
     'crispy_forms',
     'bootstrap4',
-    'crispy_bootstrap4'
+    'crispy_bootstrap4',
+    'inventory.templatetags.custom_filters',
 ]
 
 MIDDLEWARE = [
