@@ -1,11 +1,19 @@
 from django import forms
 from django.forms import ModelForm
-from .models import Inventory, Return, Damaged, Sales
+from .models import Inventory, Return, Damaged, Sales, Inventory_category
 
 class AddInventoryForm(ModelForm):
+    category = forms.ModelChoiceField(
+        queryset=Inventory_category.objects.all(),
+        empty_label="Select a category",
+        required=True,
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+    
     class Meta:
         model = Inventory
         fields = [
+            'category',
             'bought_from',
             'name',
             'purchase_price',
@@ -16,6 +24,10 @@ class AddInventoryForm(ModelForm):
             'size',
             'on_sale'
         ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['category'].help_text = '<a href="#" data-bs-toggle="modal" data-bs-target="#addCategoryModal">+ Add New Category</a>'
 
     def clean(self):
         cleaned_data = super().clean()
@@ -74,3 +86,15 @@ class DateRangeForm(forms.Form):
         super(DateRangeForm, self).__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget.attrs.update({'class': 'form-control'})
+
+class Inventory_categoryForm(ModelForm):
+    class Meta:
+        model = Inventory_category
+        fields = ['name', 'description']
+
+    def __init__(self, *args, **kwargs):
+        super(Inventory_categoryForm, self).__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.update({'class': 'form-control'})
+            
+

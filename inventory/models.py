@@ -11,6 +11,7 @@ class Inventory(models.Model):
     label = models.CharField(max_length=50)
     size = models.CharField(max_length=20)
     on_sale = models.BooleanField(default=True)
+    category = models.ForeignKey('Inventory_category', on_delete=models.SET_NULL, null=True, blank=True)
     created_date = models.DateTimeField(auto_now_add=True)
     last_updated = models.DateTimeField(auto_now=True)
     last_sale_date = models.DateTimeField(null=True, blank=True)
@@ -32,6 +33,15 @@ class Inventory(models.Model):
         verbose_name = 'Inventory Item'
         verbose_name_plural = 'Inventory'
 
+class Inventory_category(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    date_created = models.DateTimeField(auto_now_add=True)
+    date_updated = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
 class Sales(models.Model):
     inventory_item = models.ForeignKey('Inventory', on_delete=models.CASCADE, related_name='sales_records')
     quantity_sold = models.IntegerField()
@@ -39,6 +49,16 @@ class Sales(models.Model):
     sale_date = models.DateTimeField(default=timezone.now)
     discount_applied = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     total_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    receipt_number = models.CharField(max_length=20, blank=True, null=True)
+    quantity_returned = models.IntegerField(default=0)
+
+    @property
+    def can_be_returned(self):
+        return self.quantity_sold > self.quantity_returned
+
+    @property
+    def remaining_quantity(self):
+        return self.quantity_sold - self.quantity_returned
 
     def save(self, *args, **kwargs):
         if not self.total_amount:
@@ -55,15 +75,16 @@ class Sales(models.Model):
         return f"Sale of {self.quantity_sold} {self.inventory_item.name}(s) on {self.sale_date.date()}"
 
 class Return(models.Model):
-    inventory_item = models.ForeignKey(Inventory,on_delete=models.CASCADE)
-    quantity_returned = models.IntegerField(blank=False,null=False)
+    inventory_item = models.ForeignKey(Inventory, on_delete=models.CASCADE)
+    quantity_returned = models.IntegerField(blank=False, null=False)
     return_date = models.DateField(auto_now_add=True)
     reason = models.TextField()
-    size = models.PositiveIntegerField(default=0,blank=False,null=False)
-    label = models.TextField(max_length=255,default="")
+    receipt_number = models.CharField(max_length=20, blank=True, null=True)
+    sale = models.ForeignKey('Sales', on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self) -> str:
-        return f'Return of {self.quantity_returned }{self.inventory_item.name}'
+        return f'Return of {self.quantity_returned} {self.inventory_item.name}'
+
     def save(self, *args, **kwargs):
         self.size = self.inventory_item.size 
         super(Return, self).save(*args, **kwargs)

@@ -1,0 +1,269 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load inventory_filters %}
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="card shadow-lg rounded-3">
+        <div class="card-body p-4">
+            <div class="d-flex justify-content-between align-items-center mb-5">
+                <div>
+                    <h2 class="fw-bold mb-2">Inventory Categories</h2>
+                    <p class="text-muted fs-6">Manage your product categories</p>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-primary rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+                        <i class="fas fa-plus me-2"></i>Add Category
+                    </button>
+                    <a href="{% url 'inventory' %}" class="btn btn-outline-primary rounded-pill px-4 ms-2">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Inventory
+                    </a>
+                </div>
+            </div>
+
+            <!-- Categories Table -->
+            <div class="card bg-light border-0 rounded-4">
+                <div class="card-body p-4">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="bg-light">
+                                <tr>
+                                    <th class="fw-semibold">Category Name</th>
+                                    <th class="fw-semibold">Description</th>
+                                    <th class="fw-semibold text-center">Products Count</th>
+                                    <th class="fw-semibold text-end">Total Stock Value</th>
+                                    <th class="fw-semibold text-end">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for category in categories %}
+                                <tr>
+                                    <td class="fw-medium">{{ category.name }}</td>
+                                    <td class="text-muted">{{ category.description|truncatechars:50 }}</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-primary rounded-pill">
+                                            {{ category.items_count }}
+                                        </span>
+                                    </td>
+                                    <td class="text-end">${{ category.total_stock_value|floatformat:2 }}</td>
+                                    <td class="text-end">
+                                        <button class="btn btn-sm btn-outline-primary rounded-pill" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#editCategoryModal{{ category.id }}">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger rounded-pill ms-2" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#deleteCategoryModal{{ category.id }}">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center py-4 text-muted">
+                                        <i class="fas fa-folder-open fa-2x mb-3"></i>
+                                        <p class="mb-0">No categories found. Add your first category!</p>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Category Modal -->
+<div class="modal fade" id="addCategoryModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 shadow">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold">Add New Category</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="addCategoryForm">
+                {% csrf_token %}
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold mb-2">Category Name</label>
+                        <input type="text" name="name" class="form-control rounded-3" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold mb-2">Description</label>
+                        <textarea name="description" class="form-control rounded-3" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4">Add Category</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Category Modal -->
+{% for category in categories %}
+<div class="modal fade" id="editCategoryModal{{ category.id }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 shadow">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold">Edit Category</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="POST" action="{% url 'update_inventory_category' category.id %}">
+                {% csrf_token %}
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold mb-2">Category Name</label>
+                        <input type="text" name="name" class="form-control rounded-3" value="{{ category.name }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold mb-2">Description</label>
+                        <textarea name="description" class="form-control rounded-3" rows="3">{{ category.description }}</textarea>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary rounded-pill px-4">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<!-- Delete Category Modal -->
+{% for category in categories %}
+<div class="modal fade" id="deleteCategoryModal{{ category.id }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 shadow">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold text-danger">Delete Category</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p>Are you sure you want to delete <strong>{{ category.name }}</strong>?</p>
+                <p class="text-danger mb-0"><i class="fas fa-exclamation-triangle me-2"></i>This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{% url 'delete_inventory_category' category.id %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger rounded-pill px-4">Delete Category</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<style>
+:root {
+    --primary-color: #0d6efd;
+    --primary-hover: #0b5ed7;
+    --border-radius: 1rem;
+    --transition: all 0.3s ease;
+}
+
+.card {
+    transition: var(--transition);
+}
+
+.form-control {
+    padding: 0.75rem 1rem;
+    border: 1.5px solid #e0e0e0;
+    transition: var(--transition);
+    font-size: 0.95rem;
+}
+
+.form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+}
+
+.btn {
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+    transition: var(--transition);
+}
+
+.btn-sm {
+    padding: 0.5rem 1rem;
+}
+
+.table th {
+    font-size: 0.95rem;
+    color: #495057;
+}
+
+.table td {
+    font-size: 0.95rem;
+}
+
+.badge {
+    font-weight: 500;
+    padding: 0.5em 1em;
+}
+
+.modal-content {
+    border: none;
+}
+
+@media (max-width: 768px) {
+    .container-fluid {
+        padding: 1rem;
+    }
+    
+    .card-body {
+        padding: 1.5rem;
+    }
+}
+</style>
+
+<script>
+document.getElementById('addCategoryForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    
+    fetch('{% url "add_category_ajax" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            // Reset the form
+            this.reset();
+            
+            // Close the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('addCategoryModal'));
+            modal.hide();
+            
+            // Refresh the page to show the new category
+            window.location.reload();
+        } else {
+            console.error('Server Error:', data.error);
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Fetch Error:', error);
+        console.error('Error Details:', error.message);
+        alert('An error occurred while adding the category. Please check the console for details.');
+    });
+});
+</script>
+{% endblock %}

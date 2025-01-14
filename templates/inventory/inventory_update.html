@@ -5,33 +5,72 @@
 <div class="container-fluid">
     <div class="card shadow-sm">
         <div class="card-body">
-            <h3 class="card-title mb-4">Make a Sale</h3>
+            <h3 class="card-title mb-4">Edit Product - {{ inventory.name }}</h3>
 
             {% include 'inventory/includes/form_errors.html' %}
 
             <form method="POST">
                 {% csrf_token %}
                 <div class="row">
-                    <div class="col-md-6">
-                        {% for field in form %}
-                            <div class="mb-3">
-                                <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
-                                {{ field|addclass:'form-control' }}
-                                {% if field.errors %}
-                                    <div class="invalid-feedback d-block">
-                                        {% for error in field.errors %}
-                                            {{ error }}
-                                        {% endfor %}
-                                    </div>
-                                {% endif %}
-                            </div>
-                        {% endfor %}
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Category</label>
+                        <select name="category" class="form-control" required>
+                            {% for category in categories %}
+                            <option value="{{ category.id }}" {% if category.id == inventory.category.id %}selected{% endif %}>
+                                {{ category.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Supplier</label>
+                        <input type="text" name="bought_from" class="form-control" value="{{ inventory.bought_from }}" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Product Name</label>
+                        <input type="text" name="name" class="form-control" value="{{ inventory.name }}" required>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Label</label>
+                        <input type="text" name="label" class="form-control" value="{{ inventory.label }}">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Size</label>
+                        <input type="number" name="size" class="form-control" value="{{ inventory.size }}">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Quantity in Stock</label>
+                        <input type="number" name="quantity_in_Stock" class="form-control" value="{{ inventory.quantity_in_Stock }}" required min="0">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Purchase Price</label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" name="purchase_price" class="form-control" step="0.01" value="{{ inventory.purchase_price }}" required min="0">
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label">Selling Price</label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" name="selling_price" class="form-control" step="0.01" value="{{ inventory.selling_price }}" required min="0">
+                        </div>
+                    </div>
+                    <div class="col-12 mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea name="description" class="form-control" rows="3">{{ inventory.description }}</textarea>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input type="checkbox" name="on_sale" class="form-check-input" id="onSale" {% if inventory.on_sale %}checked{% endif %}>
+                            <label class="form-check-label" for="onSale">Available for Sale</label>
+                        </div>
                     </div>
                 </div>
 
                 <div class="form-group pt-4">
                     <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-check-circle me-2"></i>Make a Sale
+                        <i class="fas fa-save me-2"></i>Save Changes
                     </button>
                     <a href="{% url 'inventory' %}" class="btn btn-outline-secondary ms-2">
                         <i class="fas fa-times-circle me-2"></i>Cancel
@@ -41,62 +80,4 @@
         </div>
     </div>
 </div>
-
-<style>
-.card {
-    border: none;
-    border-radius: 15px;
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-}
-
-.card-body {
-    padding: 2rem;
-}
-
-.form-control {
-    border-radius: 8px;
-    padding: 0.75rem 1rem;
-    border: 1px solid #ced4da;
-    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-}
-
-.form-control:focus {
-    border-color: var(--accent-blue);
-    box-shadow: 0 0 0 0.2rem rgba(0, 136, 204, 0.25);
-}
-
-.invalid-feedback {
-    color: #dc3545;
-    font-size: 0.875rem;
-    margin-top: 0.25rem;
-}
-
-.btn {
-    padding: 0.75rem 1.5rem;
-    border-radius: 8px;
-    font-weight: 500;
-    transition: all 0.2s;
-}
-
-.btn-primary {
-    background-color: var(--primary-blue);
-    border-color: var(--primary-blue);
-}
-
-.btn-primary:hover {
-    background-color: var(--dark-blue);
-    border-color: var(--dark-blue);
-}
-
-.btn-outline-secondary:hover {
-    background-color: #6c757d;
-    color: white;
-}
-
-.form-label {
-    font-weight: 500;
-    margin-bottom: 0.5rem;
-    color: #495057;
-}
-</style>
 {% endblock %}

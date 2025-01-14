@@ -1,8 +1,8 @@
 from django.shortcuts import redirect, render,get_object_or_404
 import plotly.utils
-from .models import Inventory, Return, Damaged, StockMovement, Sales, missing_inventory
+from .models import Inventory, Return, Damaged, StockMovement, Sales, missing_inventory, Inventory_category
 from django.contrib.auth.decorators import login_required
-from .forms import AddInventoryForm,UpdateInventoryForm,PeriodSummaryForm,DateRangeForm,ReturnInventoryForm,DamagedInventoryForm,LoginForm
+from .forms import AddInventoryForm,UpdateInventoryForm,DateRangeForm,ReturnInventoryForm,DamagedInventoryForm,Inventory_categoryForm
 from django.contrib import messages
 import plotly
 import plotly.express as px
@@ -23,16 +23,22 @@ from django.db.models import Sum, Count, F, ExpressionWrapper, DecimalField, Q
 from django.db.models.functions import TruncMonth, Coalesce, ExtractMonth
 from django.utils import timezone
 from datetime import timedelta
-from .models import Inventory, Sales, Return, Damaged
+from .models import Inventory, Sales, Return, Damaged, Inventory_category
 import json
 import calendar
 from django.urls import reverse
+from django.db import transaction
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods
+import decimal
 
 
 
 @login_required
 def inventory_list(request):
     inventories = Inventory.objects.all()
+    categories = Inventory_category.objects.all()
     
     # Renamed annotations to avoid conflicts with model properties
     inventories = inventories.annotate(
@@ -41,17 +47,68 @@ def inventory_list(request):
     )
     
     context = {
-        'inventories': inventories
+        'inventories': inventories,
+        'categories': categories,
     }
     return render(request, 'inventory/inventory_list.html', context)
 
 @login_required
-def per_product_view(request,pk):
-    product = get_object_or_404(Inventory,pk=pk)
+@require_http_methods(["POST"])
+def update_inventory(request, pk):
+    inventory = get_object_or_404(Inventory, pk=pk)
+    
+    try:
+        # Get form data
+        data = request.POST.dict()
+        data['on_sale'] = request.POST.get('on_sale') == 'on'
+        
+        # Convert numeric fields
+        data['purchase_price'] = Decimal(data['purchase_price'])
+        data['selling_price'] = Decimal(data['selling_price'])
+        data['quantity_in_Stock'] = int(data['quantity_in_Stock'])
+        data['size'] = int(data.get('size', 0))
+        
+        # Validate prices
+        if data['selling_price'] < data['purchase_price']:
+            raise ValueError("Selling price cannot be less than purchase price")
+        
+        # Update inventory
+        for key, value in data.items():
+            if key != 'csrfmiddlewaretoken':
+                setattr(inventory, key, value)
+        
+        inventory.save()
+        
+        return JsonResponse({
+            'success': True
+        })
+        
+    except (ValueError, decimal.InvalidOperation) as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+@login_required
+def per_product_view(request, pk):
+    inventory = get_object_or_404(Inventory, pk=pk)
+    
+    # Get sales data with return information
+    sales_data = Sales.objects.filter(inventory_item=inventory)
+    
+    total_sales = sum(sale.total_amount for sale in sales_data)
+    total_quantity_sold = sum(sale.quantity_sold for sale in sales_data)
+    total_returns = sum(sale.quantity_returned for sale in sales_data)
+    net_quantity = total_quantity_sold - total_returns
+    
     context = {
-        'inventory':product
+        'inventory': inventory,
+        'total_sales': total_sales,
+        'total_quantity_sold': total_quantity_sold,
+        'total_returns': total_returns,
+        'net_quantity': net_quantity,
     }
-    print(product.last_sale_date)
+    print(inventory.last_sale_date)
 
     return render(request,'inventory/per_product.html',context)
 
@@ -91,60 +148,55 @@ def delete_inventory(request,pk):
 from decimal import Decimal
 
 @login_required
+@require_http_methods(["GET", "POST"])
 def make_sale(request, pk):
-    inventory_item = get_object_or_404(Inventory, pk=pk)
+    inventory = get_object_or_404(Inventory, pk=pk)
     
     if request.method == 'POST':
-        form = UpdateInventoryForm(request.POST)
-        
-        if form.is_valid():
-            quantity_sold = form.cleaned_data['quantity_sold']
-            sale_price = form.cleaned_data['sale_price']
-            discount = form.cleaned_data['discount_applied']
-
-            # Check if enough stock is available
-            if inventory_item.quantity_in_Stock - quantity_sold < 0:
-                messages.error(request, "Not enough stock available.")
-                return render(request, 'inventory/inventory_update.html', {'form': form})
-
-            # Create new sale record
+        try:
+            quantity = int(request.POST.get('quantity_sold'))
+            sale_price = Decimal(request.POST.get('sale_price'))
+            discount = Decimal(request.POST.get('discount_applied', 0))
+            
+            if quantity <= 0:
+                raise ValueError("Quantity must be greater than 0")
+            
+            if quantity > inventory.quantity_in_Stock:
+                raise ValueError("Not enough stock available")
+            
+            if sale_price <= 0:
+                raise ValueError("Sale price must be greater than 0")
+            
+            # Create the sale
             sale = Sales.objects.create(
-                inventory_item=inventory_item,
-                quantity_sold=quantity_sold,
+                inventory_item=inventory,
+                quantity_sold=quantity,
                 sale_price=sale_price,
-                discount_applied=discount,
-                sale_date=timezone.now()
+                discount_applied=discount
             )
-            inventory_item.last_sale_date = timezone.now()
-            inventory_item.save()
-
-
-            # Create stock movement record
-            StockMovement.objects.create(
-                inventory_item=inventory_item,
-                movement_type='OUT',
-                quantity=quantity_sold,
-                reason='Sale'
-            )
-
-            # Update inventory stock
-            inventory_item.quantity_in_Stock -= quantity_sold
-            inventory_item.save()
-
-            messages.success(request, "Sale successfully recorded")
+            
+            # Update inventory
+            inventory.quantity_in_Stock -= quantity
+            inventory.save()
+            
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': True,
+                    'sale_id': sale.id
+                })
             return redirect('inventory')
-    else:
-        initial_data = {
-            'sale_price': inventory_item.selling_price,  # Set initial sale price to cost
-            'quantity_sold': 1,  # Default quantity
-            'discount_applied': 0  # Default discount
-        }
-        form = UpdateInventoryForm(initial=initial_data)
+            
+        except (ValueError, decimal.InvalidOperation) as e:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': False,
+                    'error': str(e)
+                })
+            messages.error(request, str(e))
+            return redirect('make_sale', pk=pk)
     
-    return render(request, 'inventory/inventory_update.html', {
-        'form': form,
-        'inventory': inventory_item
-    })
+    # GET request - we don't need this anymore as we're using modal
+    return redirect('inventory')
 
 
 
@@ -166,70 +218,113 @@ def make_sale(request, pk):
 @login_required
 def sales_summary(request):
     form = DateRangeForm(request.GET or None)
+    sales = Sales.objects.all().order_by('-sale_date')
     
     if form.is_valid():
         start_date = form.cleaned_data['start_date']
         end_date = form.cleaned_data['end_date']
-        
-        # Get sales data within date range
-        sales_data = Sales.objects.filter(
-            sale_date__date__range=(start_date, end_date)
-        ).values('inventory_item__name').annotate(
-            total_quantity=Sum('quantity_sold'),
-            total_sales=Sum('total_amount'),
-            total_discount=Sum('discount_applied')
-        ).order_by('-total_sales')
-    else:
-        # Get all sales data if no date range specified
-        sales_data = Sales.objects.values('inventory_item__name').annotate(
-            total_quantity=Sum('quantity_sold'),
-            total_sales=Sum('total_amount'),
-            total_discount=Sum('discount_applied')
-        ).order_by('-total_sales')
-    
+        if start_date and end_date:
+            sales = sales.filter(sale_date__date__range=[start_date, end_date])
+
     # Calculate totals
-    totals = {
-        'total_quantity': sum(item['total_quantity'] for item in sales_data),
-        'total_sales': sum(item['total_sales'] for item in sales_data),
-        'total_discount': sum(item['total_discount'] for item in sales_data)
-    }
-    
+    total_amount = sum(sale.total_amount for sale in sales)
+    total_quantity_sold = sum(sale.quantity_sold for sale in sales)
+    total_returns = sum(sale.quantity_returned for sale in sales)
+    net_quantity = total_quantity_sold - total_returns
+
     context = {
+        'sales': sales,
         'form': form,
-        'sales_data': sales_data,
-        'totals': totals
+        'total_amount': total_amount,
+        'total_quantity_sold': total_quantity_sold,
+        'total_returns': total_returns,
+        'net_quantity': net_quantity,
     }
     
     return render(request, 'inventory/sales_summary.html', context)
 
 
 @login_required
-def returnInventory(request,pk):
-    inventory_item = get_object_or_404(Inventory,pk=pk)
+def returnInventory(request, pk):
+    inventory_item = get_object_or_404(Inventory, pk=pk)
     if request.method == 'POST':
         form = ReturnInventoryForm(request.POST)
         if form.is_valid():
-            quantity_returned = form.cleaned_data['quantity_returned']
-            return_instance = Return(quantity_returned=quantity_returned, inventory_item=inventory_item)
-            inventory_item.quantity_in_Stock += quantity_returned
-            inventory_item.save()
-            return_instance.save()
+            try:
+                with transaction.atomic():
+                    receipt_number = form.cleaned_data['receipt_number']
+                    quantity_returned = form.cleaned_data['quantity_returned']
+                    reason = form.cleaned_data['reason']
+                    
+                    # Try to find the associated sale
+                    try:
+                        sale = Sales.objects.get(
+                            receipt_number=receipt_number,
+                            inventory_item=inventory_item
+                        )
+                        
+                        # Check if return quantity is valid
+                        if quantity_returned > sale.remaining_quantity:
+                            messages.error(
+                                request, 
+                                f"Return quantity ({quantity_returned}) exceeds remaining quantity ({sale.remaining_quantity})"
+                            )
+                            return redirect('returnInventory', pk=pk)
+                            
+                        # Update the sale's returned quantity
+                        sale.quantity_returned += quantity_returned
+                        sale.save()
+                            
+                    except Sales.DoesNotExist:
+                        messages.warning(request, "No matching sale found for this receipt number")
+                        sale = None
+                    
+                    # Create return record
+                    return_instance = Return.objects.create(
+                        quantity_returned=quantity_returned,
+                        inventory_item=inventory_item,
+                        reason=reason,
+                        receipt_number=receipt_number,
+                        sale=sale
+                    )
+                    sale.return_record.add(return_instance)
 
-            # Create stock movement record
-            StockMovement.objects.create(
-                inventory_item=inventory_item,
-                movement_type='IN',
-                quantity=quantity_returned,
-                reason='Return'
-            )
-            messages.success(request, f"Successfully returned {quantity_returned} item(s) of {inventory_item.name}")
-            return redirect('/inventory/')
+                    # Create stock movement record
+                    StockMovement.objects.create(
+                        inventory_item=inventory_item,
+                        movement_type='IN',
+                        quantity=quantity_returned,
+                        reason=f'Return: {reason} (Receipt: {receipt_number})'
+                    )
 
-           
+                    # Update inventory stock
+                    inventory_item.quantity_in_Stock += quantity_returned
+                    inventory_item.save()
+
+                    messages.success(
+                        request, 
+                        f"Successfully returned {quantity_returned} item(s) of {inventory_item.name}"
+                    )
+                    return redirect('inventory')
+                    
+            except Exception as e:
+                messages.error(request, f"Error processing return: {str(e)}")
+                return redirect('returnInventory', pk=pk)
     else:
         form = ReturnInventoryForm()
 
-    return render(request,'inventory/return_inventory.html',{'form':form,'inventory':inventory_item})    
+    # Get recent sales for this product
+    recent_sales = Sales.objects.filter(
+        inventory_item=inventory_item
+    ).order_by('-sale_date')[:5]  # Show last 5 sales
+
+    context = {
+        'form': form,
+        'inventory': inventory_item,
+        'title': f'Return {inventory_item.name}',
+        'recent_sales': recent_sales
+    }
+    return render(request, 'inventory/return_inventory.html', context)
 
 
 @login_required
@@ -407,6 +502,7 @@ def dashboard(request):
     
     # Get recent sales
     recent_sales = Sales.objects.select_related('inventory_item').order_by('-sale_date')[:10]
+
     
     # Format data for charts
     sales_data = {
@@ -469,3 +565,144 @@ def get_monthly_sales_data():
         'labels': months,
         'series': [dummy_sales]  # Chartist expects series as an array of arrays
     }
+
+
+@login_required
+def inventory_category(request):
+    categories = Inventory_category.objects.all()
+    
+    # Calculate total stock value and items count for each category
+    category_stats = categories.annotate(
+        total_stock_value=Coalesce(
+            ExpressionWrapper(
+                F('inventory__quantity_in_Stock') * F('inventory__purchase_price'),
+                output_field=DecimalField(max_digits=10, decimal_places=2)
+            ),
+            0,
+            output_field=DecimalField(max_digits=10, decimal_places=2)
+        ),
+        items_count=Count('inventory', distinct=True)
+    )
+
+    # Calculate total inventory items
+    total_inventory_items = Inventory.objects.count()
+
+    context = {
+        'categories': category_stats,
+        'total_inventory_items': total_inventory_items
+    }
+    
+    return render(request, 'inventory/inventory_category.html', context)
+
+
+def add_inventory_category(request):
+    if request.method == 'POST':
+        form = Inventory_categoryForm(request.POST)
+        if form.is_valid():
+            form.save()
+            return redirect('inventory_category')
+    return render(request, 'inventory/add_inventory_category.html')
+
+def delete_inventory_category(request, pk):
+    category = get_object_or_404(Inventory_category, pk=pk)
+    category.delete()
+    return redirect('inventory_category')
+
+def update_inventory_category(request, pk):
+    category = get_object_or_404(Inventory_category, pk=pk)
+    if request.method == 'POST':
+        form = Inventory_categoryForm(request.POST, instance=category)
+        if form.is_valid():
+            print(form.cleaned_data)
+            form.save()
+            return redirect('inventory_category')
+    return render(request, 'inventory/update_inventory_category.html', {'category': category})
+
+@require_POST  # This ensures only POST requests are accepted
+@login_required
+def add_category_ajax(request):
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':  # Verify it's an AJAX request
+        try:
+            name = request.POST.get('name')
+            description = request.POST.get('description')
+            
+            if not name:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Category name is required'
+                })
+                
+            category = Inventory_category.objects.create(
+                name=name,
+                description=description
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'category': {
+                    'id': category.id,
+                    'name': category.name
+                }
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            })
+    
+    return JsonResponse({
+        'success': False,
+        'error': 'Invalid request'
+    })
+
+@login_required
+def inventory_update(request, pk):
+    inventory = get_object_or_404(Inventory, pk=pk)
+    categories = Inventory_category.objects.all()
+    
+    if request.method == 'POST':
+        try:
+            # Get form data
+            data = request.POST.dict()
+            data['on_sale'] = request.POST.get('on_sale') == 'on'
+            
+            # Get category instance
+            category_id = data.pop('category', None)  # Remove category from data dict
+            if category_id:
+                category = get_object_or_404(Inventory_category, pk=category_id)
+                inventory.category = category
+            
+            # Convert numeric fields
+            data['purchase_price'] = Decimal(data['purchase_price'])
+            data['selling_price'] = Decimal(data['selling_price'])
+            data['quantity_in_Stock'] = int(data['quantity_in_Stock'])
+            data['size'] = int(data.get('size', 0))
+            
+            # Validate prices
+            if data['selling_price'] < data['purchase_price']:
+                messages.error(request, "Selling price cannot be less than purchase price")
+                return redirect('inventory_update', pk=pk)
+            
+            # Update inventory
+            for key, value in data.items():
+                if key not in ['csrfmiddlewaretoken']:
+                    setattr(inventory, key, value)
+            
+            inventory.save()
+            messages.success(request, f'Successfully updated {inventory.name}')
+            return redirect('inventory')
+            
+        except (ValueError, decimal.InvalidOperation) as e:
+            messages.error(request, str(e))
+            return redirect('inventory_update', pk=pk)
+    
+    context = {
+        'inventory': inventory,
+        'categories': categories,
+    }
+    return render(request, 'inventory/inventory_update.html', context)
+
+
+
+
+

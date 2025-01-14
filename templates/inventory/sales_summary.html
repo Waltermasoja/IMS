@@ -1,12 +1,21 @@
 {% extends 'base.html' %}
+{% load static %}
 {% load form_tags %}
-
 {% block content %}
 <div class="container-fluid">
-    <div class="card shadow-sm mb-4">
+    <div class="card shadow-sm">
         <div class="card-body">
-            <h3 class="card-title mb-4">Sales Summary</h3>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h3 class="card-title mb-1">Sales Summary</h3>
+                    <p class="text-muted mb-0">Overview of all sales and returns</p>
+                </div>
+                <a href="{% url 'inventory' %}" class="btn btn-outline-primary">
+                    <i class="fas fa-arrow-left me-2"></i>Back to Inventory
+                </a>
+            </div>
 
+            <!-- Date Filter Form -->
             <form method="GET" class="mb-4">
                 <div class="row g-3">
                     <div class="col-md-4">
@@ -25,70 +34,134 @@
                 </div>
             </form>
 
-            {% if sales_data %}
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Product Name</th>
-                                <th>Quantity Sold</th>
-                                <th>Total Sales</th>
-                                <th>Average Discount</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for item in sales_data %}
-                                <tr>
-                                    <td>{{ item.inventory_item__name }}</td>
-                                    <td>{{ item.total_quantity }}</td>
-                                    <td>${{ item.total_sales|floatformat:2 }}</td>
-                                    <td>{{ item.total_discount|floatformat:1 }}%</td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                        <tfoot class="table-info">
-                            <tr>
-                                <td><strong>Total</strong></td>
-                                <td><strong>{{ totals.total_quantity }}</strong></td>
-                                <td><strong>${{ totals.total_sales|floatformat:2 }}</strong></td>
-                                <td><strong>{{ totals.total_discount|floatformat:1 }}%</strong></td>
-                            </tr>
-                        </tfoot>
-                    </table>
+            <!-- Sales Summary Table -->
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Receipt #</th>
+                            <th>Product</th>
+                            <th>Date</th>
+                            <th>Quantity Sold</th>
+                            <th>Returns</th>
+                            <th>Net Quantity</th>
+                            <th>Price</th>
+                            <th>Discount</th>
+                            <th>Total Amount</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sale in sales %}
+                        <tr>
+                            <td>{{ sale.receipt_number }}</td>
+                            <td>{{ sale.inventory_item.name }}</td>
+                            <td>{{ sale.sale_date|date:"M d, Y H:i" }}</td>
+                            <td>{{ sale.quantity_sold }}</td>
+                            <td>
+                                {% if sale.quantity_returned > 0 %}
+                                <span class="text-danger">-{{ sale.quantity_returned }}</span>
+                                {% else %}
+                                0
+                                {% endif %}
+                            </td>
+                            <td>{{ sale.remaining_quantity }}</td>
+                            <td>${{ sale.sale_price }}</td>
+                            <td>
+                                {% if sale.discount_applied > 0 %}
+                                {{ sale.discount_applied }}%
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td>${{ sale.total_amount }}</td>
+                            <td>
+                                {% if sale.quantity_returned == sale.quantity_sold %}
+                                <span class="badge bg-danger">Fully Returned</span>
+                                {% elif sale.quantity_returned > 0 %}
+                                <span class="badge bg-warning text-dark">Partially Returned</span>
+                                {% else %}
+                                <span class="badge bg-success">Complete</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr>
+                            <td colspan="3"><strong>Totals</strong></td>
+                            <td><strong>{{ total_quantity_sold }}</strong></td>
+                            <td><strong>{{ total_returns }}</strong></td>
+                            <td><strong>{{ net_quantity }}</strong></td>
+                            <td colspan="2"></td>
+                            <td colspan="2"><strong>${{ total_amount }}</strong></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="row mt-4">
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h6 class="card-title text-muted">Total Sales</h6>
+                            <h3 class="mb-0">${{ total_amount }}</h3>
+                        </div>
+                    </div>
                 </div>
-            {% else %}
-                <div class="text-center py-5">
-                    <i class="fas fa-chart-bar fa-3x text-muted mb-3"></i>
-                    <h4 class="text-muted">No sales data available</h4>
-                    {% if form.is_valid %}
-                        <p class="text-muted">No sales found for the selected date range</p>
-                    {% else %}
-                        <p class="text-muted">Select a date range to view sales data</p>
-                    {% endif %}
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h6 class="card-title text-muted">Items Sold</h6>
+                            <h3 class="mb-0">{{ total_quantity_sold }}</h3>
+                        </div>
+                    </div>
                 </div>
-            {% endif %}
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h6 class="card-title text-muted">Returns</h6>
+                            <h3 class="mb-0">{{ total_returns }}</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <h6 class="card-title text-muted">Net Sales</h6>
+                            <h3 class="mb-0">{{ net_quantity }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
 <style>
-.card {
-    border: none;
-    border-radius: 15px;
-}
+    .card {
+        border: none;
+        border-radius: 15px;
+        margin-bottom: 1rem;
+    }
 
-.table th {
-    background-color: var(--light-blue);
-    color: var(--dark-blue);
-}
+    .table th {
+        background-color: var(--light-blue);
+        color: var(--dark-blue);
+    }
 
-.table-hover tbody tr:hover {
-    background-color: var(--light-blue);
-}
+    .table td {
+        vertical-align: middle;
+    }
 
-.form-control:focus {
-    border-color: var(--accent-blue);
-    box-shadow: 0 0 0 0.2rem rgba(0, 136, 204, 0.25);
-}
+    .badge {
+        font-weight: 500;
+        padding: 0.5em 0.8em;
+    }
+
+    .table-hover tbody tr:hover {
+        background-color: var(--light-blue);
+    }
 </style>
 {% endblock %}

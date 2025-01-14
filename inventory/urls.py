@@ -19,4 +19,10 @@ urlpatterns = [
     path('logout/', auth_views.LogoutView.as_view(), name='logout'),
     path('search/', search, name='search'),
     path('search', search_results, name='search_results'),
+    path('inventory_category/', inventory_category, name='inventory_category'),
+    path('add_inventory_category/', add_inventory_category, name='add_inventory_category'),
+    path('delete_inventory_category/<int:pk>/', delete_inventory_category, name='delete_inventory_category'),
+    path('update_inventory_category/<int:pk>/', update_inventory_category, name='update_inventory_category'),
+    path('add-category-ajax/', add_category_ajax, name='add_category_ajax'),
+    path('inventory_update/<int:pk>/', inventory_update, name='inventory_update'),
 ]
