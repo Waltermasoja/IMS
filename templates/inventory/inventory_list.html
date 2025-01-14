@@ -225,8 +225,8 @@
         // Update modal title
         title.textContent = `Make Sale - ${productName}`;
 
-        // Set the form action
-        form.action = `/inventory/make-sale/${inventoryId}/`;
+        // Fix: Update the form action to match URL pattern
+        form.action = `/inventory/make_sale/${inventoryId}/`;
 
         // Set default price
         const priceInput = form.querySelector('[name="sale_price"]');
@@ -252,7 +252,13 @@
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
             }
         })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    // If response is not ok, throw an error with status
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
                 if (data.success) {
                     // Close modal
@@ -262,9 +268,9 @@
                     const alert = document.createElement('div');
                     alert.className = 'alert alert-success alert-dismissible fade show';
                     alert.innerHTML = `
-                <strong>Success!</strong> Sale completed successfully.
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            `;
+                        <strong>Success!</strong> Sale completed successfully.
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
                     document.querySelector('.container-fluid').insertAdjacentElement('afterbegin', alert);
 
                     // Refresh the page after a short delay
@@ -275,7 +281,7 @@
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('An error occurred while processing the sale.');
+                alert('An error occurred while processing the sale. Please check if the quantity is available in stock.');
             });
     });
 
