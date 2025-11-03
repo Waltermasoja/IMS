@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% load form_tags %}
+{% block title %}Add Cashbook Entry{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6 animate-fade-in">
+  <h1 class="text-2xl font-bold text-gray-900">Add Cashbook Entry</h1>
+  <div class="bg-white rounded-2xl p-6 shadow-sm">
+    <form method="POST" class="space-y-4">
+      {% csrf_token %}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium">Date</label>
+          {{ form.date|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium">Reference</label>
+          {{ form.reference|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium">Description</label>
+          {{ form.description|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium">Category</label>
+          {{ form.category|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium">Receipt Amount</label>
+          {{ form.receipt_amount|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium">Payment Amount</label>
+          {{ form.payment_amount|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+      </div>
+      <div class="flex justify-end gap-3">
+        <a href="{% url 'accounting:cashbook_list' %}" class="px-4 py-2 bg-white border border-gray-200 rounded-xl">Cancel</a>
+        <button class="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

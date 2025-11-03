@@ -1,0 +1,106 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Invoice {{ receipt_number }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        /* Print-friendly styles for 80mm receipts and A4 */
+        :root { --w: 80mm; }
+        @media print {
+            @page { margin: 6mm; }
+            .no-print { display: none !important; }
+        }
+        body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; color: #111827; }
+        .container { max-width: 720px; margin: 0 auto; padding: 16px; }
+        .header { text-align: center; }
+        .title { font-weight: 700; font-size: 18px; }
+        .muted { color: #6b7280; font-size: 12px; }
+        .row { display: flex; justify-content: space-between; gap: 12px; }
+        .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin: 10px 0; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 8px; font-size: 14px; }
+        th { color: #374151; border-bottom: 1px solid #e5e7eb; }
+        tfoot td { font-weight: 600; }
+        .right { text-align: right; }
+        .btn { display: inline-block; background: #111827; color: #fff; border-radius: 8px; padding: 8px 12px; text-decoration: none; }
+        .badge { font-size: 12px; color: #2563eb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row no-print" style="margin-bottom: 10px;">
+            <a class="btn" href="#" onclick="window.print(); return false;">Print</a>
+            <a class="btn" href="javascript:window.close()">Close</a>
+        </div>
+
+        <div class="header">
+            <div class="title">Sales Invoice</div>
+            <div class="muted">Receipt # {{ receipt_number }}</div>
+        </div>
+
+        {% if not_found %}
+            <div class="card">No sales found for receipt {{ receipt_number }}.</div>
+        {% else %}
+        <div class="row card">
+            <div>
+                <div><strong>Date:</strong> {{ sale_date|date:"Y-m-d H:i" }}</div>
+                <div><strong>Cashier:</strong> {{ sales.first.recorded_by.username }}</div>
+                <div><strong>Payment:</strong> {{ sales.first.get_payment_method_display }}</div>
+            </div>
+            <div>
+                {% if customer %}
+                    <div><strong>Customer:</strong> {{ customer.name }}</div>
+                    {% if customer.phone %}<div class="muted">{{ customer.phone }}</div>{% endif %}
+                    {% if customer.email %}<div class="muted">{{ customer.email }}</div>{% endif %}
+                {% else %}
+                    <div class="badge">Cash Sale</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th class="right">Qty</th>
+                        <th class="right">Unit</th>
+                        <th class="right">Disc%</th>
+                        <th class="right">Line Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for line in line_items %}
+                    <tr>
+                        <td>{{ line.name }}</td>
+                        <td class="right">{{ line.qty }}</td>
+                        <td class="right">{{ line.unit_price }}</td>
+                        <td class="right">{{ line.discount_percent }}</td>
+                        <td class="right">{{ line.line_total }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="4" class="right">Subtotal</td>
+                        <td class="right">{{ subtotal }}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="4" class="right">Discounts</td>
+                        <td class="right">-{{ discount_total }}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="4" class="right">Total</td>
+                        <td class="right">{{ total_amount }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <div class="muted" style="text-align:center; margin-top: 8px;">Thank you for your business!</div>
+        {% endif %}
+    </div>
+</body>
+</html>

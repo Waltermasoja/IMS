@@ -53,6 +53,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'inventory.apps.InventoryConfig',
+    'accounting',
     'crispy_forms',
     'bootstrap4',
     'crispy_bootstrap4',

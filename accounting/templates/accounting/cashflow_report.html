@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Cashflow Report{% endblock %}
+{% block content %}
+<div class="space-y-6 animate-fade-in">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-gray-900">Cashflow Report</h1>
+    <a href="{% url 'accounting:cashbook_list' %}" class="px-4 py-2 bg-white border border-gray-200 rounded-xl">Back to Cashbook</a>
+  </div>
+
+  <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <table class="w-full">
+      <thead>
+        <tr class="bg-gray-50 text-xs text-gray-600 uppercase">
+          <th class="px-6 py-3 text-left">Month</th>
+          <th class="px-6 py-3 text-right">Receipts</th>
+          <th class="px-6 py-3 text-right">Payments</th>
+          <th class="px-6 py-3 text-right">Net</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+        {% for r in rows %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-6 py-3">{{ r.month|date:'M Y' }}</td>
+          <td class="px-6 py-3 text-right text-green-700">${{ r.receipts|floatformat:2 }}</td>
+          <td class="px-6 py-3 text-right text-red-700">${{ r.payments|floatformat:2 }}</td>
+          <td class="px-6 py-3 text-right font-semibold">${{ r.net|floatformat:2 }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="px-6 py-10 text-center text-gray-500">No data</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

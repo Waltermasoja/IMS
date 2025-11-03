@@ -1,6 +1,13 @@
 from django import forms
-from django.forms import ModelForm
-from .models import Inventory, Return, Damaged, Sales, Inventory_category
+from django.forms import ModelForm, inlineformset_factory
+from .models import (
+    Inventory, Return, Damaged, Sales, Inventory_category,
+    Supplier, ImportOrder, SupplierInvoice, InvoicePayment, 
+    ImportExpense, ImportOrderItem, Customer
+)
+
+from .utils import get_exchange_rate, get_common_expenses_for_country
+from decimal import Decimal
 
 class AddInventoryForm(ModelForm):
     category = forms.ModelChoiceField(
@@ -16,18 +23,22 @@ class AddInventoryForm(ModelForm):
             'category',
             'bought_from',
             'name',
+            'product_code',
             'purchase_price',
             'selling_price',
             'quantity_in_Stock',
             'description',
             'label',
             'size',
+            'weight',
             'on_sale'
         ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['category'].help_text = '<a href="#" data-bs-toggle="modal" data-bs-target="#addCategoryModal">+ Add New Category</a>'
+        self.fields['product_code'].help_text = 'Leave blank to auto-generate based on category'
+        self.fields['product_code'].widget.attrs.update({'placeholder': 'e.g., SHI-0001 (auto-generated if empty)'})
 
     def clean(self):
         cleaned_data = super().clean()
@@ -96,5 +107,307 @@ class Inventory_categoryForm(ModelForm):
         super(Inventory_categoryForm, self).__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget.attrs.update({'class': 'form-control'})
-            
 
+# ==================== IMPORT ORDER & LANDED COST FORMS ====================
+
+class SupplierForm(ModelForm):
+    class Meta:
+        model = Supplier
+        fields = [
+            'name', 'country', 'contact_person', 'email', 'phone',
+            'payment_terms', 'currency_preference', 'address', 'is_active'
+        ]
+        widgets = {
+            'address': forms.Textarea(attrs={'rows': 3}),
+            'payment_terms': forms.Select(choices=[
+                ('NET 7', 'NET 7 days'),
+                ('NET 15', 'NET 15 days'),
+                ('NET 30', 'NET 30 days'),
+                ('NET 45', 'NET 45 days'),
+                ('NET 60', 'NET 60 days'),
+                ('NET 90', 'NET 90 days'),
+                ('COD', 'Cash on Delivery'),
+                ('PREPAID', 'Prepaid'),
+            ])
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.update({'class': 'form-control'})
+
+class ImportOrderForm(ModelForm):
+    class Meta:
+        model = ImportOrder
+        fields = [
+            'supplier', 'reference_number', 'order_date', 'expected_arrival',
+            'currency', 'exchange_rate', 'status', 'allocation_method', 'notes'
+        ]
+        widgets = {
+            'order_date': forms.DateInput(attrs={'type': 'date'}),
+            'expected_arrival': forms.DateInput(attrs={'type': 'date'}),
+            'notes': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.update({'class': 'form-control'})
+        
+        # Auto-populate exchange rate when currency changes (via JavaScript)
+        self.fields['exchange_rate'].help_text = 'Will auto-populate based on current rates'
+
+    def clean(self):
+        cleaned_data = super().clean()
+        order_date = cleaned_data.get('order_date')
+        expected_arrival = cleaned_data.get('expected_arrival')
+        
+        if order_date and expected_arrival and expected_arrival < order_date:
+            raise forms.ValidationError("Expected arrival cannot be before order date")
+        
+        return cleaned_data
+
+class ImportOrderItemForm(ModelForm):
+    class Meta:
+        model = ImportOrderItem
+        fields = ['inventory_item', 'quantity', 'unit_cost', 'markup_percentage']
+        
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs.update({'class': 'form-control'})
+        
+        self.fields['markup_percentage'].help_text = 'Leave blank to use category default'
+
+# Create inline formset for import order items
+ImportOrderItemFormSet = inlineformset_factory(
+    ImportOrder, 
+    ImportOrderItem,
+    form=ImportOrderItemForm,
+    extra=1,
+    min_num=1,
+    validate_min=True,
+    can_delete=True
+)
+
+class ImportExpenseForm(ModelForm):
+    class Meta:
+        model = ImportExpense
+        fields = [
+            'expense_type', 'description', 'amount', 'currency', 
+            'exchange_rate', 'receipt_number', 'date_incurred', 'paid'
+        ]
+        widgets = {
+            'date_incurred': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        import_order = kwargs.pop('import_order', None)
+        super().__init__(*args, **kwargs)
+        
+        for field in self.fields.values():
+            field.widget.attrs.update({'class': 'form-control'})
+        
+        # Pre-populate currency and exchange rate from import order
+        if import_order:
+            self.fields['currency'].initial = import_order.currency
+            self.fields['exchange_rate'].initial = import_order.exchange_rate
+
+# Create inline formset for import expenses
+ImportExpenseFormSet = inlineformset_factory(
+    ImportOrder,
+    ImportExpense,
+    form=ImportExpenseForm,
+    extra=1,
+    can_delete=True
+)
+
+class SupplierInvoiceForm(ModelForm):
+    class Meta:
+        model = SupplierInvoice
+        fields = [
+            'invoice_number', 'currency', 'total_amount', 
+            'invoice_date', 'due_date', 'notes'
+        ]
+        widgets = {
+            'invoice_date': forms.DateInput(attrs={'type': 'date'}),
+            'due_date': forms.DateInput(attrs={'type': 'date'}),
+            'notes': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        import_order = kwargs.pop('import_order', None)
+        super().__init__(*args, **kwargs)
+        
+        for field in self.fields.values():
+            field.widget.attrs.update({'class': 'form-control'})
+        
+        # Pre-populate from import order
+        if import_order:
+            self.fields['currency'].initial = import_order.currency
+            # Auto-calculate due date based on supplier payment terms
+            if hasattr(import_order, 'supplier') and import_order.supplier.payment_terms:
+                from .utils import calculate_due_date
+                from django.utils import timezone
+                invoice_date = timezone.now().date()
+                due_date = calculate_due_date(invoice_date, import_order.supplier.payment_terms)
+                self.fields['due_date'].initial = due_date
+
+class InvoicePaymentForm(ModelForm):
+    class Meta:
+        model = InvoicePayment
+        fields = [
+            'payment_date', 'amount', 'payment_method', 
+            'reference_number', 'bank_name', 'transaction_fee', 'notes'
+        ]
+        widgets = {
+            'payment_date': forms.DateInput(attrs={'type': 'date'}),
+            'notes': forms.Textarea(attrs={'rows': 2}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        invoice = kwargs.pop('invoice', None)
+        super().__init__(*args, **kwargs)
+        
+        # Save invoice on the form for use in clean methods
+        self.invoice = invoice
+        
+        for field in self.fields.values():
+            field.widget.attrs.update({'class': 'form-control'})
+        
+        # Set max amount to outstanding balance
+        if self.invoice:
+            max_amount = self.invoice.outstanding_amount
+            self.fields['amount'].widget.attrs.update({
+                'max': str(max_amount),
+                'step': '0.01'
+            })
+            self.fields['amount'].help_text = f'Maximum: {max_amount}'
+
+    def clean_amount(self):
+        amount = self.cleaned_data.get('amount')
+        if getattr(self, 'invoice', None) and amount:
+            if amount > self.invoice.outstanding_amount:
+                raise forms.ValidationError(
+                    f"Payment amount cannot exceed outstanding balance of {self.invoice.outstanding_amount}"
+                )
+        return amount
+
+class ExpenseAllocationForm(forms.Form):
+    """Form for custom expense allocation"""
+    allocation_method = forms.ChoiceField(
+        choices=ImportOrder.ALLOCATION_METHODS,
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+    
+    def __init__(self, *args, **kwargs):
+        import_order = kwargs.pop('import_order', None)
+        super().__init__(*args, **kwargs)
+        
+        if import_order and import_order.allocation_method == 'CUSTOM':
+            # Add percentage fields for each item
+            for item in import_order.items.all():
+                field_name = f'item_{item.id}_percentage'
+                self.fields[field_name] = forms.DecimalField(
+                    label=f'{item.inventory_item.name} (%)',
+                    max_digits=5,
+                    decimal_places=2,
+                    min_value=0,
+                    max_value=100,
+                    widget=forms.NumberInput(attrs={
+                        'class': 'form-control',
+                        'step': '0.01'
+                    })
+                )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        allocation_method = cleaned_data.get('allocation_method')
+        
+        if allocation_method == 'CUSTOM':
+            # Validate that percentages sum to 100
+            total_percentage = Decimal('0')
+            for field_name, value in cleaned_data.items():
+                if field_name.startswith('item_') and field_name.endswith('_percentage'):
+                    if value:
+                        total_percentage += value
+            
+            if abs(total_percentage - Decimal('100')) > Decimal('0.01'):
+                raise forms.ValidationError(
+                    f"Percentages must sum to 100%. Current total: {total_percentage}%"
+                )
+        
+        return cleaned_data
+
+class BulkInventoryImportForm(forms.Form):
+    """Form for bulk importing inventory items to an import order"""
+    csv_file = forms.FileField(
+        help_text="Upload CSV with columns: name, quantity, unit_cost, weight, category",
+        widget=forms.FileInput(attrs={'class': 'form-control', 'accept': '.csv'})
+    )
+    
+    def clean_csv_file(self):
+        file = self.cleaned_data.get('csv_file')
+        if file:
+            if not file.name.endswith('.csv'):
+                raise forms.ValidationError("File must be a CSV file")
+            
+            # Basic file size check (max 5MB)
+            if file.size > 5 * 1024 * 1024:
+                raise forms.ValidationError("File size must be less than 5MB")
+        
+        return file
+
+class QuickExpenseForm(forms.Form):
+    """Quick form to add common expenses based on country"""
+    country = forms.CharField(
+        max_length=100,
+        widget=forms.TextInput(attrs={'class': 'form-control'})
+    )
+    goods_value = forms.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'})
+    )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['country'].help_text = 'Enter supplier country to auto-generate common expenses'
+        self.fields['goods_value'].help_text = 'Total value of goods for expense estimation'
+
+# ==================== CUSTOMER FORMS ====================
+
+class CustomerForm(ModelForm):
+    class Meta:
+        model = Customer
+        fields = ['name', 'email', 'phone', 'address', 'credit_limit', 'status']
+        widgets = {
+            'address': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Tailwind-friendly defaults
+        base_cls = 'w-full border rounded-lg px-3 py-2'
+        for f in self.fields.values():
+            existing = f.widget.attrs.get('class', '')
+            f.widget.attrs.update({'class': (existing + ' ' + base_cls).strip()})
+        
+        if 'opt_in_for_emails' in self.fields:
+            self.fields['opt_in_for_emails'].help_text = 'Customer agrees to receive email invoices'
+            self.fields['opt_in_for_emails'].label = 'Email opt-in for invoices'
+
+
+class QuickCustomerForm(forms.ModelForm):
+    """Quick form for adding customer during POS sale"""
+    class Meta:
+        model = Customer
+        fields = ['name', 'phone', 'email']
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for f in self.fields.values():
+            f.widget.attrs.update({'class': 'form-control'})
+        
+        self.fields['email'].required = False
+        self.fields['phone'].required = False

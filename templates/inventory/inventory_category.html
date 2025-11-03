@@ -1,228 +1,277 @@
 {% extends 'base.html' %}
 {% load static %}
 {% load inventory_filters %}
+
+{% block title %}Categories - IMS Pro{% endblock %}
+
 {% block content %}
-<div class="container-fluid py-4">
-    <div class="card shadow-lg rounded-3">
-        <div class="card-body p-4">
-            <div class="d-flex justify-content-between align-items-center mb-5">
-                <div>
-                    <h2 class="fw-bold mb-2">Inventory Categories</h2>
-                    <p class="text-muted fs-6">Manage your product categories</p>
-                </div>
-                <div>
-                    <button type="button" class="btn btn-primary rounded-pill px-4" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
-                        <i class="fas fa-plus me-2"></i>Add Category
+<div x-data="{ showAddModal: false, editModal: null, deleteModal: null }" class="space-y-6 animate-fade-in">
+    <!-- Page Header -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Inventory Categories</h1>
+            <p class="text-gray-500 mt-1">Manage your product categories</p>
+        </div>
+        <div class="flex items-center space-x-3">
+            <button @click="showAddModal = true" 
+                    class="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
+                <i class="fas fa-plus"></i>
+                <span class="font-medium">Add Category</span>
+            </button>
+            <a href="{% url 'inventory' %}" 
+               class="inline-flex items-center space-x-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
+                <i class="fas fa-arrow-left"></i>
+                <span class="font-medium">Back to Inventory</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Categories Table -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="bg-gray-50 border-b border-gray-200">
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category Name</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Description</th>
+                        <th class="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Products</th>
+                        <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Stock Value</th>
+                        <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for category in categories %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4">
+                            <p class="font-semibold text-gray-900">{{ category.name }}</p>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-500">
+                            {{ category.description|truncatechars:50 }}
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <span class="px-3 py-1 bg-blue-50 text-blue-600 text-xs font-semibold rounded-full">
+                                {{ category.items_count }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-right font-bold text-gray-900">
+                            ${{ category.total_stock_value|floatformat:2 }}
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center justify-end space-x-2">
+                                <button @click="editModal = {{ category.id }}" 
+                                        class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" 
+                                        title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button @click="deleteModal = {{ category.id }}" 
+                                        class="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" 
+                                        title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-16 text-center">
+                            <i class="fas fa-folder-open text-gray-300 text-6xl mb-4"></i>
+                            <h3 class="text-xl font-semibold text-gray-900 mb-2">No categories found</h3>
+                            <p class="text-gray-500 mb-6">Add your first category to organize your inventory</p>
+                            <button @click="showAddModal = true" 
+                                    class="inline-flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                                <i class="fas fa-plus"></i>
+                                <span>Add Category</span>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Add Category Modal -->
+    <div x-show="showAddModal" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         @keydown.escape.window="showAddModal = false"
+         class="fixed inset-0 z-50 overflow-y-auto" 
+         style="display: none;">
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div class="fixed inset-0 bg-black/50" @click="showAddModal = false"></div>
+            
+            <div x-show="showAddModal"
+                 x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="opacity-0 scale-95"
+                 x-transition:enter-end="opacity-100 scale-100"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="opacity-100 scale-100"
+                 x-transition:leave-end="opacity-0 scale-95"
+                 class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-2xl font-bold text-gray-900">Add New Category</h3>
+                    <button @click="showAddModal = false" 
+                            class="p-2 hover:bg-gray-100 rounded-lg text-gray-400 transition-colors">
+                        <i class="fas fa-times"></i>
                     </button>
-                    <a href="{% url 'inventory' %}" class="btn btn-outline-primary rounded-pill px-4 ms-2">
-                        <i class="fas fa-arrow-left me-2"></i>Back to Inventory
-                    </a>
                 </div>
-            </div>
-
-            <!-- Categories Table -->
-            <div class="card bg-light border-0 rounded-4">
-                <div class="card-body p-4">
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle">
-                            <thead class="bg-light">
-                                <tr>
-                                    <th class="fw-semibold">Category Name</th>
-                                    <th class="fw-semibold">Description</th>
-                                    <th class="fw-semibold text-center">Products Count</th>
-                                    <th class="fw-semibold text-end">Total Stock Value</th>
-                                    <th class="fw-semibold text-end">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for category in categories %}
-                                <tr>
-                                    <td class="fw-medium">{{ category.name }}</td>
-                                    <td class="text-muted">{{ category.description|truncatechars:50 }}</td>
-                                    <td class="text-center">
-                                        <span class="badge bg-primary rounded-pill">
-                                            {{ category.items_count }}
-                                        </span>
-                                    </td>
-                                    <td class="text-end">${{ category.total_stock_value|floatformat:2 }}</td>
-                                    <td class="text-end">
-                                        <button class="btn btn-sm btn-outline-primary rounded-pill" 
-                                                data-bs-toggle="modal" 
-                                                data-bs-target="#editCategoryModal{{ category.id }}">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button class="btn btn-sm btn-outline-danger rounded-pill ms-2" 
-                                                data-bs-toggle="modal" 
-                                                data-bs-target="#deleteCategoryModal{{ category.id }}">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="5" class="text-center py-4 text-muted">
-                                        <i class="fas fa-folder-open fa-2x mb-3"></i>
-                                        <p class="mb-0">No categories found. Add your first category!</p>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Add Category Modal -->
-<div class="modal fade" id="addCategoryModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content rounded-4 shadow">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title fw-bold">Add New Category</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form id="addCategoryForm">
-                {% csrf_token %}
-                <div class="modal-body p-4">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold mb-2">Category Name</label>
-                        <input type="text" name="name" class="form-control rounded-3" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold mb-2">Description</label>
-                        <textarea name="description" class="form-control rounded-3" rows="3"></textarea>
-                    </div>
-                </div>
-                <div class="modal-footer border-0 pt-0">
-                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary rounded-pill px-4">Add Category</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- Edit Category Modal -->
-{% for category in categories %}
-<div class="modal fade" id="editCategoryModal{{ category.id }}" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content rounded-4 shadow">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title fw-bold">Edit Category</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="POST" action="{% url 'update_inventory_category' category.id %}">
-                {% csrf_token %}
-                <div class="modal-body p-4">
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold mb-2">Category Name</label>
-                        <input type="text" name="name" class="form-control rounded-3" value="{{ category.name }}" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold mb-2">Description</label>
-                        <textarea name="description" class="form-control rounded-3" rows="3">{{ category.description }}</textarea>
-                    </div>
-                </div>
-                <div class="modal-footer border-0 pt-0">
-                    <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary rounded-pill px-4">Save Changes</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-{% endfor %}
-
-<!-- Delete Category Modal -->
-{% for category in categories %}
-<div class="modal fade" id="deleteCategoryModal{{ category.id }}" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content rounded-4 shadow">
-            <div class="modal-header border-0 pb-0">
-                <h5 class="modal-title fw-bold text-danger">Delete Category</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-4">
-                <p>Are you sure you want to delete <strong>{{ category.name }}</strong>?</p>
-                <p class="text-danger mb-0"><i class="fas fa-exclamation-triangle me-2"></i>This action cannot be undone.</p>
-            </div>
-            <div class="modal-footer border-0 pt-0">
-                <button type="button" class="btn btn-outline-secondary rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
-                <form method="POST" action="{% url 'delete_inventory_category' category.id %}" class="d-inline">
+                
+                <form id="addCategoryForm">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-danger rounded-pill px-4">Delete Category</button>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Category Name</label>
+                            <input type="text" name="name" required
+                                   class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                            <textarea name="description" rows="3"
+                                      class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-3 mt-6">
+                        <button type="button" @click="showAddModal = false"
+                                class="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
+                            Cancel
+                        </button>
+                        <button type="submit"
+                                class="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transition-all font-medium">
+                            Add Category
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>
     </div>
+
+    <!-- Edit Category Modals -->
+    {% for category in categories %}
+    <div x-show="editModal === {{ category.id }}" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         @keydown.escape.window="editModal = null"
+         class="fixed inset-0 z-50 overflow-y-auto" 
+         style="display: none;">
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div class="fixed inset-0 bg-black/50" @click="editModal = null"></div>
+            
+            <div x-show="editModal === {{ category.id }}"
+                 x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="opacity-0 scale-95"
+                 x-transition:enter-end="opacity-100 scale-100"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="opacity-100 scale-100"
+                 x-transition:leave-end="opacity-0 scale-95"
+                 class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-2xl font-bold text-gray-900">Edit Category</h3>
+                    <button @click="editModal = null" 
+                            class="p-2 hover:bg-gray-100 rounded-lg text-gray-400 transition-colors">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <form method="POST" action="{% url 'update_inventory_category' category.id %}">
+                    {% csrf_token %}
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Category Name</label>
+                            <input type="text" name="name" value="{{ category.name }}" required
+                                   class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                            <textarea name="description" rows="3"
+                                      class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">{{ category.description }}</textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-3 mt-6">
+                        <button type="button" @click="editModal = null"
+                                class="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
+                            Cancel
+                        </button>
+                        <button type="submit"
+                                class="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transition-all font-medium">
+                            Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Delete Category Modals -->
+    {% for category in categories %}
+    <div x-show="deleteModal === {{ category.id }}" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         @keydown.escape.window="deleteModal = null"
+         class="fixed inset-0 z-50 overflow-y-auto" 
+         style="display: none;">
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div class="fixed inset-0 bg-black/50" @click="deleteModal = null"></div>
+            
+            <div x-show="deleteModal === {{ category.id }}"
+                 x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="opacity-0 scale-95"
+                 x-transition:enter-end="opacity-100 scale-100"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="opacity-100 scale-100"
+                 x-transition:leave-end="opacity-0 scale-95"
+                 class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-2xl font-bold text-red-600">Delete Category</h3>
+                    <button @click="deleteModal = null" 
+                            class="p-2 hover:bg-gray-100 rounded-lg text-gray-400 transition-colors">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <div class="mb-6">
+                    <p class="text-gray-700 mb-4">Are you sure you want to delete <strong>{{ category.name }}</strong>?</p>
+                    <div class="flex items-center space-x-2 p-4 bg-red-50 rounded-lg">
+                        <i class="fas fa-exclamation-triangle text-red-600"></i>
+                        <p class="text-sm text-red-600 font-medium">This action cannot be undone.</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-3">
+                    <button type="button" @click="deleteModal = null"
+                            class="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
+                        Cancel
+                    </button>
+                    <form method="POST" action="{% url 'delete_inventory_category' category.id %}" class="flex-1">
+                        {% csrf_token %}
+                        <button type="submit"
+                                class="w-full px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 shadow-lg hover:shadow-xl transition-all font-medium">
+                            Delete Category
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
 </div>
-{% endfor %}
+{% endblock %}
 
-<style>
-:root {
-    --primary-color: #0d6efd;
-    --primary-hover: #0b5ed7;
-    --border-radius: 1rem;
-    --transition: all 0.3s ease;
-}
-
-.card {
-    transition: var(--transition);
-}
-
-.form-control {
-    padding: 0.75rem 1rem;
-    border: 1.5px solid #e0e0e0;
-    transition: var(--transition);
-    font-size: 0.95rem;
-}
-
-.form-control:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
-}
-
-.btn {
-    padding: 0.75rem 1.5rem;
-    font-weight: 500;
-    transition: var(--transition);
-}
-
-.btn-sm {
-    padding: 0.5rem 1rem;
-}
-
-.table th {
-    font-size: 0.95rem;
-    color: #495057;
-}
-
-.table td {
-    font-size: 0.95rem;
-}
-
-.badge {
-    font-weight: 500;
-    padding: 0.5em 1em;
-}
-
-.modal-content {
-    border: none;
-}
-
-@media (max-width: 768px) {
-    .container-fluid {
-        padding: 1rem;
-    }
-    
-    .card-body {
-        padding: 1.5rem;
-    }
-}
-</style>
-
+{% block extra_js %}
 <script>
 document.getElementById('addCategoryForm').addEventListener('submit', function(e) {
     e.preventDefault();
@@ -245,24 +294,15 @@ document.getElementById('addCategoryForm').addEventListener('submit', function(e
     })
     .then(data => {
         if (data.success) {
-            // Reset the form
-            this.reset();
-            
-            // Close the modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('addCategoryModal'));
-            modal.hide();
-            
             // Refresh the page to show the new category
             window.location.reload();
         } else {
-            console.error('Server Error:', data.error);
-            alert('Error: ' + data.error);
+            alert('Error: ' + (data.error || 'Failed to add category'));
         }
     })
     .catch(error => {
-        console.error('Fetch Error:', error);
-        console.error('Error Details:', error.message);
-        alert('An error occurred while adding the category. Please check the console for details.');
+        console.error('Error:', error);
+        alert('An error occurred while adding the category.');
     });
 });
 </script>

@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% block title %}Import Order {{ order.order_number }}{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold">Import Order {{ order.order_number }}</h1>
+      <p class="text-gray-600">Supplier: {{ order.supplier.name }} • Status: {{ order.get_status_display }}</p>
+    </div>
+    <div class="flex gap-2">
+      <form method="post" action="{% url 'import_order_allocate' order.id %}">
+        {% csrf_token %}
+        <button class="px-4 py-2 bg-indigo-600 text-white rounded">Allocate Expenses</button>
+      </form>
+      <a href="{% url 'add_supplier_invoice' order.id %}" class="px-4 py-2 bg-blue-600 text-white rounded">Add Invoice</a>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-white rounded shadow p-4">
+      <h2 class="font-semibold mb-3">Items</h2>
+      <form method="post">
+        {% csrf_token %}
+        {{ items_formset.management_form }}
+        <div class="space-y-3">
+        {% for form in items_formset %}
+          <div class="grid grid-cols-5 gap-2 items-end">
+            <div class="col-span-2">{{ form.inventory_item.label }}{{ form.inventory_item }}</div>
+            <div>{{ form.quantity.label }}{{ form.quantity }}</div>
+            <div>{{ form.unit_cost.label }}{{ form.unit_cost }}</div>
+            <div>{{ form.markup_percentage.label }}{{ form.markup_percentage }}</div>
+          </div>
+        {% endfor %}
+        </div>
+        <div class="mt-3 flex justify-end">
+          <button name="save_items" value="1" class="px-3 py-2 bg-gray-800 text-white rounded">Save Items</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="bg-white rounded shadow p-4">
+      <h2 class="font-semibold mb-3">Expenses</h2>
+      <form method="post">
+        {% csrf_token %}
+        {{ expenses_formset.management_form }}
+        <div class="space-y-3">
+        {% for form in expenses_formset %}
+          <div class="grid grid-cols-6 gap-2 items-end">
+            <div class="col-span-2">{{ form.expense_type.label }}{{ form.expense_type }}</div>
+            <div>{{ form.description.label }}{{ form.description }}</div>
+            <div>{{ form.amount.label }}{{ form.amount }}</div>
+            <div>{{ form.currency.label }}{{ form.currency }}</div>
+            <div>{{ form.exchange_rate.label }}{{ form.exchange_rate }}</div>
+            <div>{{ form.paid.label }}{{ form.paid }}</div>
+          </div>
+        {% endfor %}
+        </div>
+        <div class="mt-3 flex justify-end">
+          <button name="save_expenses" value="1" class="px-3 py-2 bg-gray-800 text-white rounded">Save Expenses</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="bg-white rounded shadow p-4">
+    <h2 class="font-semibold mb-3">Invoices</h2>
+    <table class="w-full">
+      <thead>
+        <tr class="text-left border-b">
+          <th class="p-2">Invoice #</th>
+          <th class="p-2">Amount</th>
+          <th class="p-2">Paid</th>
+          <th class="p-2">Status</th>
+          <th class="p-2">Due</th>
+          <th class="p-2">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in invoices %}
+        <tr class="border-b">
+          <td class="p-2">{{ inv.invoice_number }}</td>
+          <td class="p-2">{{ inv.total_amount }}</td>
+          <td class="p-2">{{ inv.amount_paid }}</td>
+          <td class="p-2">{{ inv.get_status_display }}</td>
+          <td class="p-2">{{ inv.due_date }}</td>
+          <td class="p-2">
+            <a class="text-blue-600" href="{% url 'add_invoice_payment' inv.id %}">Record Payment</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td class="p-3" colspan="6">No invoices yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

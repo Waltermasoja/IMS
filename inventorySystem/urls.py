@@ -27,6 +27,7 @@ urlpatterns = [
     path('', redirect_to_login, name='root'),
     path('admin/', admin.site.urls),
     path('inventory/', include('inventory.urls')),
+    path('accounting/', include('accounting.urls')),
     path('login/', login_view, name='login'),
     path('logout/', logout_view, name='logout'),
 ]

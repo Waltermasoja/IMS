@@ -1,0 +1,496 @@
+{% extends 'base.html' %}
+
+{% block title %}Point of Sale - IMS Pro{% endblock %}
+
+{% block content %}
+<form style="display:none">{% csrf_token %}</form>
+<div x-data="posInterface()" class="min-h-screen bg-gray-50">
+    <!-- Header -->
+    <div class="bg-white shadow-sm border-b border-gray-200 mb-6">
+        <div class="flex items-center justify-between p-6">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Point of Sale</h1>
+                <p class="text-gray-500 mt-1">Fast checkout for sales transactions</p>
+            </div>
+            <div class="flex items-center space-x-4">
+                <!-- Sales Person Info -->
+                <div class="text-right">
+                    <p class="text-sm font-semibold text-gray-900">{{ user.get_full_name|default:user.username }}</p>
+                    <p class="text-xs text-gray-500">Sales Associate</p>
+                </div>
+                <div class="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center">
+                    <span class="text-white font-semibold text-sm">{{ user.username|slice:":1"|upper }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6">
+        <!-- Product Search & Selection (Left Side) -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Quick Search -->
+            <div class="bg-white rounded-2xl shadow-sm p-6">
+                <h2 class="text-xl font-semibold text-gray-900 mb-4">
+                    <i class="fas fa-search text-blue-500 mr-2"></i>Product Search
+                </h2>
+                
+                <!-- Search Input -->
+                <div class="relative mb-4">
+                    <input type="text" 
+                           x-model="searchQuery"
+                           @input="searchProducts()"
+                           @keydown.enter="selectFirstResult()"
+                           @keydown.arrow-down.prevent="navigateResults('down')"
+                           @keydown.arrow-up.prevent="navigateResults('up')"
+                           placeholder="Scan barcode or type product code (e.g., SHI-0001)"
+                           class="w-full px-4 py-4 pl-12 text-lg bg-gray-50 border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent font-mono">
+                    <i class="fas fa-barcode absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xl"></i>
+                    
+                    <!-- Loading spinner -->
+                    <div x-show="searching" class="absolute right-4 top-1/2 -translate-y-1/2">
+                        <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
+                    </div>
+                </div>
+                
+                <!-- Search Results -->
+                <div x-show="searchResults.length > 0" 
+                     class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-80 overflow-y-auto">
+                    <template x-for="(product, index) in searchResults" :key="product.id">
+                        <div @click="addToCart(product)"
+                             :class="{'ring-2 ring-green-500': selectedResultIndex === index}"
+                             class="p-4 bg-gray-50 rounded-xl hover:bg-green-50 cursor-pointer transition-all border-2 border-transparent hover:border-green-200">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <p class="font-semibold text-gray-900" x-text="product.name"></p>
+                                    <p class="text-sm text-blue-600 font-mono" x-text="product.product_code"></p>
+                                    <p class="text-xs text-gray-500 mt-1">
+                                        <span x-text="product.category"></span> • 
+                                        Stock: <span x-text="product.quantity_in_stock" class="font-medium"></span>
+                                    </p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-lg font-bold text-green-600" x-text="'$' + product.selling_price"></p>
+                                    <button class="mt-1 px-3 py-1 bg-green-500 text-white text-xs rounded-full hover:bg-green-600">
+                                        Add to Cart
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- No results message -->
+                <div x-show="searchQuery && searchResults.length === 0 && !searching" class="text-center py-8">
+                    <i class="fas fa-search text-gray-300 text-4xl mb-3"></i>
+                    <p class="text-gray-500">No products found</p>
+                    <p class="text-xs text-gray-400 mt-1">Try scanning barcode or typing product code</p>
+                </div>
+            </div>
+
+            <!-- Quick Action Buttons -->
+            <div class="bg-white rounded-2xl shadow-sm p-6">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <button @click="newSale()" 
+                            class="p-4 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors text-center">
+                        <i class="fas fa-plus text-2xl mb-2"></i>
+                        <p class="text-sm font-medium">New Sale</p>
+                    </button>
+                    <button @click="showTransactions()" 
+                            class="p-4 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-colors text-center">
+                        <i class="fas fa-history text-2xl mb-2"></i>
+                        <p class="text-sm font-medium">Transactions</p>
+                    </button>
+                    <button @click="voidTransaction()" 
+                            class="p-4 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors text-center">
+                        <i class="fas fa-ban text-2xl mb-2"></i>
+                        <p class="text-sm font-medium">Void</p>
+                    </button>
+                    <button @click="endOfDay()" 
+                            class="p-4 bg-gray-50 text-gray-600 rounded-xl hover:bg-gray-100 transition-colors text-center">
+                        <i class="fas fa-calculator text-2xl mb-2"></i>
+                        <p class="text-sm font-medium">End of Day</p>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cart & Checkout (Right Side) -->
+        <div class="bg-white rounded-2xl shadow-sm p-6 sticky top-6 h-fit">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">
+                <i class="fas fa-shopping-cart text-green-500 mr-2"></i>
+                Current Sale
+                <span x-show="cart.length > 0" class="text-sm bg-green-100 text-green-700 px-2 py-1 rounded-full ml-2" x-text="cart.length"></span>
+            </h2>
+            
+            <!-- Cart Items -->
+            <div class="space-y-3 mb-6 max-h-80 overflow-y-auto">
+                <template x-for="(item, index) in cart" :key="index">
+                    <div class="p-3 bg-gray-50 rounded-xl">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <p class="font-medium text-gray-900" x-text="item.name"></p>
+                                <p class="text-xs text-gray-500 font-mono" x-text="item.product_code"></p>
+                            </div>
+                            <button @click="removeFromCart(index)" 
+                                    class="text-red-500 hover:text-red-700 ml-2">
+                                <i class="fas fa-trash text-sm"></i>
+                            </button>
+                        </div>
+                        <div class="flex items-center justify-between mt-2">
+                            <div class="flex items-center space-x-2">
+                                <button @click="updateQuantity(index, item.quantity - 1)" 
+                                        class="w-8 h-8 bg-gray-200 rounded-full hover:bg-gray-300 flex items-center justify-center">
+                                    <i class="fas fa-minus text-xs"></i>
+                                </button>
+                                <span class="w-12 text-center font-medium" x-text="item.quantity"></span>
+                                <button @click="updateQuantity(index, item.quantity + 1)" 
+                                        class="w-8 h-8 bg-gray-200 rounded-full hover:bg-gray-300 flex items-center justify-center">
+                                    <i class="fas fa-plus text-xs"></i>
+                                </button>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-sm text-gray-500">$<span x-text="item.selling_price"></span> each</p>
+                                <p class="font-bold text-green-600">$<span x-text="(item.quantity * item.selling_price).toFixed(2)"></span></p>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+                
+                <!-- Empty cart -->
+                <div x-show="cart.length === 0" class="text-center py-12">
+                    <i class="fas fa-shopping-cart text-gray-300 text-5xl mb-4"></i>
+                    <p class="text-gray-500">Cart is empty</p>
+                    <p class="text-sm text-gray-400 mt-1">Search and add products to start a sale</p>
+                </div>
+            </div>
+            
+            <!-- Discount Section -->
+            <div x-show="cart.length > 0" class="mb-6">
+                <div class="flex items-center space-x-3 mb-3">
+                    <label class="text-sm font-medium text-gray-700">Discount %:</label>
+                    <input type="number" 
+                           x-model="discount" 
+                           @input="calculateTotals()"
+                           min="0" max="100" step="0.1"
+                           class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500">
+                </div>
+            </div>
+            
+            <!-- Totals -->
+            <div x-show="cart.length > 0" class="border-t border-gray-200 pt-4 space-y-2">
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-600">Subtotal:</span>
+                    <span class="font-medium">$<span x-text="subtotal.toFixed(2)"></span></span>
+                </div>
+                <div x-show="discount > 0" class="flex justify-between text-sm">
+                    <span class="text-gray-600">Discount (<span x-text="discount"></span>%):</span>
+                    <span class="text-red-600">-$<span x-text="discountAmount.toFixed(2)"></span></span>
+                </div>
+                <div class="flex justify-between text-lg font-bold border-t border-gray-200 pt-2">
+                    <span>Total:</span>
+                    <span class="text-green-600">$<span x-text="total.toFixed(2)"></span></span>
+                </div>
+            </div>
+            
+            <!-- Checkout Button -->
+            <button x-show="cart.length > 0"
+                    @click="processCheckout()" 
+                    :disabled="processing"
+                    class="w-full mt-6 py-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 font-bold text-lg shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                <span x-show="!processing">Complete Sale - $<span x-text="total.toFixed(2)"></span></span>
+                <span x-show="processing" class="flex items-center justify-center">
+                    <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Processing...
+                </span>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Success Modal -->
+<div x-show="showSuccessModal" 
+     x-transition:enter="transition ease-out duration-300"
+     x-transition:enter-start="opacity-0"
+     x-transition:enter-end="opacity-100"
+     x-transition:leave="transition ease-in duration-200"
+     x-transition:leave-start="opacity-100"
+     x-transition:leave-end="opacity-0"
+     class="fixed inset-0 z-50 overflow-y-auto" 
+     style="display: none;">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50"></div>
+        
+        <div class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 text-center">
+            <div class="mb-6">
+                <div class="mx-auto w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                    <i class="fas fa-check text-3xl text-green-600"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-gray-900 mb-2">Sale Completed!</h3>
+                <p class="text-gray-600" x-text="successMessage"></p>
+            </div>
+            
+            <div x-show="lastSale" class="bg-gray-50 rounded-xl p-4 mb-6 text-left">
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between font-mono">
+                        <span class="text-gray-600">Receipt #:</span>
+                        <span class="font-medium" x-text="lastSale?.receipt_number"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Amount:</span>
+                        <span class="font-bold text-green-600">$<span x-text="lastSale?.total_amount || '0.00'"></span></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Items:</span>
+                        <span class="font-medium" x-text="lastSale?.items_count || '0'"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex space-x-3">
+                <button @click="printReceipt()" 
+                        class="flex-1 px-4 py-3 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 transition-colors font-medium">
+                    <i class="fas fa-print mr-2"></i>Print
+                </button>
+                <button @click="newSale()"
+                        class="flex-1 px-4 py-3 bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors font-medium">
+                    <i class="fas fa-plus mr-2"></i>New Sale
+                </button>
+                <button @click="closeSuccessModal()"
+                        class="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function posInterface() {
+    return {
+        searchQuery: '',
+        searchResults: [],
+        selectedResultIndex: -1,
+        searching: false,
+        searchTimeout: null,
+        
+        cart: [],
+        discount: 0,
+        subtotal: 0,
+        discountAmount: 0,
+        total: 0,
+        
+        processing: false,
+        showSuccessModal: false,
+        successMessage: '',
+        lastSale: null,
+        
+        init() {
+            // Focus search input on load
+            this.$nextTick(() => {
+                this.$el.querySelector('input[type="text"]').focus();
+            });
+        },
+        
+        searchProducts() {
+            const query = this.searchQuery.trim();
+            
+            // Clear previous timeout
+            if (this.searchTimeout) {
+                clearTimeout(this.searchTimeout);
+            }
+            
+            if (query.length < 1) {
+                this.searchResults = [];
+                return;
+            }
+            
+            this.searching = true;
+            
+            // Debounce search requests
+            this.searchTimeout = setTimeout(() => {
+                fetch(`{% url 'product_search_ajax' %}?q=${encodeURIComponent(query)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        this.searchResults = data.products || [];
+                        this.selectedResultIndex = -1;
+                        this.searching = false;
+                    })
+                    .catch(error => {
+                        console.error('Search error:', error);
+                        this.searchResults = [];
+                        this.searching = false;
+                    });
+            }, 200); // Faster debounce for POS
+        },
+        
+        selectFirstResult() {
+            if (this.searchResults.length > 0) {
+                this.addToCart(this.searchResults[0]);
+            }
+        },
+        
+        navigateResults(direction) {
+            if (this.searchResults.length === 0) return;
+            
+            if (direction === 'down') {
+                this.selectedResultIndex = Math.min(this.selectedResultIndex + 1, this.searchResults.length - 1);
+            } else {
+                this.selectedResultIndex = Math.max(this.selectedResultIndex - 1, -1);
+            }
+        },
+        
+        addToCart(product) {
+            // Check if product already in cart
+            const existingIndex = this.cart.findIndex(item => item.id === product.id);
+            
+            if (existingIndex >= 0) {
+                // Increase quantity if already in cart
+                this.updateQuantity(existingIndex, this.cart[existingIndex].quantity + 1);
+            } else {
+                // Add new item to cart
+                this.cart.push({
+                    id: product.id,
+                    name: product.name,
+                    product_code: product.product_code,
+                    selling_price: parseFloat(product.selling_price),
+                    quantity: 1,
+                    max_quantity: product.quantity_in_stock
+                });
+            }
+            
+            this.calculateTotals();
+            this.clearSearch();
+        },
+        
+        removeFromCart(index) {
+            this.cart.splice(index, 1);
+            this.calculateTotals();
+        },
+        
+        updateQuantity(index, newQuantity) {
+            if (newQuantity <= 0) {
+                this.removeFromCart(index);
+                return;
+            }
+            
+            // Check stock availability
+            if (newQuantity > this.cart[index].max_quantity) {
+                alert(`Only ${this.cart[index].max_quantity} items available in stock`);
+                return;
+            }
+            
+            this.cart[index].quantity = newQuantity;
+            this.calculateTotals();
+        },
+        
+        calculateTotals() {
+            this.subtotal = this.cart.reduce((sum, item) => sum + (item.quantity * item.selling_price), 0);
+            this.discountAmount = this.subtotal * (this.discount / 100);
+            this.total = this.subtotal - this.discountAmount;
+        },
+        
+        clearSearch() {
+            this.searchQuery = '';
+            this.searchResults = [];
+            this.selectedResultIndex = -1;
+            // Re-focus search input
+            this.$nextTick(() => {
+                this.$el.querySelector('input[type="text"]').focus();
+            });
+        },
+        
+        newSale() {
+            this.cart = [];
+            this.discount = 0;
+            this.calculateTotals();
+            this.showSuccessModal = false;
+            this.clearSearch();
+        },
+        
+        processCheckout() {
+            if (this.cart.length === 0) return;
+            
+            this.processing = true;
+            
+            // Process each item in cart
+            const salePromises = this.cart.map(item => {
+                const formData = new FormData();
+                formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+                formData.append('quantity_sold', item.quantity);
+                formData.append('sale_price', item.selling_price);
+                formData.append('discount_applied', this.discount);
+                
+                return fetch(`/inventory/make_sale/${item.id}/`, {
+                    method: 'POST',
+                    body: formData
+                }).then(response => response.json());
+            });
+            
+            Promise.all(salePromises)
+                .then(results => {
+                    const allSuccessful = results.every(result => result.success);
+                    
+                    if (allSuccessful) {
+                        const totalAmount = results.reduce((sum, result) => sum + parseFloat(result.total_amount), 0);
+                        const receiptNumber = results[0].receipt_number; // Use first receipt number
+                        
+                        this.lastSale = {
+                            receipt_number: receiptNumber,
+                            total_amount: totalAmount.toFixed(2),
+                            items_count: this.cart.length
+                        };
+                        
+                        this.successMessage = `Sale completed successfully! ${this.cart.length} item(s) sold for $${totalAmount.toFixed(2)}`;
+                        this.showSuccessModal = true;
+                        
+                        // Clear cart after successful sale
+                        this.cart = [];
+                        this.discount = 0;
+                        this.calculateTotals();
+                        
+                    } else {
+                        const failedResults = results.filter(result => !result.success);
+                        alert('Some items failed to process: ' + failedResults.map(r => r.error).join(', '));
+                    }
+                    
+                    this.processing = false;
+                })
+                .catch(error => {
+                    this.processing = false;
+                    console.error('Checkout error:', error);
+                    alert('An error occurred during checkout');
+                });
+        },
+        
+        closeSuccessModal() {
+            this.showSuccessModal = false;
+        },
+        
+        printReceipt() {
+            if (this.lastSale?.receipt_number) {
+                window.open(`/inventory/invoice/print/${this.lastSale.receipt_number}/`, '_blank');
+            }
+        },
+        
+        showTransactions() {
+            window.location.href = '/inventory/sales_summary/';
+        },
+        
+        voidTransaction() {
+            alert('Void transaction feature coming soon!');
+        },
+        
+        endOfDay() {
+            alert('End of day report feature coming soon!');
+        }
+    }
+}
+
+// Auto-focus search on page load
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelector('input[type="text"]')?.focus();
+});
+</script>
+
+{% endblock %}

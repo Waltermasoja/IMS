@@ -1,0 +1,461 @@
+<!-- Enhanced Quick Sale Modal with Product Search -->
+<div x-data="quickSaleModal()" 
+     x-show="showModal" 
+     x-transition:enter="transition ease-out duration-300"
+     x-transition:enter-start="opacity-0"
+     x-transition:enter-end="opacity-100"
+     x-transition:leave="transition ease-in duration-200"
+     x-transition:leave-start="opacity-100"
+     x-transition:leave-end="opacity-0"
+     class="fixed inset-0 z-50 overflow-y-auto" 
+     style="display: none;"
+     @keydown.escape.window="closeModal()">
+     
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50" @click="closeModal()"></div>
+        
+        <div x-show="showModal"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100 scale-100"
+             x-transition:leave-end="opacity-0 scale-95"
+             class="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
+             
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center space-x-3">
+                    <div class="p-2 bg-green-100 rounded-lg">
+                        <i class="fas fa-cash-register text-green-600"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-2xl font-bold text-gray-900">Quick Sale</h3>
+                        <p class="text-sm text-gray-500">Search and sell products instantly</p>
+                    </div>
+                </div>
+                <button @click="closeModal()" 
+                        class="p-2 hover:bg-gray-100 rounded-lg text-gray-400 transition-colors">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <!-- Product Search -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-search mr-1"></i>
+                    Search Product (Code, Name, or Label)
+                </label>
+                <div class="relative">
+                    <input type="text" 
+                           x-model="searchQuery"
+                           @input="searchProducts()"
+                           @keydown.enter="selectFirstResult()"
+                           @keydown.arrow-down.prevent="navigateResults('down')"
+                           @keydown.arrow-up.prevent="navigateResults('up')"
+                           placeholder="Type product code (e.g., SHI-0001) or name..."
+                           class="w-full px-4 py-3 pl-11 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent">
+                    <i class="fas fa-barcode absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    
+                    <!-- Loading spinner -->
+                    <div x-show="searching" class="absolute right-4 top-1/2 -translate-y-1/2">
+                        <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-green-500"></div>
+                    </div>
+                </div>
+                
+                <!-- Search Results Dropdown -->
+                <div x-show="searchResults.length > 0" 
+                     class="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                    <template x-for="(product, index) in searchResults" :key="product.id">
+                        <div @click="selectProduct(product)"
+                             :class="{'bg-green-50': selectedResultIndex === index}"
+                             class="px-4 py-3 hover:bg-green-50 cursor-pointer border-b border-gray-100 last:border-b-0">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="font-semibold text-gray-900" x-text="product.display_name"></p>
+                                    <p class="text-sm text-gray-500">
+                                        <span x-text="product.category"></span> • 
+                                        Stock: <span x-text="product.quantity_in_stock"></span>
+                                    </p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="font-bold text-green-600" x-text="'$' + product.selling_price"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- No results dropdown message -->
+                <div x-show="searchQuery && !searching && searchResults.length === 0"
+                     class="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg p-4 text-center text-gray-500">
+                    <p>No products found for "<span x-text="searchQuery"></span>"</p>
+                    <p class="text-xs text-gray-400 mt-1">Try product code, name, label, size, or category</p>
+                </div>
+            </div>
+
+            <!-- Selected Product Info -->
+            <div x-show="selectedProduct" class="mb-6 p-4 bg-gray-50 rounded-xl">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-semibold text-gray-900" x-text="selectedProduct?.display_name"></p>
+                        <p class="text-sm text-gray-500">
+                            Available Stock: <span x-text="selectedProduct?.quantity_in_stock" class="font-medium text-green-600"></span>
+                        </p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-lg font-bold text-green-600" x-text="'$' + (selectedProduct?.selling_price || '0.00')"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sale Form -->
+            <form @submit.prevent="processSale()" x-show="selectedProduct">
+                {% csrf_token %}
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <!-- Quantity -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
+                            <input type="number" 
+                                   x-model="saleData.quantity_sold"
+                                   :max="selectedProduct?.quantity_in_stock"
+                                   min="1" 
+                                   required
+                                   @input="calculateTotal()"
+                                   class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500">
+                        </div>
+                        
+                        <!-- Sale Price -->
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Unit Price</label>
+                            <div class="relative">
+                                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                                <input type="number" 
+                                       x-model="saleData.sale_price"
+                                       step="0.01" 
+                                       required
+                                       @input="calculateTotal()"
+                                       class="w-full px-4 py-3 pl-8 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Discount -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Discount (%)
+                            <span class="text-xs text-gray-400">Optional</span>
+                        </label>
+                        <input type="number" 
+                               x-model="saleData.discount_applied"
+                               min="0" 
+                               max="100" 
+                               step="0.1"
+                               @input="calculateTotal()"
+                               class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500">
+                    </div>
+                    
+                    <!-- Total Amount -->
+                    <div class="p-4 bg-green-50 rounded-xl">
+                        <div class="flex items-center justify-between">
+                            <span class="text-lg font-medium text-gray-700">Total Amount</span>
+                            <span class="text-2xl font-bold text-green-600" x-text="'$' + totalAmount.toFixed(2)"></span>
+                        </div>
+                        <div x-show="saleData.discount_applied > 0" class="text-sm text-gray-500 mt-1">
+                            <span>Original: $</span><span x-text="(saleData.quantity_sold * saleData.sale_price).toFixed(2)"></span>
+                            <span class="ml-2 text-green-600">Saved: $</span><span x-text="((saleData.quantity_sold * saleData.sale_price) - totalAmount).toFixed(2)" class="text-green-600"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Action Buttons -->
+                <div class="flex items-center space-x-3 mt-6">
+                    <button type="button" 
+                            @click="closeModal()"
+                            class="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                            :disabled="processing"
+                            class="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-xl transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span x-show="!processing">Complete Sale</span>
+                        <span x-show="processing" class="flex items-center justify-center">
+                            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Processing...
+                        </span>
+                    </button>
+                </div>
+            </form>
+
+            <!-- No Product Selected -->
+            <div x-show="!selectedProduct" class="text-center py-8">
+                <div class="text-gray-400 mb-4">
+                    <i class="fas fa-search text-4xl"></i>
+                </div>
+                <p class="text-gray-500">Search for a product to start a sale</p>
+                <p class="text-xs text-gray-400 mt-2">
+                    💡 Tip: Type product code for fastest search
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Success Modal -->
+<div x-show="showSuccessModal" 
+     x-transition:enter="transition ease-out duration-300"
+     x-transition:enter-start="opacity-0"
+     x-transition:enter-end="opacity-100"
+     x-transition:leave="transition ease-in duration-200"
+     x-transition:leave-start="opacity-100"
+     x-transition:leave-end="opacity-0"
+     class="fixed inset-0 z-50 overflow-y-auto" 
+     style="display: none;">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50"></div>
+        
+        <div class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 text-center">
+            <div class="mb-4">
+                <div class="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                    <i class="fas fa-check text-2xl text-green-600"></i>
+                </div>
+                <h3 class="text-xl font-bold text-gray-900 mb-2">Sale Completed!</h3>
+                <p class="text-gray-600" x-text="successMessage"></p>
+            </div>
+            
+            <div x-show="saleResult" class="bg-gray-50 rounded-xl p-4 mb-6 text-left">
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Receipt #:</span>
+                        <span class="font-medium" x-text="saleResult?.receipt_number"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Amount:</span>
+                        <span class="font-medium" x-text="'$' + (saleResult?.total_amount || '0.00')"></span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-600">Remaining Stock:</span>
+                        <span class="font-medium" x-text="saleResult?.remaining_stock"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex space-x-3">
+                <button @click="printReceipt()" 
+                        class="flex-1 px-4 py-3 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 transition-colors font-medium">
+                    <i class="fas fa-print mr-2"></i>Print
+                </button>
+                <button @click="newSale()"
+                        class="flex-1 px-4 py-3 bg-green-100 text-green-700 rounded-xl hover:bg-green-200 transition-colors font-medium">
+                    <i class="fas fa-plus mr-2"></i>New Sale
+                </button>
+                <button @click="closeSuccessModal()"
+                        class="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function quickSaleModal() {
+    return {
+        showModal: false,
+        showSuccessModal: false,
+        searchQuery: '',
+        searchResults: [],
+        selectedProduct: null,
+        selectedResultIndex: -1,
+        searching: false,
+        processing: false,
+        successMessage: '',
+        saleResult: null,
+        searchTimeout: null,
+        
+        saleData: {
+            quantity_sold: 1,
+            sale_price: 0,
+            discount_applied: 0
+        },
+        
+        totalAmount: 0,
+        
+        openModal() {
+            this.showModal = true;
+            this.resetForm();
+            // Focus search input after modal opens
+            this.$nextTick(() => {
+                this.$el.querySelector('input[type="text"]').focus();
+            });
+        },
+        
+        closeModal() {
+            this.showModal = false;
+            this.resetForm();
+        },
+        
+        closeSuccessModal() {
+            this.showSuccessModal = false;
+            this.showModal = false;
+        },
+        
+        newSale() {
+            this.showSuccessModal = false;
+            this.resetForm();
+            // Keep modal open and focus search
+            this.$nextTick(() => {
+                this.$el.querySelector('input[type="text"]').focus();
+            });
+        },
+        
+        resetForm() {
+            this.searchQuery = '';
+            this.searchResults = [];
+            this.selectedProduct = null;
+            this.selectedResultIndex = -1;
+            this.saleData = {
+                quantity_sold: 1,
+                sale_price: 0,
+                discount_applied: 0
+            };
+            this.totalAmount = 0;
+            this.processing = false;
+        },
+        
+        searchProducts() {
+            const query = this.searchQuery.trim();
+            
+            // Clear previous timeout
+            if (this.searchTimeout) {
+                clearTimeout(this.searchTimeout);
+            }
+            
+            if (query.length < 1) {
+                this.searchResults = [];
+                return;
+            }
+            
+            this.searching = true;
+            
+            // Debounce search requests
+            this.searchTimeout = setTimeout(() => {
+                fetch(`{% url 'product_search_ajax' %}?q=${encodeURIComponent(query)}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        this.searchResults = data.products || [];
+                        this.selectedResultIndex = -1;
+                        this.searching = false;
+                    })
+                    .catch(error => {
+                        console.error('Search error:', error);
+                        this.searchResults = [];
+                        this.searching = false;
+                    });
+            }, 300);
+        },
+        
+        selectProduct(product) {
+            this.selectedProduct = product;
+            this.searchResults = [];
+            this.searchQuery = product.display_name;
+            this.saleData.sale_price = parseFloat(product.selling_price);
+            this.calculateTotal();
+        },
+        
+        selectFirstResult() {
+            if (this.searchResults.length > 0) {
+                this.selectProduct(this.searchResults[0]);
+            }
+        },
+        
+        navigateResults(direction) {
+            if (this.searchResults.length === 0) return;
+            
+            if (direction === 'down') {
+                this.selectedResultIndex = Math.min(this.selectedResultIndex + 1, this.searchResults.length - 1);
+            } else {
+                this.selectedResultIndex = Math.max(this.selectedResultIndex - 1, -1);
+            }
+            
+            if (this.selectedResultIndex >= 0) {
+                this.selectProduct(this.searchResults[this.selectedResultIndex]);
+            }
+        },
+        
+        calculateTotal() {
+            const quantity = parseInt(this.saleData.quantity_sold) || 0;
+            const price = parseFloat(this.saleData.sale_price) || 0;
+            const discount = parseFloat(this.saleData.discount_applied) || 0;
+            
+            const subtotal = quantity * price;
+            const discountAmount = subtotal * (discount / 100);
+            this.totalAmount = subtotal - discountAmount;
+        },
+        
+        processSale() {
+            if (!this.selectedProduct) return;
+            
+            this.processing = true;
+            
+            const formData = new FormData();
+            formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+            formData.append('quantity_sold', this.saleData.quantity_sold);
+            formData.append('sale_price', this.saleData.sale_price);
+            formData.append('discount_applied', this.saleData.discount_applied);
+            
+            fetch(`/inventory/make_sale/${this.selectedProduct.id}/`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                this.processing = false;
+                
+                if (data.success) {
+                    this.successMessage = data.message;
+                    this.saleResult = data;
+                    this.showSuccessModal = true;
+                    
+                    // Refresh page data if needed
+                    if (typeof refreshInventoryData === 'function') {
+                        refreshInventoryData();
+                    }
+                } else {
+                    alert('Sale Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                this.processing = false;
+                console.error('Sale error:', error);
+                alert('An error occurred while processing the sale');
+            });
+        },
+        
+        printReceipt() {
+            if (this.saleResult?.receipt_number) {
+                window.open(`/inventory/invoice/print/${this.saleResult.receipt_number}/`, '_blank');
+            }
+        }
+    }
+}
+
+// Global function to open the quick sale modal
+function openQuickSaleModal() {
+    // Dispatch event to open modal
+    window.dispatchEvent(new CustomEvent('open-quick-sale'));
+}
+
+// Initialize modal when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Listen for the open event
+    window.addEventListener('open-quick-sale', function() {
+        // Find the modal component and open it
+        const modalEl = document.querySelector('[x-data*="quickSaleModal"]');
+        if (modalEl && modalEl.__x) {
+            modalEl.__x.$data.openModal();
+        }
+    });
+});
+</script>

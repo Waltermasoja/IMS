@@ -1,0 +1,185 @@
+{% extends 'base_modern.html' %}
+{% load static %}
+
+{% block title %}Invoice {{ invoice.invoice_number }}{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6 max-w-4xl">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <a href="{% url 'invoice_list' %}" class="text-blue-600 hover:text-blue-800">
+            <i class="fas fa-arrow-left mr-2"></i>Back to Invoices
+        </a>
+        <div class="flex gap-2">
+            <a href="{% url 'print_invoice' invoice.id %}" target="_blank"
+               class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition">
+                <i class="fas fa-print mr-2"></i>Print
+            </a>
+            {% if invoice.customer and invoice.customer.opt_in_for_emails and invoice.customer.email %}
+                <button onclick="sendInvoiceEmail({{ invoice.id }})"
+                        class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition">
+                    <i class="fas fa-envelope mr-2"></i>Send Email
+                </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Invoice Card -->
+    <div class="bg-white rounded-lg shadow-lg p-8">
+        <!-- Invoice Header -->
+        <div class="border-b-2 border-gray-200 pb-6 mb-6">
+            <div class="flex justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-800 mb-2">INVOICE</h1>
+                    <p class="text-gray-600">{{ invoice.invoice_number }}</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm text-gray-600">Date</p>
+                    <p class="font-semibold">{{ invoice.invoice_date|date:"F d, Y" }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Customer Info -->
+        <div class="mb-8">
+            <h3 class="text-sm font-semibold text-gray-600 mb-2">BILL TO:</h3>
+            {% if invoice.customer %}
+                <p class="font-semibold text-gray-800">{{ invoice.customer.name }}</p>
+                {% if invoice.customer.email %}
+                    <p class="text-sm text-gray-600">
+                        <i class="fas fa-envelope mr-1"></i>{{ invoice.customer.email }}
+                        {% if invoice.customer.opt_in_for_emails %}
+                            <span class="ml-2 text-xs text-green-600">(Opted in)</span>
+                        {% endif %}
+                    </p>
+                {% endif %}
+                {% if invoice.customer.phone %}
+                    <p class="text-sm text-gray-600"><i class="fas fa-phone mr-1"></i>{{ invoice.customer.phone }}</p>
+                {% endif %}
+                {% if invoice.customer.address %}
+                    <p class="text-sm text-gray-600 mt-1">{{ invoice.customer.address }}</p>
+                {% endif %}
+                <p class="text-sm text-gray-500 mt-2">
+                    <i class="fas fa-shopping-cart mr-1"></i>Total Purchases: {{ invoice.customer.purchase_count }}
+                </p>
+            {% else %}
+                <p class="text-gray-600 italic">Walk-in Customer</p>
+            {% endif %}
+        </div>
+
+        <!-- Items Table -->
+        <div class="mb-8">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b-2 border-gray-300">
+                        <th class="text-left py-2 text-sm font-semibold text-gray-600">ITEM</th>
+                        <th class="text-center py-2 text-sm font-semibold text-gray-600">QTY</th>
+                        <th class="text-right py-2 text-sm font-semibold text-gray-600">UNIT PRICE</th>
+                        <th class="text-right py-2 text-sm font-semibold text-gray-600">DISCOUNT</th>
+                        <th class="text-right py-2 text-sm font-semibold text-gray-600">TOTAL</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr class="border-b border-gray-200">
+                        <td class="py-3">
+                            <p class="font-medium text-gray-800">{{ item.product_name }}</p>
+                            {% if item.product_code %}
+                                <p class="text-xs text-gray-500">{{ item.product_code }}</p>
+                            {% endif %}
+                        </td>
+                        <td class="text-center py-3">{{ item.quantity }}</td>
+                        <td class="text-right py-3">${{ item.unit_price|floatformat:2 }}</td>
+                        <td class="text-right py-3">
+                            {% if item.discount_percent > 0 %}
+                                {{ item.discount_percent }}%
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="text-right py-3 font-semibold">${{ item.line_total|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Totals -->
+        <div class="flex justify-end mb-6">
+            <div class="w-64">
+                <div class="flex justify-between py-2 border-b border-gray-200">
+                    <span class="text-gray-600">Subtotal:</span>
+                    <span class="font-semibold">${{ invoice.subtotal|floatformat:2 }}</span>
+                </div>
+                {% if invoice.discount_amount > 0 %}
+                <div class="flex justify-between py-2 border-b border-gray-200">
+                    <span class="text-gray-600">Discount:</span>
+                    <span class="font-semibold text-red-600">-${{ invoice.discount_amount|floatformat:2 }}</span>
+                </div>
+                {% endif %}
+                {% if invoice.tax_amount > 0 %}
+                <div class="flex justify-between py-2 border-b border-gray-200">
+                    <span class="text-gray-600">Tax:</span>
+                    <span class="font-semibold">${{ invoice.tax_amount|floatformat:2 }}</span>
+                </div>
+                {% endif %}
+                <div class="flex justify-between py-3 border-t-2 border-gray-300">
+                    <span class="text-lg font-bold text-gray-800">Total:</span>
+                    <span class="text-lg font-bold text-gray-800">${{ invoice.total_amount|floatformat:2 }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Email Status -->
+        {% if invoice.email_sent %}
+        <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+            <p class="text-sm text-green-800">
+                <i class="fas fa-check-circle mr-2"></i>
+                Invoice emailed to {{ invoice.customer.email }} on {{ invoice.email_sent_date|date:"F d, Y" }}
+            </p>
+        </div>
+        {% endif %}
+
+        <!-- Notes -->
+        {% if invoice.notes %}
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4">
+            <h4 class="font-semibold text-gray-700 mb-2">Notes:</h4>
+            <p class="text-sm text-gray-600">{{ invoice.notes }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Footer -->
+        <div class="text-center text-sm text-gray-500 pt-4 border-t border-gray-200">
+            <p>Created by {{ invoice.created_by.username }} on {{ invoice.created_date|date:"F d, Y" }}</p>
+            <p class="mt-2">Thank you for your business!</p>
+        </div>
+    </div>
+</div>
+
+<script>
+function sendInvoiceEmail(invoiceId) {
+    if (!confirm('Send this invoice via email?')) return;
+    
+    fetch(`/inventory/invoices/${invoiceId}/send-email/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Failed to send email');
+        console.error(error);
+    });
+}
+</script>
+{% endblock %}

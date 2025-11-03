@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% block title %}Add Invoice - IMS Pro{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-6 animate-fade-in">
+    <!-- Page Header -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Add Invoice</h1>
+            <p class="text-gray-500 mt-1">Create invoice for import order {{ order.order_number }}</p>
+        </div>
+        <a href="{% url 'import_order_detail' order.id %}" 
+           class="inline-flex items-center space-x-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
+            <i class="fas fa-arrow-left"></i>
+            <span class="font-medium">Back to Order</span>
+        </a>
+    </div>
+
+    <!-- Form Card -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <form method="post" class="p-8">
+            {% csrf_token %}
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Invoice Number -->
+                <div>
+                    <label for="{{ form.invoice_number.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-file-invoice text-blue-500 mr-2"></i>Invoice Number
+                    </label>
+                    <input type="text" name="invoice_number" id="{{ form.invoice_number.id_for_label }}" 
+                           value="{{ form.invoice_number.value|default:'' }}"
+                           class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                           placeholder="INV-2024-001">
+                    {% for error in form.invoice_number.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
+                </div>
+
+                <!-- Invoice Date -->
+                <div>
+                    <label for="{{ form.invoice_date.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-calendar text-green-500 mr-2"></i>Invoice Date
+                    </label>
+                    <input type="date" name="invoice_date" id="{{ form.invoice_date.id_for_label }}" 
+                           value="{{ form.invoice_date.value|default:'' }}"
+                           class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                    {% for error in form.invoice_date.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
+                </div>
+
+                <!-- Due Date -->
+                <div>
+                    <label for="{{ form.due_date.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-clock text-orange-500 mr-2"></i>Due Date
+                    </label>
+                    <input type="date" name="due_date" id="{{ form.due_date.id_for_label }}" 
+                           value="{{ form.due_date.value|default:'' }}"
+                           class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                    {% for error in form.due_date.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
+                </div>
+
+                <!-- Total Amount -->
+                <div>
+                    <label for="{{ form.total_amount.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-dollar-sign text-purple-500 mr-2"></i>Total Amount
+                    </label>
+                    <div class="relative">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</span>
+                        <input type="number" step="0.01" name="total_amount" id="{{ form.total_amount.id_for_label }}" 
+                               value="{{ form.total_amount.value|default:'' }}"
+                               class="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="0.00">
+                    </div>
+                    {% for error in form.total_amount.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
+                </div>
+
+                <!-- Currency -->
+                <div>
+                    <label for="{{ form.currency.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-coins text-yellow-500 mr-2"></i>Currency
+                    </label>
+                    <select name="currency" id="{{ form.currency.id_for_label }}" 
+                            class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                        {% for choice in form.currency.field.choices %}
+                            <option value="{{ choice.0 }}" {% if form.currency.value == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
+                        {% endfor %}
+                    </select>
+                    {% for error in form.currency.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
+                </div>
+
+                <!-- Status -->
+                <div>
+                    <label for="{{ form.status.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-flag text-red-500 mr-2"></i>Status
+                    </label>
+                    <select name="status" id="{{ form.status.id_for_label }}" 
+                            class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                        {% for choice in form.status.field.choices %}
+                            <option value="{{ choice.0 }}" {% if form.status.value == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
+                        {% endfor %}
+                    </select>
+                    {% for error in form.status.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
+                </div>
+
+                <!-- Notes -->
+                <div class="lg:col-span-2">
+                    <label for="{{ form.notes.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-sticky-note text-indigo-500 mr-2"></i>Notes
+                    </label>
+                    <textarea name="notes" id="{{ form.notes.id_for_label }}" rows="3"
+                              class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                              placeholder="Additional notes about this invoice">{{ form.notes.value|default:'' }}</textarea>
+                    {% for error in form.notes.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex flex-col sm:flex-row gap-3 pt-8 mt-8 border-t border-gray-100">
+                <a href="{% url 'import_order_detail' order.id %}" 
+                   class="inline-flex items-center justify-center px-6 py-3 border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
+                    <i class="fas fa-times mr-2"></i>
+                    Cancel
+                </a>
+                <button type="submit" 
+                        class="inline-flex items-center justify-center px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
+                    <i class="fas fa-save mr-2"></i>
+                    Save Invoice
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

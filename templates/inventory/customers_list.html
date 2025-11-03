@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+{% block title %}Customers{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <!-- Header + Stats -->
+  <div class="bg-white rounded-2xl shadow-sm p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Customers</h1>
+        <p class="text-gray-500 text-sm">Manage customer profiles and credit limits</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="{% url 'customer_create' %}" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          <i class="fas fa-plus mr-2"></i> Add Customer
+        </a>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+      <div class="border rounded-xl p-4 text-center">
+        <div class="text-xs uppercase text-gray-500">Active</div>
+        <div class="text-xl font-semibold text-gray-900">{{ active_count }}</div>
+      </div>
+      <div class="border rounded-xl p-4 text-center">
+        <div class="text-xs uppercase text-gray-500">Suspended</div>
+        <div class="text-xl font-semibold text-amber-700">{{ suspended_count }}</div>
+      </div>
+      <div class="border rounded-xl p-4 text-center">
+        <div class="text-xs uppercase text-gray-500">Inactive</div>
+        <div class="text-xl font-semibold text-gray-900">{{ inactive_count }}</div>
+      </div>
+      <div class="border rounded-xl p-4 text-center">
+        <div class="text-xs uppercase text-gray-500">A/R Balance</div>
+        <div class="text-xl font-semibold text-green-700">${{ total_balance }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="bg-white rounded-2xl shadow-sm p-6">
+    {% if customers %}
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead>
+          <tr class="text-left text-gray-500 border-b">
+            <th class="py-3 pr-4">Name</th>
+            <th class="py-3 pr-4">Phone</th>
+            <th class="py-3 pr-4">Email</th>
+            <th class="py-3 pr-4">Credit Limit</th>
+            <th class="py-3 pr-4">Balance</th>
+            <th class="py-3 pr-4">Status</th>
+            <th class="py-3 pr-4">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y">
+          {% for customer in customers %}
+          <tr class="align-top">
+            <td class="py-3 pr-4 font-semibold">{{ customer.name }}</td>
+            <td class="py-3 pr-4">{{ customer.phone|default:"-" }}</td>
+            <td class="py-3 pr-4">{{ customer.email|default:"-" }}</td>
+            <td class="py-3 pr-4">${{ customer.credit_limit }}</td>
+            <td class="py-3 pr-4 {% if customer.current_balance > 0 %}text-amber-700{% endif %}">${{ customer.current_balance }}</td>
+            <td class="py-3 pr-4">
+              <span class="px-2 py-1 rounded text-xs
+                {% if customer.status == 'ACTIVE' %} bg-green-50 text-green-700
+                {% elif customer.status == 'SUSPENDED' %} bg-amber-50 text-amber-700
+                {% else %} bg-gray-100 text-gray-700 {% endif %}">
+                {{ customer.get_status_display }}
+              </span>
+            </td>
+            <td class="py-3 pr-4">
+              <a href="{% url 'customer_update' customer.pk %}" class="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50">Edit</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <div class="text-center py-16">
+        <div class="mx-auto w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center mb-4">
+          <i class="fas fa-user-friends text-indigo-600 text-2xl"></i>
+        </div>
+        <h3 class="text-lg font-semibold text-gray-900">No customers yet</h3>
+        <p class="text-gray-500">Create a customer to enable credit sales and layby plans.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

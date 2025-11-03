@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% load form_tags %}
+{% block title %}Cashbook{% endblock %}
+{% block content %}
+<div class="space-y-6 animate-fade-in">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-gray-900">Cashbook</h1>
+    <a href="{% url 'cashbook_add' %}" class="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl">Add Entry</a>
+  </div>
+
+  <div class="bg-white rounded-2xl p-6 shadow-sm">
+    <form method="GET" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="block text-sm font-medium">Start Date</label>
+        {{ form.start_date|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+      </div>
+      <div>
+        <label class="block text-sm font-medium">End Date</label>
+        {{ form.end_date|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+      </div>
+      <div class="flex items-end">
+        <button class="w-full px-4 py-2 bg-gray-800 text-white rounded-xl">Filter</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="bg-white rounded-xl p-4 shadow-sm"><div class="text-sm text-gray-500">Opening</div><div class="text-xl font-bold">${{ opening|floatformat:2 }}</div></div>
+    <div class="bg-white rounded-xl p-4 shadow-sm"><div class="text-sm text-gray-500">Receipts</div><div class="text-xl font-bold text-green-600">${{ receipts|floatformat:2 }}</div></div>
+    <div class="bg-white rounded-xl p-4 shadow-sm"><div class="text-sm text-gray-500">Payments</div><div class="text-xl font-bold text-red-600">${{ payments|floatformat:2 }}</div></div>
+    <div class="bg-white rounded-xl p-4 shadow-sm"><div class="text-sm text-gray-500">Closing</div><div class="text-xl font-bold">${{ closing|floatformat:2 }}</div></div>
+  </div>
+
+  <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <table class="w-full">
+      <thead>
+        <tr class="bg-gray-50 text-xs text-gray-600 uppercase">
+          <th class="px-6 py-3 text-left">Date</th>
+          <th class="px-6 py-3 text-left">Reference</th>
+          <th class="px-6 py-3 text-left">Description</th>
+          <th class="px-6 py-3 text-left">Category</th>
+          <th class="px-6 py-3 text-right">Receipt</th>
+          <th class="px-6 py-3 text-right">Payment</th>
+          <th class="px-6 py-3 text-right">Running</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+        {% for r in rows %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-6 py-3">{{ r.entry.date }}</td>
+          <td class="px-6 py-3">{{ r.entry.reference }}</td>
+          <td class="px-6 py-3">{{ r.entry.description }}</td>
+          <td class="px-6 py-3">{{ r.entry.category }}</td>
+          <td class="px-6 py-3 text-right text-green-700">{% if r.entry.receipt_amount %}${{ r.entry.receipt_amount|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td class="px-6 py-3 text-right text-red-700">{% if r.entry.payment_amount %}${{ r.entry.payment_amount|floatformat:2 }}{% else %}-{% endif %}</td>
+          <td class="px-6 py-3 text-right font-semibold">${{ r.running|floatformat:2 }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="px-6 py-10 text-center text-gray-500">No entries</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

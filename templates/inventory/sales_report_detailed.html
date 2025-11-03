@@ -1,0 +1,201 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load form_tags %}
+
+{% block title %}Sales Report (Detailed) - IMS Pro{% endblock %}
+
+{% block content %}
+<div class="space-y-6 animate-fade-in">
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-900">Detailed Sales Report</h1>
+      <p class="text-gray-500 mt-1">See who sold what, when, and how much</p>
+    </div>
+    <div class="flex gap-3">
+      <a href="{% url 'sales_report_export_csv' %}?{{ request.GET.urlencode }}" class="inline-flex items-center space-x-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
+        <i class="fas fa-file-csv"></i>
+        <span class="font-medium">Export CSV</span>
+      </a>
+      <a href="{% url 'sales_report_simple' %}" class="inline-flex items-center space-x-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
+        <i class="fas fa-chart-column"></i>
+        <span class="font-medium">Simple View</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="bg-white rounded-2xl p-6 shadow-sm">
+    <form method="GET" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
+      <div class="col-span-1">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+        {{ form.start_date|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+      </div>
+      <div class="col-span-1">
+        <label class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+        {{ form.end_date|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+      </div>
+      <div class="col-span-1">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+        <select name="payment_method" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl">
+          <option value="">All</option>
+          <option value="CASH" {% if selected.payment_method == 'CASH' %}selected{% endif %}>Cash</option>
+          <option value="CREDIT" {% if selected.payment_method == 'CREDIT' %}selected{% endif %}>Credit</option>
+          <option value="LAYBY" {% if selected.payment_method == 'LAYBY' %}selected{% endif %}>Layby</option>
+        </select>
+      </div>
+      <div class="col-span-1">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Salesperson</label>
+        <select name="salesperson" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl">
+          <option value="">All</option>
+          {% for u in salespeople %}
+          <option value="{{ u.recorded_by__id }}" {% if selected.salesperson|default:'' == u.recorded_by__id|stringformat:'s' %}selected{% endif %}>{{ u.recorded_by__username }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-span-1">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Product</label>
+        <select name="product" class="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl">
+          <option value="">All</option>
+          {% for p in products %}
+          <option value="{{ p.inventory_item__id }}" {% if selected.product|default:'' == p.inventory_item__id|stringformat:'s' %}selected{% endif %}>{{ p.inventory_item__name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-span-1 flex items-end">
+        <button class="w-full px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl">Filter</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- KPI Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+    <div class="bg-white rounded-2xl p-6 shadow-sm">
+      <div class="text-sm text-gray-500">Total Amount</div>
+      <div class="text-2xl font-bold text-gray-900">${{ totals.amount|floatformat:2 }}</div>
+    </div>
+    <div class="bg-white rounded-2xl p-6 shadow-sm">
+      <div class="text-sm text-gray-500">Qty Sold</div>
+      <div class="text-2xl font-bold text-gray-900">{{ totals.qty }}</div>
+    </div>
+    <div class="bg-white rounded-2xl p-6 shadow-sm">
+      <div class="text-sm text-gray-500">Returns</div>
+      <div class="text-2xl font-bold text-gray-900">{{ totals.returns }}</div>
+    </div>
+    <div class="bg-white rounded-2xl p-6 shadow-sm">
+      <div class="text-sm text-gray-500">COGS (est.)</div>
+      <div class="text-2xl font-bold text-gray-900">${{ totals.cogs|floatformat:2 }}</div>
+    </div>
+  </div>
+
+  <!-- Breakdown Tabs -->
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+    <!-- By Salesperson -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-lg font-semibold">By Salesperson</h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead>
+            <tr class="bg-gray-50 text-xs text-gray-600 uppercase">
+              <th class="px-6 py-3 text-left">User</th>
+              <th class="px-6 py-3 text-right">Qty</th>
+              <th class="px-6 py-3 text-right">Returns</th>
+              <th class="px-6 py-3 text-right">Sales</th>
+              <th class="px-6 py-3 text-right">COGS</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            {% for r in by_user %}
+            <tr class="hover:bg-gray-50">
+              <td class="px-6 py-3">{{ r.recorded_by__username|default:'Unassigned' }}</td>
+              <td class="px-6 py-3 text-right">{{ r.total_qty|default:0 }}</td>
+              <td class="px-6 py-3 text-right">{{ r.total_returns|default:0 }}</td>
+              <td class="px-6 py-3 text-right font-semibold">${{ r.total_amount|floatformat:2 }}</td>
+              <td class="px-6 py-3 text-right">${{ r.cogs|floatformat:2 }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="px-6 py-6 text-center text-gray-500">No data</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- By Product -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+      <div class="px-6 py-4 border-b border-gray-200">
+        <h2 class="text-lg font-semibold">By Product</h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead>
+            <tr class="bg-gray-50 text-xs text-gray-600 uppercase">
+              <th class="px-6 py-3 text-left">Product</th>
+              <th class="px-6 py-3 text-right">Qty</th>
+              <th class="px-6 py-3 text-right">Returns</th>
+              <th class="px-6 py-3 text-right">Sales</th>
+              <th class="px-6 py-3 text-right">COGS</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200">
+            {% for r in by_product %}
+            <tr class="hover:bg-gray-50">
+              <td class="px-6 py-3">{{ r.inventory_item__name }}</td>
+              <td class="px-6 py-3 text-right">{{ r.total_qty|default:0 }}</td>
+              <td class="px-6 py-3 text-right">{{ r.total_returns|default:0 }}</td>
+              <td class="px-6 py-3 text-right font-semibold">${{ r.total_amount|floatformat:2 }}</td>
+              <td class="px-6 py-3 text-right">${{ r.cogs|floatformat:2 }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="5" class="px-6 py-6 text-center text-gray-500">No data</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detailed Rows -->
+  <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+      <h2 class="text-lg font-semibold">Recent Sales</h2>
+      <div class="text-sm text-gray-500">Showing up to 200 rows</div>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full">
+        <thead>
+          <tr class="bg-gray-50 text-xs text-gray-600 uppercase">
+            <th class="px-6 py-3 text-left">Date</th>
+            <th class="px-6 py-3 text-left">Receipt</th>
+            <th class="px-6 py-3 text-left">Product</th>
+            <th class="px-6 py-3 text-right">Qty</th>
+            <th class="px-6 py-3 text-right">Price</th>
+            <th class="px-6 py-3 text-right">Discount</th>
+            <th class="px-6 py-3 text-right">Total</th>
+            <th class="px-6 py-3 text-left">Payment</th>
+            <th class="px-6 py-3 text-left">Salesperson</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+          {% for s in details %}
+          <tr class="hover:bg-gray-50">
+            <td class="px-6 py-3">{{ s.sale_date|date:'Y-m-d H:i' }}</td>
+            <td class="px-6 py-3">{{ s.receipt_number }}</td>
+            <td class="px-6 py-3">{{ s.inventory_item.name }}</td>
+            <td class="px-6 py-3 text-right">{{ s.quantity_sold }}</td>
+            <td class="px-6 py-3 text-right">${{ s.sale_price }}</td>
+            <td class="px-6 py-3 text-right">{% if s.discount_applied %}{{ s.discount_applied }}%{% else %}-{% endif %}</td>
+            <td class="px-6 py-3 text-right font-semibold">${{ s.total_amount|floatformat:2 }}</td>
+            <td class="px-6 py-3">{{ s.payment_method }}</td>
+            <td class="px-6 py-3">{{ s.recorded_by.username|default:'-' }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="9" class="px-6 py-10 text-center text-gray-500">No sales found</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

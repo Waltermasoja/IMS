@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+{% block title %}Accounts Receivable{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <!-- Header + Stats -->
+  <div class="bg-white rounded-2xl shadow-sm p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Accounts Receivable</h1>
+        <p class="text-gray-500 text-sm">Manage outstanding invoices and collect payments</p>
+      </div>
+      <div class="grid grid-cols-3 gap-4">
+        <div class="border rounded-xl p-4 text-center">
+          <div class="text-xs uppercase text-gray-500">Invoices</div>
+          <div class="text-xl font-semibold text-gray-900">{{ invoice_count }}</div>
+        </div>
+        <div class="border rounded-xl p-4 text-center">
+          <div class="text-xs uppercase text-gray-500">Overdue</div>
+          <div class="text-xl font-semibold text-amber-700">{{ overdue_count }}</div>
+        </div>
+        <div class="border rounded-xl p-4 text-center">
+          <div class="text-xs uppercase text-gray-500">Outstanding</div>
+          <div class="text-xl font-semibold text-green-700">${{ total_outstanding }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="bg-white rounded-2xl shadow-sm p-6">
+    {% if invoices %}
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead>
+          <tr class="text-left text-gray-500 border-b">
+            <th class="py-3 pr-4">Invoice</th>
+            <th class="py-3 pr-4">Customer</th>
+            <th class="py-3 pr-4">Invoice Date</th>
+            <th class="py-3 pr-4">Due Date</th>
+            <th class="py-3 pr-4">Status</th>
+            <th class="py-3 pr-4">Total</th>
+            <th class="py-3 pr-4">Paid</th>
+            <th class="py-3 pr-4">Outstanding</th>
+            <th class="py-3 pr-4">Collect</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y">
+          {% for inv in invoices %}
+          <tr class="align-top {% if inv.is_overdue %}bg-amber-50{% endif %}">
+            <td class="py-3 pr-4 font-semibold">{{ inv.invoice_number }}</td>
+            <td class="py-3 pr-4">{{ inv.customer.name }}</td>
+            <td class="py-3 pr-4">{{ inv.invoice_date }}</td>
+            <td class="py-3 pr-4">{{ inv.due_date }}</td>
+            <td class="py-3 pr-4">
+              <span class="px-2 py-1 rounded text-xs
+                {% if inv.status == 'PAID' %} bg-green-50 text-green-700
+                {% elif inv.status == 'PARTIAL' %} bg-blue-50 text-blue-700
+                {% elif inv.is_overdue %} bg-amber-100 text-amber-800
+                {% else %} bg-gray-100 text-gray-700 {% endif %}">
+                {{ inv.get_status_display }}
+              </span>
+            </td>
+            <td class="py-3 pr-4">${{ inv.total_amount }}</td>
+            <td class="py-3 pr-4">${{ inv.amount_paid }}</td>
+            <td class="py-3 pr-4 font-semibold text-green-700">${{ inv.outstanding_amount }}</td>
+            <td class="py-3 pr-4">
+              <form method="post" action="{% url 'ar_payment_create' %}" class="flex flex-wrap items-center gap-2">
+                {% csrf_token %}
+                <input type="hidden" name="invoice" value="{{ inv.id }}" />
+                <input type="date" name="payment_date" value="{{ today }}" class="border rounded-lg px-2 py-1 text-sm" />
+                <input type="number" step="0.01" min="0" max="{{ inv.outstanding_amount }}" name="amount" class="border rounded-lg px-2 py-1 w-28 text-sm" placeholder="Amount" />
+                <select name="method" class="border rounded-lg px-2 py-1 text-sm">
+                  <option value="CASH">Cash</option>
+                  <option value="BANK">Bank</option>
+                  <option value="CARD">Card</option>
+                  <option value="MOBILE">Mobile</option>
+                </select>
+                <input type="text" name="reference" class="border rounded-lg px-2 py-1 w-28 text-sm" placeholder="Ref" />
+                <button class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Pay</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <div class="text-center py-16">
+        <div class="mx-auto w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mb-4">
+          <i class="fas fa-file-invoice-dollar text-amber-600 text-2xl"></i>
+        </div>
+        <h3 class="text-lg font-semibold text-gray-900">No A/R invoices</h3>
+        <p class="text-gray-500">Create a credit sale from the POS by choosing payment method "On Credit".</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

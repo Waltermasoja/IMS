@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% block title %}Layby Plans{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <!-- Header + Stats -->
+  <div class="bg-white rounded-2xl shadow-sm p-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">Layby Plans</h1>
+        <p class="text-gray-500 text-sm">Track layby balances, payments and fulfillment</p>
+      </div>
+      <div class="grid grid-cols-3 gap-4">
+        <div class="border rounded-xl p-4 text-center">
+          <div class="text-xs uppercase text-gray-500">Active</div>
+          <div class="text-xl font-semibold text-gray-900">{{ active_count }}</div>
+        </div>
+        <div class="border rounded-xl p-4 text-center">
+          <div class="text-xs uppercase text-gray-500">Fulfilled</div>
+          <div class="text-xl font-semibold text-gray-900">{{ fulfilled_count }}</div>
+        </div>
+        <div class="border rounded-xl p-4 text-center">
+          <div class="text-xs uppercase text-gray-500">Outstanding</div>
+          <div class="text-xl font-semibold text-green-700">${{ total_remaining }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="bg-white rounded-2xl shadow-sm p-6">
+    {% if plans %}
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead>
+          <tr class="text-left text-gray-500 border-b">
+            <th class="py-3 pr-4">Plan</th>
+            <th class="py-3 pr-4">Customer</th>
+            <th class="py-3 pr-4">Created</th>
+            <th class="py-3 pr-4">Status</th>
+            <th class="py-3 pr-4">Total</th>
+            <th class="py-3 pr-4">Paid</th>
+            <th class="py-3 pr-4">Remaining</th>
+            <th class="py-3 pr-4">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y">
+          {% for p in plans %}
+          <tr class="align-top">
+            <td class="py-3 pr-4 font-semibold">#{{ p.id }}</td>
+            <td class="py-3 pr-4">{{ p.customer.name }}</td>
+            <td class="py-3 pr-4">{{ p.created_date }}</td>
+            <td class="py-3 pr-4">
+              <span class="px-2 py-1 rounded text-xs
+                {% if p.status == 'ACTIVE' %} bg-purple-50 text-purple-700
+                {% elif p.status == 'FULFILLED' %} bg-green-50 text-green-700
+                {% elif p.status == 'CANCELLED' %} bg-gray-100 text-gray-600
+                {% else %} bg-yellow-50 text-yellow-700 {% endif %}">
+                {{ p.get_status_display }}
+              </span>
+            </td>
+            <td class="py-3 pr-4">${{ p.total_price }}</td>
+            <td class="py-3 pr-4">${{ p.amount_paid }}</td>
+            <td class="py-3 pr-4 font-semibold text-green-700">${{ p.remaining }}</td>
+            <td class="py-3 pr-4">
+              <div class="flex flex-wrap items-center gap-2">
+                <!-- Add payment -->
+                <form method="post" action="{% url 'layby_payment_create' %}" class="flex items-center gap-2">
+                  {% csrf_token %}
+                  <input type="hidden" name="plan" value="{{ p.id }}" />
+                  <input type="date" name="payment_date" value="{{ today }}" class="border rounded-lg px-2 py-1 text-sm" />
+                  <input type="number" step="0.01" min="0" name="amount" class="border rounded-lg px-2 py-1 w-28 text-sm" placeholder="Amount" />
+                  <input type="text" name="reference" class="border rounded-lg px-2 py-1 w-28 text-sm" placeholder="Ref" />
+                  <button class="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">Add</button>
+                </form>
+                {% if p.status == 'ACTIVE' %}
+                <form method="post" action="{% url 'layby_fulfill' p.id %}">
+                  {% csrf_token %}
+                  <button class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700" {% if p.remaining > 0 %}disabled class="opacity-50 cursor-not-allowed"{% endif %}>Fulfill</button>
+                </form>
+                <form method="post" action="{% url 'layby_cancel' p.id %}" class="flex items-center gap-2">
+                  {% csrf_token %}
+                  <input type="number" step="0.01" min="0" name="cancellation_fee" class="border rounded-lg px-2 py-1 w-24 text-sm" placeholder="Fee" />
+                  <button class="px-3 py-1.5 border border-red-300 text-red-600 rounded-lg text-sm hover:bg-red-50">Cancel</button>
+                </form>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <div class="text-center py-16">
+        <div class="mx-auto w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center mb-4">
+          <i class="fas fa-hand-holding-usd text-purple-600 text-2xl"></i>
+        </div>
+        <h3 class="text-lg font-semibold text-gray-900">No layby plans yet</h3>
+        <p class="text-gray-500">Create a layby plan from the POS by choosing payment method "Layby".</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

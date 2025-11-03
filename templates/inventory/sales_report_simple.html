@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Sales Report (Simple) - IMS Pro{% endblock %}
+
+{% block content %}
+<div class="space-y-6 animate-fade-in">
+    <!-- Page Header -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Sales Report (Simple)</h1>
+            <p class="text-gray-500 mt-1">Sales overview for the last 30 days grouped by payment method</p>
+        </div>
+        <div class="flex items-center space-x-3">
+            <a href="{% url 'sales_report_detailed' %}" 
+               class="inline-flex items-center space-x-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
+                <i class="fas fa-chart-line mr-2"></i>
+                <span class="font-medium">Detailed View</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {% for method, total in totals_by_method.items %}
+        <div class="bg-white rounded-2xl p-6 shadow-sm hover:shadow-xl transition-all transform hover:-translate-y-1">
+            <div class="flex items-center justify-between mb-4">
+                <div class="w-12 h-12 rounded-xl flex items-center justify-center shadow-lg
+                    {% if method == 'CASH' %}bg-gradient-to-br from-green-500 to-green-600
+                    {% elif method == 'CREDIT' %}bg-gradient-to-br from-blue-500 to-blue-600
+                    {% else %}bg-gradient-to-br from-purple-500 to-purple-600{% endif %}">
+                    <i class="fas {% if method == 'CASH' %}fa-money-bill-wave{% elif method == 'CREDIT' %}fa-credit-card{% else %}fa-calendar-check{% endif %} text-white text-xl"></i>
+                </div>
+            </div>
+            <h3 class="text-gray-500 text-sm font-medium mb-1 uppercase">{{ method }}</h3>
+            <p class="text-3xl font-bold text-gray-900">${{ total|floatformat:2 }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Daily Sales Table -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Daily Sales Breakdown</h2>
+            <p class="text-sm text-gray-500 mt-1">Sales by day for the last 30 days</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="bg-gray-50 text-xs text-gray-600 uppercase">
+                        <th class="px-6 py-3 text-left">Date</th>
+                        <th class="px-6 py-3 text-right">Cash</th>
+                        <th class="px-6 py-3 text-right">Credit</th>
+                        <th class="px-6 py-3 text-right">Layby</th>
+                        <th class="px-6 py-3 text-right font-semibold">Total</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for row in daily_rows %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-3 font-medium text-gray-900">{{ row.date|date:"M d, Y" }}</td>
+                        <td class="px-6 py-3 text-right text-green-600 font-semibold">${{ row.cash|floatformat:2 }}</td>
+                        <td class="px-6 py-3 text-right text-blue-600 font-semibold">${{ row.credit|floatformat:2 }}</td>
+                        <td class="px-6 py-3 text-right text-purple-600 font-semibold">${{ row.layby|floatformat:2 }}</td>
+                        <td class="px-6 py-3 text-right">
+                            <span class="text-gray-900 font-bold text-lg">${{ row.total|floatformat:2 }}</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-10 text-center text-gray-500">
+                            <i class="fas fa-chart-bar text-gray-300 text-3xl mb-2"></i>
+                            <p>No sales data available</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="bg-gray-50 border-t-2 border-gray-200">
+                    <tr class="font-bold text-gray-900">
+                        <td class="px-6 py-4">Total</td>
+                        <td class="px-6 py-4 text-right text-green-600">${{ totals_by_method.CASH|floatformat:2 }}</td>
+                        <td class="px-6 py-4 text-right text-blue-600">${{ totals_by_method.CREDIT|floatformat:2 }}</td>
+                        <td class="px-6 py-4 text-right text-purple-600">${{ totals_by_method.LAYBY|floatformat:2 }}</td>
+                        <td class="px-6 py-4 text-right">
+                            <span class="text-gray-900">${{ totals_by_method.CASH|add:totals_by_method.CREDIT|add:totals_by_method.LAYBY|floatformat:2 }}</span>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

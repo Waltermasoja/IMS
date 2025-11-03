@@ -1,0 +1,364 @@
+{% extends 'base.html' %}
+
+{% block title %}Point of Sale - IMS Pro{% endblock %}
+
+{% block content %}
+<div x-data="posInterface()" class="space-y-6">
+    <form style="display:none">{% csrf_token %}</form>
+    <!-- Header -->
+    <div class="bg-white rounded-2xl shadow-sm p-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900">Point of Sale</h1>
+                <p class="text-gray-500 mt-1">Fast checkout system for {{ user.profile.get_role_display }}</p>
+            </div>
+            <div class="text-right">
+                <p class="text-sm font-semibold text-gray-900">{{ user.get_full_name|default:user.username }}</p>
+                <p class="text-xs text-gray-500">{{ user.profile.get_role_display }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Product Search -->
+        <div class="bg-white rounded-2xl shadow-sm p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Product Search</h2>
+            
+            <div class="relative mb-4">
+                <input type="text" 
+                       x-model="searchQuery"
+                       @input="searchProducts()"
+                       @keydown.enter="selectFirstResult()"
+                       placeholder="Type product code or name..."
+                       class="w-full px-4 py-3 pl-11 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500">
+                <i class="fas fa-barcode absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+            </div>
+            
+            <div x-show="searchResults.length > 0" class="space-y-2 max-h-80 overflow-y-auto">
+                <template x-for="product in searchResults" :key="product.id">
+                    <div @click="addToCart(product)" 
+                         class="p-3 bg-gray-50 rounded-xl hover:bg-green-50 cursor-pointer transition-colors">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="font-semibold" x-text="product.name"></p>
+                                <p class="text-sm text-blue-600 font-mono" x-text="product.product_code"></p>
+                                <p class="text-xs text-gray-500">Stock: <span x-text="product.quantity_in_stock"></span></p>
+                            </div>
+                            <p class="font-bold text-green-600" x-text="'$' + product.selling_price"></p>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- No results message -->
+            <div x-show="searchQuery && searchResults.length === 0" class="text-center py-6 text-gray-500">
+                <i class="fas fa-search text-gray-300 text-3xl mb-2"></i>
+                <p>No products found for "<span x-text="searchQuery"></span>"</p>
+                <p class="text-xs text-gray-400 mt-1">Try product code, name, label, size, or category</p>
+            </div>
+        </div>
+
+        <!-- Cart & Checkout -->
+        <div class="bg-white rounded-2xl shadow-sm p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">
+                Cart <span x-show="cart.length > 0" x-text="'(' + cart.length + ')'" class="text-green-600"></span>
+            </h2>
+            
+            <div class="space-y-2 mb-6 max-h-60 overflow-y-auto">
+                <template x-for="(item, index) in cart" :key="index">
+                    <div class="p-3 bg-gray-50 rounded-xl">
+                        <div class="flex justify-between items-start">
+                            <div class="flex-1">
+                                <p class="font-medium" x-text="item.name"></p>
+                                <p class="text-xs font-mono text-gray-500" x-text="item.product_code"></p>
+                            </div>
+                            <button @click="removeFromCart(index)" class="text-red-500 ml-2">
+                                <i class="fas fa-trash text-sm"></i>
+                            </button>
+                        </div>
+                        <div class="flex items-center justify-between mt-2">
+                            <div class="flex items-center space-x-2">
+                                <button @click="updateQuantity(index, item.quantity - 1)" 
+                                        class="w-6 h-6 bg-gray-200 rounded-full hover:bg-gray-300 text-xs">-</button>
+                                <span class="w-8 text-center" x-text="item.quantity"></span>
+                                <button @click="updateQuantity(index, item.quantity + 1)" 
+                                        class="w-6 h-6 bg-gray-200 rounded-full hover:bg-gray-300 text-xs">+</button>
+                            </div>
+                            <p class="font-bold text-green-600" x-text="'$' + (item.quantity * item.selling_price).toFixed(2)"></p>
+                        </div>
+                    </div>
+                </template>
+                
+                <div x-show="cart.length === 0" class="text-center py-8 text-gray-500">
+                    <i class="fas fa-shopping-cart text-4xl mb-2"></i>
+                    <p>Cart is empty</p>
+                </div>
+            </div>
+            
+            <!-- Payment Method & Customer -->
+            <div x-show="cart.length > 0" class="mb-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                    <select x-model="payment_method" @change="onPaymentMethodChange()" class="w-full px-3 py-2 border rounded-lg">
+                        <option value="CASH">Cash</option>
+                        <option value="CREDIT">On Credit</option>
+                        <option value="LAYBY">Layby</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">
+                        Customer
+                        <span x-show="payment_method === 'CASH'" class="text-xs text-gray-500">(Optional - for loyalty)</span>
+                        <span x-show="payment_method !== 'CASH'" class="text-xs text-red-500">*Required</span>
+                    </label>
+                    <div class="flex gap-2">
+                      <select x-model="customer_id" id="customer_select" class="w-full px-3 py-2 border rounded-lg">
+                          <option value="">-- Select Customer --</option>
+                          {% for c in customers %}
+                          <option value="{{ c.id }}">{{ c.name }} ({{ c.phone }})</option>
+                          {% endfor %}
+                      </select>
+<button type="button" @click.stop="openCustomerModal = true" class="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ New</button>
+                    </div>
+                </div>
+                <div x-show="payment_method === 'CREDIT'">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                    <input type="date" x-model="due_date" class="w-full px-3 py-2 border rounded-lg" />
+                </div>
+                <div x-show="payment_method === 'LAYBY'">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Deposit</label>
+                    <input type="number" min="0" step="0.01" x-model.number="deposit" class="w-full px-3 py-2 border rounded-lg" />
+                </div>
+            </div>
+
+            <!-- Discount -->
+            <div x-show="cart.length > 0" class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Discount %:</label>
+                <input type="number" x-model="discount" @input="calculateTotals()" 
+                       min="0" :max="{{ user.profile.max_discount_percent }}" 
+                       class="w-full px-3 py-2 border rounded-lg">
+            </div>
+            
+            <!-- Totals -->
+            <div x-show="cart.length > 0" class="border-t pt-4 space-y-1">
+                <div class="flex justify-between">
+                    <span>Subtotal:</span>
+                    <span x-text="'$' + subtotal.toFixed(2)"></span>
+                </div>
+                <div x-show="discount > 0" class="flex justify-between text-red-600">
+                    <span x-text="'Discount (' + discount + '%):' "></span>
+                    <span x-text="'-$' + discountAmount.toFixed(2)"></span>
+                </div>
+                <div class="flex justify-between text-lg font-bold border-t pt-2">
+                    <span>Total:</span>
+                    <span class="text-green-600" x-text="'$' + total.toFixed(2)"></span>
+                </div>
+            </div>
+            
+            <button x-show="cart.length > 0" @click="processCheckout()" 
+                    :disabled="processing"
+                    class="w-full mt-4 py-3 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 disabled:opacity-50">
+                <span x-show="!processing">Complete Sale</span>
+                <span x-show="processing">Processing...</span>
+            </button>
+        </div>
+    </div>
+    
+    <!-- Add Customer Modal -->
+    <div x-show="openCustomerModal" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" style="display:none" @keydown.escape.window="openCustomerModal=false" @click.self="openCustomerModal=false">
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+        <h3 class="text-lg font-semibold mb-4">Add Customer</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm text-gray-700 mb-1">Name</label>
+            <input type="text" x-model="newCustomer.name" class="w-full border rounded-lg px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-sm text-gray-700 mb-1">Phone</label>
+            <input type="text" x-model="newCustomer.phone" class="w-full border rounded-lg px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-sm text-gray-700 mb-1">Email</label>
+            <input type="email" x-model="newCustomer.email" class="w-full border rounded-lg px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-sm text-gray-700 mb-1">Credit Limit</label>
+            <input type="number" step="0.01" min="0" x-model.number="newCustomer.credit_limit" class="w-full border rounded-lg px-3 py-2" />
+          </div>
+          <div>
+            <label class="block text-sm text-gray-700 mb-1">Status</label>
+            <select x-model="newCustomer.status" class="w-full border rounded-lg px-3 py-2">
+              <option value="ACTIVE">Active</option>
+              <option value="SUSPENDED">Suspended</option>
+              <option value="INACTIVE">Inactive</option>
+            </select>
+          </div>
+        </div>
+        <div class="mt-3">
+          <label class="flex items-center space-x-2">
+            <input type="checkbox" x-model="newCustomer.opt_in_for_emails" class="rounded border-gray-300" />
+            <span class="text-sm text-gray-700">Customer agrees to receive email invoices</span>
+          </label>
+        </div>
+        <div class="flex items-center justify-end gap-2 mt-5">
+          <button @click="openCustomerModal=false" class="px-4 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
+          <button @click="createCustomer()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
+        </div>
+      </div>
+    </div>
+</div>
+
+<script>
+function posInterface() {
+    return {
+        searchQuery: '',
+        searchResults: [],
+        cart: [],
+        discount: 0,
+        subtotal: 0,
+        discountAmount: 0,
+        total: 0,
+        processing: false,
+        payment_method: 'CASH',
+        customer_id: '',
+        due_date: '',
+        deposit: 0,
+        openCustomerModal: false,
+        newCustomer: { name: '', phone: '', email: '', credit_limit: 0, status: 'ACTIVE', opt_in_for_emails: false },
+        onPaymentMethodChange() {
+            // no-op placeholder for now
+        },
+        createCustomer() {
+            const fd = new FormData();
+            fd.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+            fd.append('name', this.newCustomer.name);
+            fd.append('phone', this.newCustomer.phone);
+            fd.append('email', this.newCustomer.email);
+            fd.append('credit_limit', this.newCustomer.credit_limit);
+            fd.append('status', this.newCustomer.status);
+            fd.append('opt_in_for_emails', this.newCustomer.opt_in_for_emails);
+            fetch('{% url 'customer_create_ajax' %}', { method: 'POST', body: fd })
+              .then(r => r.json())
+              .then(data => {
+                if (!data.success) { alert('Failed to add customer'); return; }
+                // Add to select
+                const sel = document.getElementById('customer_select');
+                const opt = document.createElement('option');
+                opt.value = data.customer.id;
+                opt.text = `${data.customer.name} (${data.customer.phone || ''})`;
+                sel.add(opt);
+                this.customer_id = String(data.customer.id);
+                this.openCustomerModal = false;
+                this.newCustomer = { name: '', phone: '', email: '', credit_limit: 0, status: 'ACTIVE', opt_in_for_emails: false };
+              })
+              .catch(() => alert('Error creating customer'));
+        },
+        
+        searchProducts() {
+            if (this.searchQuery.length < 1) {
+                this.searchResults = [];
+                return;
+            }
+            
+            fetch(`{% url 'product_search_ajax' %}?q=${encodeURIComponent(this.searchQuery)}`)
+                .then(response => response.json())
+                .then(data => this.searchResults = data.products || []);
+        },
+        
+        selectFirstResult() {
+            if (this.searchResults.length > 0) {
+                this.addToCart(this.searchResults[0]);
+            }
+        },
+        
+        addToCart(product) {
+            const existing = this.cart.findIndex(item => item.id === product.id);
+            if (existing >= 0) {
+                this.updateQuantity(existing, this.cart[existing].quantity + 1);
+            } else {
+                this.cart.push({
+                    id: product.id,
+                    name: product.name,
+                    product_code: product.product_code,
+                    selling_price: parseFloat(product.selling_price),
+                    quantity: 1,
+                    max_quantity: product.quantity_in_stock
+                });
+            }
+            this.calculateTotals();
+            this.searchQuery = '';
+            this.searchResults = [];
+        },
+        
+        removeFromCart(index) {
+            this.cart.splice(index, 1);
+            this.calculateTotals();
+        },
+        
+        updateQuantity(index, newQuantity) {
+            if (newQuantity <= 0) {
+                this.removeFromCart(index);
+                return;
+            }
+            if (newQuantity > this.cart[index].max_quantity) {
+                alert(`Only ${this.cart[index].max_quantity} items available`);
+                return;
+            }
+            this.cart[index].quantity = newQuantity;
+            this.calculateTotals();
+        },
+        
+        calculateTotals() {
+            this.subtotal = this.cart.reduce((sum, item) => sum + (item.quantity * item.selling_price), 0);
+            this.discountAmount = this.subtotal * (this.discount / 100);
+            this.total = this.subtotal - this.discountAmount;
+        },
+        
+        processCheckout() {
+            this.processing = true;
+            
+            const salePromises = this.cart.map(item => {
+                const formData = new FormData();
+                formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+                formData.append('quantity_sold', item.quantity);
+                formData.append('sale_price', item.selling_price);
+                formData.append('discount_applied', this.discount);
+                if (this.payment_method !== 'CASH' && !this.customer_id) {
+                    return Promise.resolve({success:false, error:'Select customer'});
+                }
+                formData.append('payment_method', this.payment_method);
+                if (this.payment_method === 'CREDIT') {
+                    formData.append('customer_id', this.customer_id);
+                    formData.append('due_date', this.due_date);
+                }
+                if (this.payment_method === 'LAYBY') {
+                    formData.append('customer_id', this.customer_id);
+                    formData.append('deposit', this.deposit);
+                }
+                
+                return fetch(`/inventory/make_sale/${item.id}/`, {
+                    method: 'POST',
+                    body: formData
+                }).then(response => response.json());
+            });
+            
+            Promise.all(salePromises).then(results => {
+                this.processing = false;
+                if (results.every(r => r.success)) {
+                    const totalAmount = results.reduce((sum, r) => sum + parseFloat(r.total_amount), 0);
+                    alert(`Sale completed! Total: $${totalAmount.toFixed(2)}`);
+                    this.cart = [];
+                    this.discount = 0;
+                    this.calculateTotals();
+                } else {
+                    alert('Some items failed to process');
+                }
+            }).catch(() => {
+                this.processing = false;
+                alert('Error processing sale');
+            });
+        }
+    }
+}
+</script>
+{% endblock %}
