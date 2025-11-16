@@ -12,14 +12,14 @@ django-resized==1.0.2
 django-tinymce==3.7.1
 gunicorn==21.2.0
 idna==3.6
-mysqlclient==2.2.6
+# mysqlclient==2.2.6  # Commented out - only needed for MySQL production database
 numpy==1.26.4
 openpyxl==3.1.2
 packaging==23.2
 pandas==2.2.3
 pillow==10.2.0
 plotly==5.24.1
-psycopg2==2.9.9
+psycopg2-binary==2.9.9
 python-dateutil==2.9.0.post0
 python-decouple==3.8
 python-dotenv==1.0.1
