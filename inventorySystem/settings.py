@@ -121,14 +121,27 @@ WSGI_APPLICATION = 'inventorySystem.wsgi.application'
 # }
 
 # Database configuration
-# Railway (production): Uses DATABASE_URL environment variable or falls back to Railway PostgreSQL
-# Local (development): Falls back to SQLite if DATABASE_URL is not set
+# Priority order:
+# 1. DATABASE_PUBLIC_URL - for local Railway CLI commands (uses TCP proxy, works from outside Railway)
+# 2. DATABASE_URL - for production inside Railway (uses private domain)
+# 3. Railway env vars - fallback using individual PostgreSQL environment variables
+# 4. SQLite - for local development without Railway
 
-# Check if DATABASE_URL is set (Railway standard)
+# Check for DATABASE_PUBLIC_URL first (for local Railway CLI usage)
+DATABASE_PUBLIC_URL = os.environ.get('DATABASE_PUBLIC_URL')
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
-if DATABASE_URL:
-    # Use dj_database_url to parse the DATABASE_URL
+if DATABASE_PUBLIC_URL:
+    # Use public URL for local Railway CLI commands (works from outside Railway network)
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=DATABASE_PUBLIC_URL,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+    }
+elif DATABASE_URL:
+    # Use private URL for production inside Railway (only works inside Railway network)
     DATABASES = {
         'default': dj_database_url.config(
             default=DATABASE_URL,
@@ -137,15 +150,15 @@ if DATABASE_URL:
         )
     }
 elif os.environ.get('RAILWAY_ENVIRONMENT') or os.environ.get('RAILWAY'):
-    # Railway environment detected but no DATABASE_URL - use Railway PostgreSQL credentials
+    # Railway environment detected - use Railway PostgreSQL credentials from env vars
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.environ.get('DB_NAME', 'railway'),
-            'USER': os.environ.get('DB_USER', 'postgres'),
-            'PASSWORD': os.environ.get('DB_PASSWORD', 'pNDvSpPwTmShhljHrqaUeULqXvCxAEmz'),
-            'HOST': os.environ.get('DB_HOST', 'maglev.proxy.rlwy.net'),
-            'PORT': os.environ.get('DB_PORT', '57897'),
+            'NAME': os.environ.get('PGDATABASE', os.environ.get('POSTGRES_DB', 'railway')),
+            'USER': os.environ.get('PGUSER', os.environ.get('POSTGRES_USER', 'postgres')),
+            'PASSWORD': os.environ.get('PGPASSWORD', os.environ.get('POSTGRES_PASSWORD', '')),
+            'HOST': os.environ.get('PGHOST', os.environ.get('RAILWAY_TCP_PROXY_DOMAIN', 'maglev.proxy.rlwy.net')),
+            'PORT': os.environ.get('PGPORT', os.environ.get('RAILWAY_TCP_PROXY_PORT', '57897')),
         }
     }
 else:
