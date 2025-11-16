@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Expenses{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-gray-900">Expenses</h1>
+    <a href="{% url 'accounting:expense_add' %}" class="px-4 py-2 bg-blue-600 text-white rounded-xl">Add Expense</a>
+  </div>
+
+  <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <table class="w-full">
+      <thead>
+        <tr class="bg-gray-50 text-xs text-gray-600 uppercase">
+          <th class="px-6 py-3 text-left">Date</th>
+          <th class="px-6 py-3 text-left">Category</th>
+          <th class="px-6 py-3 text-left">Description</th>
+          <th class="px-6 py-3 text-right">Amount</th>
+          <th class="px-6 py-3 text-left">GL Account</th>
+          <th class="px-6 py-3 text-left">Reference</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+        {% for e in expenses %}
+        <tr>
+          <td class="px-6 py-3">{{ e.date }}</td>
+          <td class="px-6 py-3">{{ e.get_category_display }}</td>
+          <td class="px-6 py-3">{{ e.description }}</td>
+          <td class="px-6 py-3 text-right">${{ e.amount|floatformat:2 }}</td>
+          <td class="px-6 py-3">{{ e.gl_account.code }} - {{ e.gl_account.name }}</td>
+          <td class="px-6 py-3">{{ e.reference }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="px-6 py-8 text-center text-gray-500">No expenses</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

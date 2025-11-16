@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import User
+from django.utils.html import format_html
 from .models import (
     Inventory, Inventory_category, Sales, Return, Damaged, StockMovement, missing_inventory,
     Supplier, ImportOrder, SupplierInvoice, InvoicePayment, ImportExpense, ImportOrderItem,
@@ -12,10 +13,52 @@ from .models import (
 
 @admin.register(Inventory)
 class InventoryAdmin(admin.ModelAdmin):
-    list_display = ['name', 'category', 'quantity_in_Stock', 'purchase_price', 'selling_price', 'weight', 'on_sale']
+    list_display = ['image_preview', 'name', 'product_code', 'category', 'quantity_in_Stock', 'purchase_price', 'selling_price', 'on_sale']
     list_filter = ['category', 'on_sale', 'created_date']
-    search_fields = ['name', 'description', 'label']
-    readonly_fields = ['created_date', 'last_updated']
+    search_fields = ['name', 'description', 'label', 'product_code']
+    readonly_fields = ['image_display', 'created_date', 'last_updated']
+
+    fieldsets = (
+        ('Product Image', {
+            'fields': ('image', 'image_display')
+        }),
+        ('Basic Information', {
+            'fields': ('category', 'bought_from', 'name', 'product_code', 'description')
+        }),
+        ('Details', {
+            'fields': ('label', 'size', 'weight')
+        }),
+        ('Pricing & Stock', {
+            'fields': ('purchase_price', 'selling_price', 'quantity_in_Stock', 'on_sale')
+        }),
+        ('Stock Control', {
+            'fields': ('reorder_point', 'lead_time_days')
+        }),
+        ('Metadata', {
+            'fields': ('created_date', 'last_updated', 'last_sale_date'),
+            'classes': ('collapse',)
+        })
+    )
+
+    def image_preview(self, obj):
+        """Small thumbnail for list view"""
+        if obj.thumbnail:
+            return format_html(
+                '<img src="{}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 5px;" />',
+                obj.thumbnail.url
+            )
+        return format_html('<div style="width: 50px; height: 50px; background: #f0f0f0; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #999;">📦</div>')
+    image_preview.short_description = 'Image'
+
+    def image_display(self, obj):
+        """Larger image for detail view"""
+        if obj.image:
+            return format_html(
+                '<img src="{}" style="max-width: 400px; max-height: 400px; object-fit: contain; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />',
+                obj.image.url
+            )
+        return format_html('<p style="color: #999;">No image uploaded</p>')
+    image_display.short_description = 'Current Image'
 
 @admin.register(Inventory_category)
 class InventoryCategoryAdmin(admin.ModelAdmin):

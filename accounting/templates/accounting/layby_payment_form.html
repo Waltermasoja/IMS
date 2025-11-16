@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% load form_tags %}
+{% block title %}Add Layby Payment{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+  <h1 class="text-2xl font-bold text-gray-900">Add Layby Payment</h1>
+  {% if plan %}
+  <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+    <p class="text-sm text-gray-600">
+      <strong>Layby Plan:</strong> {{ plan.customer.name }}<br>
+      <strong>Total:</strong> ${{ plan.total_price }}<br>
+      <strong>Amount Paid:</strong> ${{ plan.amount_paid }}<br>
+      <strong>Balance:</strong> ${{ plan.remaining }}
+    </p>
+  </div>
+  {% endif %}
+  <div class="bg-white rounded-2xl p-6 shadow-sm">
+    <form method="POST" class="space-y-4">
+      {% csrf_token %}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {% if not plan %}
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium">Layby Plan</label>
+          {{ form.plan|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+        {% else %}
+        {{ form.plan.as_hidden }}
+        {% endif %}
+        <div>
+          <label class="block text-sm font-medium">Payment Date</label>
+          {{ form.payment_date|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium">Amount</label>
+          {{ form.amount|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium">Reference</label>
+          {{ form.reference|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+      </div>
+      <div class="flex justify-end gap-3">
+        {% if plan %}
+        <a href="{% url 'accounting:layby_detail' plan.id %}" class="px-4 py-2 bg-white border border-gray-200 rounded-xl">Cancel</a>
+        {% else %}
+        <a href="{% url 'accounting:layby_list' %}" class="px-4 py-2 bg-white border border-gray-200 rounded-xl">Cancel</a>
+        {% endif %}
+        <button class="px-4 py-2 bg-blue-600 text-white rounded-xl">Record Payment</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

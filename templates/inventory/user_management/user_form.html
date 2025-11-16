@@ -1,0 +1,299 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ action }} User - IMS{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8">
+        <a href="{% url 'user_management_dashboard' %}"
+           class="inline-flex items-center text-blue-600 hover:text-blue-700 mb-4">
+            <i class="fas fa-arrow-left mr-2"></i>
+            Back to User Management
+        </a>
+        <h1 class="text-3xl font-bold text-gray-900 flex items-center">
+            <i class="fas {% if action == 'Create' %}fa-user-plus{% else %}fa-user-edit{% endif %} mr-3 text-blue-600"></i>
+            {{ action }} User
+        </h1>
+        <p class="text-gray-600 mt-2">
+            {% if action == 'Create' %}
+                Create a new user account with specific role and permissions
+            {% else %}
+                Update user account information, role, and permissions
+            {% endif %}
+        </p>
+    </div>
+
+    <form method="post" class="space-y-6">
+        {% csrf_token %}
+
+        <!-- Basic Information -->
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                <i class="fas fa-id-card mr-2 text-blue-600"></i>
+                Basic Information
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Username <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text"
+                           name="username"
+                           value="{% if edit_user %}{{ edit_user.username }}{% endif %}"
+                           {% if edit_user %}readonly{% endif %}
+                           required
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent {% if edit_user %}bg-gray-100{% endif %}">
+                    {% if edit_user %}
+                    <p class="text-xs text-gray-500 mt-1">Username cannot be changed</p>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Email
+                    </label>
+                    <input type="email"
+                           name="email"
+                           value="{% if edit_user %}{{ edit_user.email }}{% endif %}"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        First Name
+                    </label>
+                    <input type="text"
+                           name="first_name"
+                           value="{% if edit_user %}{{ edit_user.first_name }}{% endif %}"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Last Name
+                    </label>
+                    <input type="text"
+                           name="last_name"
+                           value="{% if edit_user %}{{ edit_user.last_name }}{% endif %}"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+            </div>
+        </div>
+
+        <!-- Password -->
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                <i class="fas fa-lock mr-2 text-blue-600"></i>
+                Password
+                {% if edit_user %}
+                    <span class="text-sm font-normal text-gray-500 ml-2">(Leave blank to keep current password)</span>
+                {% endif %}
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Password {% if action == 'Create' %}<span class="text-red-500">*</span>{% endif %}
+                    </label>
+                    <input type="password"
+                           name="password"
+                           {% if action == 'Create' %}required{% endif %}
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Confirm Password {% if action == 'Create' %}<span class="text-red-500">*</span>{% endif %}
+                    </label>
+                    <input type="password"
+                           name="password_confirm"
+                           {% if action == 'Create' %}required{% endif %}
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+            </div>
+        </div>
+
+        <!-- Role Selection -->
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                <i class="fas fa-user-tag mr-2 text-blue-600"></i>
+                Role & Status
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        User Role <span class="text-red-500">*</span>
+                    </label>
+                    <select name="role"
+                            required
+                            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        {% for role_value, role_name in roles %}
+                        <option value="{{ role_value }}"
+                                {% if edit_user and edit_user.profile.role == role_value %}selected{% endif %}>
+                            {{ role_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1">This determines the user's default permissions</p>
+                </div>
+
+                <div class="space-y-3">
+                    <label class="flex items-center">
+                        <input type="checkbox"
+                               name="is_active"
+                               {% if not edit_user or edit_user.is_active %}checked{% endif %}
+                               class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                        <span class="ml-2 text-sm text-gray-700">
+                            <span class="font-medium">Active Account</span>
+                            <span class="block text-xs text-gray-500">User can log in to the system</span>
+                        </span>
+                    </label>
+
+                    <label class="flex items-center">
+                        <input type="checkbox"
+                               name="is_staff"
+                               {% if edit_user and edit_user.is_staff %}checked{% endif %}
+                               class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                        <span class="ml-2 text-sm text-gray-700">
+                            <span class="font-medium">Staff Status</span>
+                            <span class="block text-xs text-gray-500">Can access Django admin panel</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- POS Permissions -->
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                <i class="fas fa-cash-register mr-2 text-green-600"></i>
+                POS & Sales Permissions
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="space-y-3">
+                    <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <input type="checkbox"
+                               name="can_make_sales"
+                               {% if not edit_user or edit_user.profile.can_make_sales %}checked{% endif %}
+                               class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
+                        <span class="ml-3">
+                            <span class="block font-medium text-gray-900">Make Sales</span>
+                            <span class="block text-xs text-gray-500">Process sales transactions</span>
+                        </span>
+                    </label>
+
+                    <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <input type="checkbox"
+                               name="can_process_returns"
+                               {% if not edit_user or edit_user.profile.can_process_returns %}checked{% endif %}
+                               class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
+                        <span class="ml-3">
+                            <span class="block font-medium text-gray-900">Process Returns</span>
+                            <span class="block text-xs text-gray-500">Handle product returns</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="space-y-3">
+                    <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <input type="checkbox"
+                               name="can_apply_discounts"
+                               {% if not edit_user or edit_user.profile.can_apply_discounts %}checked{% endif %}
+                               class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
+                        <span class="ml-3">
+                            <span class="block font-medium text-gray-900">Apply Discounts</span>
+                            <span class="block text-xs text-gray-500">Give discounts on sales</span>
+                        </span>
+                    </label>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">
+                            Maximum Discount %
+                        </label>
+                        <input type="number"
+                               name="max_discount_percent"
+                               value="{% if edit_user %}{{ edit_user.profile.max_discount_percent }}{% else %}10.00{% endif %}"
+                               step="0.01"
+                               min="0"
+                               max="100"
+                               class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Permissions -->
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+                <i class="fas fa-cogs mr-2 text-purple-600"></i>
+                System Permissions
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox"
+                           name="can_view_reports"
+                           {% if edit_user and edit_user.profile.can_view_reports %}checked{% endif %}
+                           class="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                    <span class="ml-3">
+                        <span class="block font-medium text-gray-900">View Reports</span>
+                        <span class="block text-xs text-gray-500">Access sales and inventory reports</span>
+                    </span>
+                </label>
+
+                <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox"
+                           name="can_manage_inventory"
+                           {% if edit_user and edit_user.profile.can_manage_inventory %}checked{% endif %}
+                           class="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                    <span class="ml-3">
+                        <span class="block font-medium text-gray-900">Manage Inventory</span>
+                        <span class="block text-xs text-gray-500">Add, edit, and delete products</span>
+                    </span>
+                </label>
+
+                <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <input type="checkbox"
+                           name="can_manage_suppliers"
+                           {% if edit_user and edit_user.profile.can_manage_suppliers %}checked{% endif %}
+                           class="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500">
+                    <span class="ml-3">
+                        <span class="block font-medium text-gray-900">Manage Suppliers</span>
+                        <span class="block text-xs text-gray-500">Add and edit supplier information</span>
+                    </span>
+                </label>
+
+                <label class="flex items-center p-3 border border-red-200 rounded-lg hover:bg-red-50 cursor-pointer bg-red-50">
+                    <input type="checkbox"
+                           name="can_manage_users"
+                           {% if edit_user and edit_user.profile.can_manage_users %}checked{% endif %}
+                           class="w-4 h-4 text-red-600 border-gray-300 rounded focus:ring-red-500">
+                    <span class="ml-3">
+                        <span class="block font-medium text-gray-900">Manage Users</span>
+                        <span class="block text-xs text-red-600">Admin only - create/edit users</span>
+                    </span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center justify-between space-x-4">
+            <a href="{% url 'user_management_dashboard' %}"
+               class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors">
+                <i class="fas fa-times mr-2"></i>
+                Cancel
+            </a>
+
+            <button type="submit"
+                    class="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+                <i class="fas {% if action == 'Create' %}fa-user-plus{% else %}fa-save{% endif %} mr-2"></i>
+                {{ action }} User
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

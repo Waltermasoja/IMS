@@ -1,0 +1,225 @@
+{% extends 'accounting/base_accounting.html' %}
+{% load humanize %}
+
+{% block title %}Customer Statement - {{ customer.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>Customer Account Statement</h2>
+            <h4 class="text-muted">{{ customer.name }}</h4>
+            {% if customer.phone %}
+            <p class="mb-0"><i class="fas fa-phone"></i> {{ customer.phone }}</p>
+            {% endif %}
+            {% if customer.email %}
+            <p class="mb-0"><i class="fas fa-envelope"></i> {{ customer.email }}</p>
+            {% endif %}
+        </div>
+        <div class="col-md-4 text-right">
+            <button onclick="window.print()" class="btn btn-outline-primary mb-2">
+                <i class="fas fa-print"></i> Print Statement
+            </button>
+            <br>
+            <a href="{% url 'accounting:ar_invoice_list' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Invoices
+            </a>
+        </div>
+    </div>
+
+    <!-- Date Range Filter -->
+    <div class="row mb-3">
+        <div class="col-md-12">
+            <form method="get" class="form-inline">
+                <label class="mr-2">Filter by Date:</label>
+                {{ form.start_date }}
+                <span class="mx-2">to</span>
+                {{ form.end_date }}
+                <button type="submit" class="btn btn-sm btn-primary ml-2">Filter</button>
+                <a href="{% url 'accounting:customer_statement' customer.id %}" class="btn btn-sm btn-secondary ml-2">Clear</a>
+            </form>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-primary">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Total Invoiced</h6>
+                    <h3 class="text-primary">${{ total_invoiced|floatformat:2|intcomma }}</h3>
+                    <small class="text-muted">Amount billed</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-success">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Total Paid</h6>
+                    <h3 class="text-success">${{ total_paid|floatformat:2|intcomma }}</h3>
+                    <small class="text-muted">Payments received</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card {% if current_balance > 0 %}border-warning{% else %}border-success{% endif %}">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Current Balance</h6>
+                    <h3 class="{% if current_balance > 0 %}text-warning{% else %}text-success{% endif %}">
+                        ${{ current_balance|floatformat:2|intcomma }}
+                    </h3>
+                    <small class="text-muted">Amount owed</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card {% if customer.current_balance > customer.credit_limit %}border-danger{% else %}border-info{% endif %}">
+                <div class="card-body text-center">
+                    <h6 class="text-muted">Credit Status</h6>
+                    <h3 class="{% if customer.current_balance > customer.credit_limit %}text-danger{% else %}text-info{% endif %}">
+                        ${{ customer.credit_limit|floatformat:2|intcomma }}
+                    </h3>
+                    <small class="text-muted">
+                        {% if customer.credit_limit > 0 %}
+                        Available: ${{ customer.credit_limit|floatformat:0|add:0|sub:customer.current_balance|floatformat:2|intcomma }}
+                        {% else %}
+                        No credit limit
+                        {% endif %}
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transaction History -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0">Transaction History</h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if transactions %}
+                    <table class="table table-hover mb-0">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Reference</th>
+                                <th>Description</th>
+                                <th class="text-right">Charges</th>
+                                <th class="text-right">Payments</th>
+                                <th class="text-right">Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for trans in transactions %}
+                            <tr>
+                                <td>{{ trans.date|date:"M d, Y" }}</td>
+                                <td>
+                                    {% if trans.type == 'Invoice' %}
+                                    <span class="badge badge-danger">{{ trans.type }}</span>
+                                    {% else %}
+                                    <span class="badge badge-success">{{ trans.type }}</span>
+                                    {% endif %}
+                                </td>
+                                <td><code>{{ trans.reference }}</code></td>
+                                <td>{{ trans.description }}</td>
+                                <td class="text-right">
+                                    {% if trans.debit > 0 %}
+                                    ${{ trans.debit|floatformat:2|intcomma }}
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td class="text-right">
+                                    {% if trans.credit > 0 %}
+                                    ${{ trans.credit|floatformat:2|intcomma }}
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td class="text-right">
+                                    <strong class="{% if trans.balance > 0 %}text-warning{% else %}text-success{% endif %}">
+                                        ${{ trans.balance|floatformat:2|intcomma }}
+                                    </strong>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="bg-light">
+                            <tr>
+                                <td colspan="4"><strong>TOTALS</strong></td>
+                                <td class="text-right"><strong>${{ total_invoiced|floatformat:2|intcomma }}</strong></td>
+                                <td class="text-right"><strong>${{ total_paid|floatformat:2|intcomma }}</strong></td>
+                                <td class="text-right">
+                                    <strong class="{% if current_balance > 0 %}text-warning{% else %}text-success{% endif %}">
+                                        ${{ current_balance|floatformat:2|intcomma }}
+                                    </strong>
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                    {% else %}
+                    <div class="p-5 text-center text-muted">
+                        <i class="fas fa-file-invoice fa-3x mb-3"></i>
+                        <p>No transactions found for this customer.</p>
+                        {% if start_date or end_date %}
+                        <p class="text-sm">Try adjusting the date range.</p>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Status Messages -->
+            {% if current_balance > 0 %}
+            <div class="alert alert-warning mt-3">
+                <strong>Outstanding Balance:</strong> This customer owes ${{ current_balance|floatformat:2|intcomma }}.
+                {% if customer.current_balance > customer.credit_limit and customer.credit_limit > 0 %}
+                <span class="text-danger">
+                    <i class="fas fa-exclamation-triangle"></i> Customer is over their credit limit!
+                </span>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="alert alert-success mt-3">
+                <strong>Account Current:</strong> No outstanding balance. Customer account is in good standing.
+            </div>
+            {% endif %}
+
+            <!-- Quick Actions -->
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h6>Quick Actions</h6>
+                    <a href="{% url 'accounting:ar_invoice_list' %}?customer={{ customer.id }}" class="btn btn-outline-primary mr-2">
+                        <i class="fas fa-file-invoice"></i> View All Invoices
+                    </a>
+                    {% if current_balance > 0 %}
+                    <a href="{% url 'accounting:ar_payment_add' %}" class="btn btn-success mr-2">
+                        <i class="fas fa-dollar-sign"></i> Record Payment
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'accounting:ar_aging_report' %}?customer={{ customer.id }}" class="btn btn-outline-info">
+                        <i class="fas fa-chart-line"></i> Aging Report
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Print Styles -->
+<style>
+@media print {
+    .btn, .alert, form, .card:last-child {
+        display: none !important;
+    }
+    .card {
+        border: none !important;
+        box-shadow: none !important;
+    }
+}
+</style>
+{% endblock %}

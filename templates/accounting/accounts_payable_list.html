@@ -1,0 +1,203 @@
+{% extends 'base.html' %}
+{% block title %}Accounts Payable - IMS Pro{% endblock %}
+{% block content %}
+<div class="space-y-6 animate-fade-in">
+    <!-- Page Header -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Accounts Payable</h1>
+            <p class="text-gray-500 mt-1">What we owe to suppliers</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{% url 'accounting:ar_invoice_list' %}"
+               class="inline-flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
+                <i class="fas fa-file-invoice-dollar"></i>
+                <span class="font-medium">Accounts Receivable</span>
+            </a>
+            <a href="{% url 'reports_index' %}"
+               class="inline-flex items-center space-x-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
+                <i class="fas fa-arrow-left"></i>
+                <span class="font-medium">Back to Reports</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Total Outstanding -->
+        <div class="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl p-6 text-white shadow-lg">
+            <div class="flex items-center justify-between mb-3">
+                <div class="bg-white bg-opacity-20 rounded-xl p-3">
+                    <i class="fas fa-file-invoice text-2xl"></i>
+                </div>
+            </div>
+            <p class="text-red-100 text-sm font-medium">Total Outstanding</p>
+            <h3 class="text-3xl font-bold mt-1">${{ total_outstanding|floatformat:2 }}</h3>
+        </div>
+
+        <!-- Overdue Amount -->
+        <div class="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl p-6 text-white shadow-lg">
+            <div class="flex items-center justify-between mb-3">
+                <div class="bg-white bg-opacity-20 rounded-xl p-3">
+                    <i class="fas fa-exclamation-triangle text-2xl"></i>
+                </div>
+            </div>
+            <p class="text-orange-100 text-sm font-medium">Overdue</p>
+            <h3 class="text-3xl font-bold mt-1">${{ overdue_amount|floatformat:2 }}</h3>
+        </div>
+
+        <!-- Invoice Count -->
+        <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg">
+            <div class="flex items-center justify-between mb-3">
+                <div class="bg-white bg-opacity-20 rounded-xl p-3">
+                    <i class="fas fa-receipt text-2xl"></i>
+                </div>
+            </div>
+            <p class="text-blue-100 text-sm font-medium">Unpaid Invoices</p>
+            <h3 class="text-3xl font-bold mt-1">{{ invoice_count }}</h3>
+        </div>
+    </div>
+
+    <!-- Supplier Summary -->
+    {% if supplier_summary %}
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-semibold text-gray-900">By Supplier</h3>
+            <p class="text-sm text-gray-500 mt-1">Amount owed to each supplier</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="bg-gray-50 border-b border-gray-200">
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Supplier</th>
+                        <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Invoices</th>
+                        <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount Owed</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for supplier in supplier_summary %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 text-sm font-medium text-gray-900">{{ supplier.name }}</td>
+                        <td class="px-6 py-4 text-sm text-right text-gray-600">{{ supplier.count }}</td>
+                        <td class="px-6 py-4 text-sm text-right font-bold text-red-600">${{ supplier.total|floatformat:2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Invoices List -->
+    {% if invoices %}
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-semibold text-gray-900">Unpaid Invoices</h3>
+            <p class="text-sm text-gray-500 mt-1">All outstanding supplier invoices</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="bg-gray-50 border-b border-gray-200">
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Invoice #</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Supplier</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Due Date</th>
+                        <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Invoice Amount</th>
+                        <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Paid</th>
+                        <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Balance Due</th>
+                        <th class="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for invoice in invoices %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ invoice.invoice_number }}</td>
+                        <td class="px-6 py-4 text-sm text-gray-900">
+                            {% if invoice.import_order and invoice.import_order.supplier %}
+                                {{ invoice.import_order.supplier.name }}
+                            {% else %}
+                                <span class="text-gray-400 italic">Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{{ invoice.invoice_date|date:"M d, Y" }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                            {% if invoice.due_date %}
+                                {{ invoice.due_date|date:"M d, Y" }}
+                            {% else %}
+                                <span class="text-gray-400">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">${{ invoice.invoice_amount|floatformat:2 }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-green-600">${{ invoice.amount_paid|floatformat:2 }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-bold text-red-600">
+                            ${% widthratio invoice.invoice_amount|floatformat:2 1 1 as inv_amt %}
+                            {% widthratio invoice.amount_paid|floatformat:2 1 1 as paid_amt %}
+                            {{ inv_amt|add:"-"|add:paid_amt|floatformat:2 }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            {% if invoice.due_date %}
+                                {% now "Y-m-d" as today %}
+                                {% if invoice.due_date|date:"Y-m-d" < today %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                                        <i class="fas fa-exclamation-triangle mr-1"></i>OVERDUE
+                                    </span>
+                                {% else %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+                                        <i class="fas fa-clock mr-1"></i>PENDING
+                                    </span>
+                                {% endif %}
+                            {% else %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800">
+                                    <i class="fas fa-minus mr-1"></i>NO DUE DATE
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            {% if invoice.import_order %}
+                                <a href="{% url 'import_order_detail' invoice.import_order.id %}"
+                                   class="inline-flex items-center px-3 py-1.5 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 transition-colors">
+                                    <i class="fas fa-eye mr-1"></i>View Order
+                                </a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="bg-gray-50 border-t-2 border-gray-300">
+                    <tr>
+                        <td colspan="4" class="px-6 py-4 text-sm font-bold text-gray-900">TOTAL</td>
+                        <td class="px-6 py-4 text-sm text-right font-bold text-gray-900">
+                            ${% widthratio invoices|length|mul:"0" 1 1 as total_inv %}
+                            {% for inv in invoices %}
+                                {% widthratio total_inv 1 1 as temp %}
+                                {% widthratio temp|add:inv.invoice_amount 1 1 as total_inv %}
+                            {% endfor %}
+                            {{ total_inv|floatformat:2 }}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-right font-bold text-green-600">
+                            ${% widthratio invoices|length|mul:"0" 1 1 as total_paid %}
+                            {% for inv in invoices %}
+                                {% widthratio total_paid 1 1 as temp %}
+                                {% widthratio temp|add:inv.amount_paid 1 1 as total_paid %}
+                            {% endfor %}
+                            {{ total_paid|floatformat:2 }}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-right font-bold text-red-600">${{ total_outstanding|floatformat:2 }}</td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <!-- No Invoices -->
+    <div class="bg-white rounded-2xl p-12 shadow-sm text-center">
+        <i class="fas fa-check-circle text-green-500 text-5xl mb-4"></i>
+        <h3 class="text-xl font-semibold text-gray-900 mb-2">All Paid Up!</h3>
+        <p class="text-gray-500">You have no outstanding supplier invoices. Great job!</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

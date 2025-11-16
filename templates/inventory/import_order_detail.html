@@ -1,97 +1,1092 @@
 {% extends 'base.html' %}
-{% block title %}Import Order {{ order.order_number }}{% endblock %}
+{% load static %}
+
+{% block title %}Import Order {{ order.order_number }} - IMS Pro{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Style Django form fields to match Tailwind design */
+    .form-control {
+        width: 100%;
+        padding: 0.625rem 1rem;
+        background-color: white;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.75rem;
+        outline: none;
+        transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: transparent;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+    }
+
+    select.form-control {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+        background-position: right 0.5rem center;
+        background-repeat: no-repeat;
+        background-size: 1.5em 1.5em;
+        padding-right: 2.5rem;
+    }
+
+    input[type="checkbox"].form-control {
+        width: 1.25rem;
+        height: 1.25rem;
+        color: #2563eb;
+        background-color: white;
+        border: 1px solid #d1d5db;
+        border-radius: 0.25rem;
+    }
+
+    input[type="checkbox"].form-control:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+    }
+
+    /* Progress bar animation */
+    .progress-step {
+        transition: all 0.3s ease;
+    }
+
+    .progress-step.active {
+        transform: scale(1.1);
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="max-w-6xl mx-auto space-y-6">
-  <div class="flex items-center justify-between">
-    <div>
-      <h1 class="text-2xl font-bold">Import Order {{ order.order_number }}</h1>
-      <p class="text-gray-600">Supplier: {{ order.supplier.name }} • Status: {{ order.get_status_display }}</p>
-    </div>
-    <div class="flex gap-2">
-      <form method="post" action="{% url 'import_order_allocate' order.id %}">
-        {% csrf_token %}
-        <button class="px-4 py-2 bg-indigo-600 text-white rounded">Allocate Expenses</button>
-      </form>
-      <a href="{% url 'add_supplier_invoice' order.id %}" class="px-4 py-2 bg-blue-600 text-white rounded">Add Invoice</a>
-    </div>
-  </div>
+<div class="max-w-7xl mx-auto space-y-6 animate-fade-in">
+    <!-- Page Header -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+            <div class="flex items-center gap-3 mb-2">
+                <a href="{% url 'import_orders_list' %}"
+                   class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <i class="fas fa-arrow-left"></i>
+                </a>
+                <h1 class="text-3xl font-bold text-gray-900">{{ order.order_number }}</h1>
+                {% if order.status == 'DRAFT' %}
+                    <span class="px-3 py-1 bg-gray-100 text-gray-800 text-sm font-semibold rounded-full">
+                        <i class="fas fa-edit mr-1"></i>{{ order.get_status_display }}
+                    </span>
+                {% elif order.status == 'CONFIRMED' %}
+                    <span class="px-3 py-1 bg-blue-100 text-blue-800 text-sm font-semibold rounded-full">
+                        <i class="fas fa-check mr-1"></i>{{ order.get_status_display }}
+                    </span>
+                {% elif order.status == 'SHIPPED' or order.status == 'IN_TRANSIT' %}
+                    <span class="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm font-semibold rounded-full">
+                        <i class="fas fa-shipping-fast mr-1"></i>{{ order.get_status_display }}
+                    </span>
+                {% elif order.status == 'RECEIVED' or order.status == 'COMPLETED' %}
+                    <span class="px-3 py-1 bg-green-100 text-green-800 text-sm font-semibold rounded-full">
+                        <i class="fas fa-check-circle mr-1"></i>{{ order.get_status_display }}
+                    </span>
+                {% else %}
+                    <span class="px-3 py-1 bg-red-100 text-red-800 text-sm font-semibold rounded-full">
+                        <i class="fas fa-times-circle mr-1"></i>{{ order.get_status_display }}
+                    </span>
+                {% endif %}
+            </div>
+            <p class="text-gray-500">
+                <i class="fas fa-industry mr-2"></i>{{ order.supplier.name }} •
+                <i class="fas fa-calendar mr-2"></i>{{ order.order_date|date:"M d, Y" }}
+                {% if order.expected_arrival %}
+                    • <i class="fas fa-ship mr-2"></i>Expected: {{ order.expected_arrival|date:"M d, Y" }}
+                {% endif %}
+            </p>
+        </div>
+        <div class="flex flex-wrap gap-3">
+            {% if order.status != 'RECEIVED' and order.status != 'COMPLETED' and order.status != 'CANCELLED' %}
+            <form method="post" action="{% url 'import_order_allocate' order.id %}" class="inline">
+                {% csrf_token %}
+                <button type="submit"
+                        class="inline-flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white rounded-xl hover:from-indigo-600 hover:to-indigo-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+                    <i class="fas fa-calculator"></i>
+                    <span>{% if order.allocation_completed %}Reallocate{% else %}Allocate{% endif %} Costs</span>
+                </button>
+            </form>
+            {% endif %}
 
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <div class="bg-white rounded shadow p-4">
-      <h2 class="font-semibold mb-3">Items</h2>
-      <form method="post">
-        {% csrf_token %}
-        {{ items_formset.management_form }}
-        <div class="space-y-3">
-        {% for form in items_formset %}
-          <div class="grid grid-cols-5 gap-2 items-end">
-            <div class="col-span-2">{{ form.inventory_item.label }}{{ form.inventory_item }}</div>
-            <div>{{ form.quantity.label }}{{ form.quantity }}</div>
-            <div>{{ form.unit_cost.label }}{{ form.unit_cost }}</div>
-            <div>{{ form.markup_percentage.label }}{{ form.markup_percentage }}</div>
-          </div>
-        {% endfor %}
+            {% if order.allocation_completed and order.status != 'RECEIVED' and order.status != 'COMPLETED' and order.status != 'CANCELLED' %}
+            <form method="post" action="{% url 'import_order_receive_goods' order.id %}" class="inline" onsubmit="return confirm('Are you sure you want to receive all goods? This will update stock levels and cannot be easily undone.');">
+                {% csrf_token %}
+                <button type="submit"
+                        class="inline-flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+                    <i class="fas fa-warehouse"></i>
+                    <span>Receive All Goods</span>
+                </button>
+            </form>
+            {% endif %}
+
+            <a href="{% url 'add_supplier_invoice' order.id %}"
+               class="inline-flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+                <i class="fas fa-file-invoice"></i>
+                <span>Add Invoice</span>
+            </a>
+
+            {% if order.status != 'CANCELLED' and order.status != 'RECEIVED' and order.status != 'COMPLETED' %}
+            <form method="post" action="{% url 'import_order_cancel' order.id %}" class="inline" onsubmit="return confirm('Are you sure you want to cancel this import order? This action will mark it as cancelled but preserve all data for records.');">
+                {% csrf_token %}
+                <button type="submit"
+                        class="inline-flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+                    <i class="fas fa-ban"></i>
+                    <span>Cancel Order</span>
+                </button>
+            </form>
+            {% endif %}
         </div>
-        <div class="mt-3 flex justify-end">
-          <button name="save_items" value="1" class="px-3 py-2 bg-gray-800 text-white rounded">Save Items</button>
-        </div>
-      </form>
     </div>
 
-    <div class="bg-white rounded shadow p-4">
-      <h2 class="font-semibold mb-3">Expenses</h2>
-      <form method="post">
-        {% csrf_token %}
-        {{ expenses_formset.management_form }}
-        <div class="space-y-3">
-        {% for form in expenses_formset %}
-          <div class="grid grid-cols-6 gap-2 items-end">
-            <div class="col-span-2">{{ form.expense_type.label }}{{ form.expense_type }}</div>
-            <div>{{ form.description.label }}{{ form.description }}</div>
-            <div>{{ form.amount.label }}{{ form.amount }}</div>
-            <div>{{ form.currency.label }}{{ form.currency }}</div>
-            <div>{{ form.exchange_rate.label }}{{ form.exchange_rate }}</div>
-            <div>{{ form.paid.label }}{{ form.paid }}</div>
-          </div>
-        {% endfor %}
+    <!-- Cancelled Status Banner -->
+    {% if order.status == 'CANCELLED' %}
+    <div class="bg-red-50 border-2 border-red-200 rounded-2xl p-6">
+        <div class="flex items-center space-x-4">
+            <div class="flex-shrink-0">
+                <div class="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center">
+                    <i class="fas fa-ban text-white text-2xl"></i>
+                </div>
+            </div>
+            <div class="flex-1">
+                <h3 class="text-xl font-bold text-red-900">Order Cancelled</h3>
+                <p class="text-red-700 mt-1">
+                    This import order has been cancelled. All data is preserved for record-keeping purposes.
+                    Items and expenses cannot be modified. Unpaid supplier invoices remain in the system for accounting.
+                </p>
+            </div>
         </div>
-        <div class="mt-3 flex justify-end">
-          <button name="save_expenses" value="1" class="px-3 py-2 bg-gray-800 text-white rounded">Save Expenses</button>
-        </div>
-      </form>
     </div>
-  </div>
+    {% endif %}
 
-  <div class="bg-white rounded shadow p-4">
-    <h2 class="font-semibold mb-3">Invoices</h2>
-    <table class="w-full">
-      <thead>
-        <tr class="text-left border-b">
-          <th class="p-2">Invoice #</th>
-          <th class="p-2">Amount</th>
-          <th class="p-2">Paid</th>
-          <th class="p-2">Status</th>
-          <th class="p-2">Due</th>
-          <th class="p-2">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for inv in invoices %}
-        <tr class="border-b">
-          <td class="p-2">{{ inv.invoice_number }}</td>
-          <td class="p-2">{{ inv.total_amount }}</td>
-          <td class="p-2">{{ inv.amount_paid }}</td>
-          <td class="p-2">{{ inv.get_status_display }}</td>
-          <td class="p-2">{{ inv.due_date }}</td>
-          <td class="p-2">
-            <a class="text-blue-600" href="{% url 'add_invoice_payment' inv.id %}">Record Payment</a>
-          </td>
-        </tr>
-        {% empty %}
-        <tr><td class="p-3" colspan="6">No invoices yet.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+    <!-- Workflow Progress -->
+    <div class="bg-white rounded-2xl shadow-sm p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-6">
+            <i class="fas fa-tasks text-blue-600 mr-2"></i>Import Workflow Progress
+        </h3>
+        <div class="relative">
+            <!-- Progress Line -->
+            <div class="absolute top-5 left-0 right-0 h-1 bg-gray-200 mx-8"></div>
+            <div class="absolute top-5 left-0 h-1 bg-green-500 transition-all duration-500 mx-8"
+                 style="width: {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}100%{% elif order.allocation_completed %}75%{% elif order.items.count > 0 %}50%{% elif order.expenses.count > 0 %}25%{% else %}0%{% endif %}"></div>
+
+            <!-- Steps -->
+            <div class="relative grid grid-cols-4 gap-4">
+                <!-- Step 1: Add Items -->
+                <div class="flex flex-col items-center">
+                    <div class="progress-step {% if order.items.count > 0 %}active{% endif %} w-10 h-10 rounded-full flex items-center justify-center mb-2 shadow-lg
+                                {% if order.items.count > 0 %}bg-green-500 text-white{% else %}bg-white border-2 border-gray-300 text-gray-400{% endif %}">
+                        {% if order.items.count > 0 %}
+                            <i class="fas fa-check"></i>
+                        {% else %}
+                            <i class="fas fa-box"></i>
+                        {% endif %}
+                    </div>
+                    <p class="text-sm font-semibold text-center {% if order.items.count > 0 %}text-green-700{% else %}text-gray-500{% endif %}">
+                        Add Items
+                    </p>
+                    <p class="text-xs text-gray-500 text-center mt-1">{{ order.items.count }} item{{ order.items.count|pluralize }}</p>
+                </div>
+
+                <!-- Step 2: Add Expenses -->
+                <div class="flex flex-col items-center">
+                    <div class="progress-step {% if order.expenses.count > 0 %}active{% endif %} w-10 h-10 rounded-full flex items-center justify-center mb-2 shadow-lg
+                                {% if order.expenses.count > 0 %}bg-green-500 text-white{% else %}bg-white border-2 border-gray-300 text-gray-400{% endif %}">
+                        {% if order.expenses.count > 0 %}
+                            <i class="fas fa-check"></i>
+                        {% else %}
+                            <i class="fas fa-receipt"></i>
+                        {% endif %}
+                    </div>
+                    <p class="text-sm font-semibold text-center {% if order.expenses.count > 0 %}text-green-700{% else %}text-gray-500{% endif %}">
+                        Add Expenses
+                    </p>
+                    <p class="text-xs text-gray-500 text-center mt-1">{{ order.expenses.count }} expense{{ order.expenses.count|pluralize }}</p>
+                </div>
+
+                <!-- Step 3: Allocate Costs -->
+                <div class="flex flex-col items-center">
+                    <div class="progress-step {% if order.allocation_completed %}active{% endif %} w-10 h-10 rounded-full flex items-center justify-center mb-2 shadow-lg
+                                {% if order.allocation_completed %}bg-green-500 text-white{% else %}bg-white border-2 border-gray-300 text-gray-400{% endif %}">
+                        {% if order.allocation_completed %}
+                            <i class="fas fa-check"></i>
+                        {% else %}
+                            <i class="fas fa-calculator"></i>
+                        {% endif %}
+                    </div>
+                    <p class="text-sm font-semibold text-center {% if order.allocation_completed %}text-green-700{% else %}text-gray-500{% endif %}">
+                        Allocate Costs
+                    </p>
+                    <p class="text-xs text-gray-500 text-center mt-1">
+                        {% if order.allocation_completed %}
+                            <i class="fas fa-check-circle text-green-500"></i> Done
+                        {% else %}
+                            Pending
+                        {% endif %}
+                    </p>
+                </div>
+
+                <!-- Step 4: Receive Goods -->
+                <div class="flex flex-col items-center">
+                    <div class="progress-step w-10 h-10 rounded-full flex items-center justify-center mb-2 shadow-lg
+                                {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}bg-green-500 text-white{% else %}bg-white border-2 border-gray-300 text-gray-400{% endif %}">
+                        {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}
+                            <i class="fas fa-check"></i>
+                        {% else %}
+                            <i class="fas fa-warehouse"></i>
+                        {% endif %}
+                    </div>
+                    <p class="text-sm font-semibold text-center {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}text-green-700{% else %}text-gray-500{% endif %}">
+                        Receive Goods
+                    </p>
+                    <p class="text-xs text-gray-500 text-center mt-1">
+                        {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}
+                            <i class="fas fa-check-circle text-green-500"></i> Completed
+                        {% else %}
+                            Not received
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Order Summary Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg">
+            <div class="flex items-center justify-between mb-3">
+                <h6 class="text-sm font-medium opacity-90">Total Items</h6>
+                <i class="fas fa-boxes text-xl opacity-75"></i>
+            </div>
+            <h3 class="text-3xl font-bold mb-1">{{ order.total_items_count }}</h3>
+            <p class="text-sm opacity-90">units ordered</p>
+        </div>
+
+        <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
+            <div class="flex items-center justify-between mb-3">
+                <h6 class="text-sm font-medium opacity-90">Goods Cost</h6>
+                <i class="fas fa-tag text-xl opacity-75"></i>
+            </div>
+            <h3 class="text-3xl font-bold mb-1">${{ order.goods_cost|floatformat:2 }}</h3>
+            <p class="text-sm opacity-90">{{ order.currency }}</p>
+        </div>
+
+        <div class="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl p-6 text-white shadow-lg">
+            <div class="flex items-center justify-between mb-3">
+                <h6 class="text-sm font-medium opacity-90">Total Expenses</h6>
+                <i class="fas fa-receipt text-xl opacity-75"></i>
+            </div>
+            <h3 class="text-3xl font-bold mb-1">${{ order.total_expenses|floatformat:2 }}</h3>
+            <p class="text-sm opacity-90">shipping, duties, etc.</p>
+        </div>
+
+        <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl p-6 text-white shadow-lg">
+            <div class="flex items-center justify-between mb-3">
+                <h6 class="text-sm font-medium opacity-90">Landed Cost</h6>
+                <i class="fas fa-dollar-sign text-xl opacity-75"></i>
+            </div>
+            <h3 class="text-3xl font-bold mb-1">${{ order.total_landed_cost|floatformat:2 }}</h3>
+            <p class="text-sm opacity-90">total cost incl. expenses</p>
+        </div>
+    </div>
+
+    <!-- Price Comparison (if allocation completed) -->
+    {% if order.allocation_completed and order.items.exists %}
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-r from-purple-50 to-pink-50 px-8 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-bold text-gray-900">
+                <i class="fas fa-balance-scale text-purple-600 mr-2"></i>Price Comparison
+            </h2>
+            <p class="text-xs text-gray-600 mt-1">Review suggested prices vs. current selling prices</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="bg-gray-50 border-b border-gray-200">
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Product</th>
+                        <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Landed Cost</th>
+                        <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Current Price</th>
+                        <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Suggested Price</th>
+                        <th class="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for item in order.items.all %}
+                    {% if item.inventory_item %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4">
+                            <div class="text-sm font-semibold text-gray-900">{{ item.inventory_item.name }}</div>
+                            <div class="text-xs text-gray-500">{{ item.inventory_item.product_code }}</div>
+                        </td>
+                        <td class="px-6 py-4 text-right text-sm font-medium text-gray-900">
+                            ${{ item.landed_cost_per_unit|floatformat:2 }}
+                        </td>
+                        <td class="px-6 py-4 text-right text-sm font-medium text-gray-900">
+                            ${{ item.inventory_item.selling_price|floatformat:2 }}
+                        </td>
+                        <td class="px-6 py-4 text-right text-sm font-bold text-purple-600">
+                            ${{ item.suggested_selling_price|floatformat:2 }}
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            {% if item.inventory_item.selling_price < item.landed_cost_per_unit %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                                    <i class="fas fa-exclamation-triangle mr-1"></i>LOSS!
+                                </span>
+                            {% elif item.inventory_item.selling_price < item.suggested_selling_price %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+                                    <i class="fas fa-arrow-up mr-1"></i>Low
+                                </span>
+                            {% elif item.inventory_item.selling_price > item.suggested_selling_price %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                                    <i class="fas fa-arrow-down mr-1"></i>High
+                                </span>
+                            {% else %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                                    <i class="fas fa-check mr-1"></i>Match
+                                </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="bg-blue-50 border-t border-blue-200 p-4">
+            <div class="flex items-start space-x-3">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-info-circle text-blue-600 text-lg"></i>
+                </div>
+                <div class="flex-1">
+                    <h5 class="text-sm font-semibold text-gray-900 mb-1">Smart Pricing</h5>
+                    <p class="text-xs text-gray-700">
+                        • <strong>New products:</strong> Selling price will be set to suggested price automatically<br>
+                        • <strong>Existing products:</strong> Current price is preserved (update manually if needed)<br>
+                        • <strong class="text-red-600">LOSS warning:</strong> Current price is below landed cost!
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Order Items and Expenses -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Items Card -->
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="bg-gradient-to-r from-blue-50 to-indigo-50 px-8 py-4 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-900">
+                        <i class="fas fa-boxes text-blue-600 mr-2"></i>Order Items ({{ order.items.count }})
+                        {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' or order.status == 'CANCELLED' %}
+                            <i class="fas fa-lock text-gray-400 ml-2" title="Locked - {% if order.status == 'CANCELLED' %}order cancelled{% else %}goods received{% endif %}"></i>
+                        {% endif %}
+                    </h2>
+                    <p class="text-xs text-gray-600 mt-1">
+                        {% if order.status == 'CANCELLED' %}
+                            <i class="fas fa-info-circle mr-1 text-red-500"></i>Editing disabled - order has been cancelled
+                        {% elif order.status == 'RECEIVED' or order.status == 'COMPLETED' %}
+                            <i class="fas fa-info-circle mr-1 text-orange-500"></i>Editing disabled - goods have been received
+                        {% else %}
+                            Add products from your inventory to this import order
+                        {% endif %}
+                    </p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-sm text-gray-600">
+                        <i class="fas fa-info-circle mr-1"></i>Step 1
+                    </span>
+                    {% if order.status != 'RECEIVED' and order.status != 'COMPLETED' %}
+                    <a href="{% url 'add_inventory' %}?return_to=import_order&order_id={{ order.id }}"
+                       class="inline-flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white text-sm rounded-lg hover:from-green-600 hover:to-green-700 shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all font-medium">
+                        <i class="fas fa-plus mr-2"></i>Quick Add Product
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            <form method="post" class="p-8" {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}onsubmit="return false;"{% endif %}>
+                {% csrf_token %}
+                {{ items_formset.management_form }}
+                
+                <!-- Formset-level errors -->
+                {% if items_formset.non_form_errors %}
+                    <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+                        <div class="flex items-start">
+                            <i class="fas fa-exclamation-circle text-red-600 mt-0.5 mr-3"></i>
+                            <div class="flex-1">
+                                <h4 class="text-sm font-semibold text-red-800 mb-1">Form Errors:</h4>
+                                <ul class="text-sm text-red-700 list-disc list-inside">
+                                    {% for error in items_formset.non_form_errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+                
+                <div id="items-container" class="space-y-4">
+                    {% for form in items_formset %}
+                        <div class="formset-row bg-gradient-to-br from-white to-{% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}gray{% else %}blue{% endif %}-50 rounded-xl p-5 border-2 border-{% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}gray{% else %}blue{% endif %}-100 hover:border-{% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}gray{% else %}blue{% endif %}-300 transition-all shadow-sm hover:shadow-md {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}opacity-60{% endif %}">
+                            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div class="md:col-span-2">
+                                    <label for="{{ form.inventory_item.id_for_label }}" class="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                                        <span class="inline-flex items-center justify-center w-6 h-6 bg-purple-100 text-purple-600 rounded-lg mr-2">
+                                            <i class="fas fa-box text-xs"></i>
+                                        </span>
+                                        {{ form.inventory_item.label }}
+                                    </label>
+                                    <div {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}class="pointer-events-none"{% endif %}>
+                                        {{ form.inventory_item }}
+                                    </div>
+                                    {% if form.inventory_item.errors %}
+                                        <p class="mt-1.5 text-xs text-red-600 flex items-center">
+                                            <i class="fas fa-exclamation-circle mr-1"></i>{{ form.inventory_item.errors.0 }}
+                                        </p>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <label for="{{ form.quantity.id_for_label }}" class="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                                        <span class="inline-flex items-center justify-center w-6 h-6 bg-green-100 text-green-600 rounded-lg mr-2">
+                                            <i class="fas fa-hashtag text-xs"></i>
+                                        </span>
+                                        Qty
+                                    </label>
+                                    {{ form.quantity }}
+                                    {% if form.quantity.errors %}
+                                        <p class="mt-1.5 text-xs text-red-600 flex items-center">
+                                            <i class="fas fa-exclamation-circle mr-1"></i>{{ form.quantity.errors.0 }}
+                                        </p>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <label for="{{ form.unit_cost.id_for_label }}" class="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                                        <span class="inline-flex items-center justify-center w-6 h-6 bg-orange-100 text-orange-600 rounded-lg mr-2">
+                                            <i class="fas fa-dollar-sign text-xs"></i>
+                                        </span>
+                                        Cost
+                                    </label>
+                                    {{ form.unit_cost }}
+                                    {% if form.unit_cost.errors %}
+                                        <p class="mt-1.5 text-xs text-red-600 flex items-center">
+                                            <i class="fas fa-exclamation-circle mr-1"></i>{{ form.unit_cost.errors.0 }}
+                                        </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="{{ form.markup_percentage.id_for_label }}" class="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                                        <span class="inline-flex items-center justify-center w-6 h-6 bg-indigo-100 text-indigo-600 rounded-lg mr-2">
+                                            <i class="fas fa-percent text-xs"></i>
+                                        </span>
+                                        Markup %
+                                        {% if form.markup_percentage.help_text %}
+                                            <span class="ml-2 text-xs text-gray-500 font-normal italic">{{ form.markup_percentage.help_text }}</span>
+                                        {% endif %}
+                                    </label>
+                                    {{ form.markup_percentage }}
+                                    {% if form.markup_percentage.errors %}
+                                        <p class="mt-1.5 text-xs text-red-600 flex items-center">
+                                            <i class="fas fa-exclamation-circle mr-1"></i>{{ form.markup_percentage.errors.0 }}
+                                        </p>
+                                    {% endif %}
+                                </div>
+                                {% if form.DELETE %}
+                                <div class="flex items-end justify-between">
+                                    <label class="flex items-center cursor-pointer px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors border border-red-200">
+                                        {{ form.DELETE }}
+                                        <i class="fas fa-trash-alt ml-2"></i>
+                                        <span class="ml-1 text-sm font-medium">Remove</span>
+                                    </label>
+                                    <button type="button" class="remove-form-btn px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors shadow-sm">
+                                        <i class="fas fa-times mr-1"></i>Delete
+                                    </button>
+                                </div>
+                                {% else %}
+                                <div class="flex items-end justify-end">
+                                    <button type="button" class="remove-form-btn px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors shadow-sm">
+                                        <i class="fas fa-times mr-1"></i>Delete
+                                    </button>
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% if form.id %}
+                                {{ form.id }}
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+
+                    {% if not items_formset %}
+                    <div id="no-items-message" class="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
+                        <i class="fas fa-box-open text-gray-400 text-3xl mb-3"></i>
+                        <p class="text-gray-600 font-medium">No items added yet</p>
+                        <p class="text-sm text-gray-500 mt-1">Click "Add Item" below to add products to this import order</p>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="mt-6 flex justify-between gap-3">
+                    {% if order.status != 'RECEIVED' and order.status != 'COMPLETED' %}
+                    <button type="button"
+                            id="add-item-btn"
+                            class="px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+                        <i class="fas fa-plus mr-2"></i>Add Another Item
+                    </button>
+                    <button type="submit"
+                            name="save_items"
+                            value="1"
+                            class="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+                        <i class="fas fa-save mr-2"></i>Save Items
+                    </button>
+                    {% else %}
+                    <div class="w-full text-center py-3 bg-gray-100 rounded-xl border border-gray-300">
+                        <i class="fas fa-lock text-gray-400 mr-2"></i>
+                        <span class="text-gray-600 font-medium">Editing disabled - goods have been received</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <!-- Expenses Card -->
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="bg-gradient-to-r from-orange-50 to-red-50 px-8 py-4 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-900">
+                        <i class="fas fa-receipt text-orange-600 mr-2"></i>Import Expenses ({{ order.expenses.count }})
+                        {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' or order.status == 'CANCELLED' %}
+                            <i class="fas fa-lock text-gray-400 ml-2" title="Locked - {% if order.status == 'CANCELLED' %}order cancelled{% else %}goods received{% endif %}"></i>
+                        {% endif %}
+                    </h2>
+                    <p class="text-xs text-gray-600 mt-1">
+                        {% if order.status == 'CANCELLED' %}
+                            <i class="fas fa-info-circle mr-1 text-red-500"></i>Editing disabled - order has been cancelled
+                        {% elif order.status == 'RECEIVED' or order.status == 'COMPLETED' %}
+                            <i class="fas fa-info-circle mr-1 text-orange-500"></i>Editing disabled - goods have been received
+                        {% else %}
+                            Shipping, duties, insurance, and other costs
+                        {% endif %}
+                    </p>
+                </div>
+                <span class="text-sm text-gray-600">
+                    <i class="fas fa-info-circle mr-1"></i>Step 2
+                </span>
+            </div>
+            <form method="post" class="p-8" {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}onsubmit="return false;"{% endif %}>
+                {% csrf_token %}
+                {{ expenses_formset.management_form }}
+                
+                <!-- Formset-level errors -->
+                {% if expenses_formset.non_form_errors %}
+                    <div class="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+                        <div class="flex items-start">
+                            <i class="fas fa-exclamation-circle text-red-600 mt-0.5 mr-3"></i>
+                            <div class="flex-1">
+                                <h4 class="text-sm font-semibold text-red-800 mb-1">Form Errors:</h4>
+                                <ul class="text-sm text-red-700 list-disc list-inside">
+                                    {% for error in expenses_formset.non_form_errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+                
+                <div id="expenses-container" class="space-y-4 {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}pointer-events-none{% endif %}">
+                    {% for form in expenses_formset %}
+                        <div class="formset-row bg-gradient-to-br from-white to-{% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}gray{% else %}orange{% endif %}-50 rounded-xl p-5 border-2 border-{% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}gray{% else %}orange{% endif %}-100 hover:border-{% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}gray{% else %}orange{% endif %}-300 transition-all shadow-sm hover:shadow-md {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}opacity-60{% endif %}"
+                             x-data="{ paid: {% if form.paid.value %}true{% else %}false{% endif %} }">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label for="{{ form.expense_type.id_for_label }}" class="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                                        <span class="inline-flex items-center justify-center w-6 h-6 bg-purple-100 text-purple-600 rounded-lg mr-2">
+                                            <i class="fas fa-tag text-xs"></i>
+                                        </span>
+                                        Type
+                                    </label>
+                                    {{ form.expense_type }}
+                                    {% if form.expense_type.errors %}
+                                        <p class="mt-1.5 text-xs text-red-600 flex items-center">
+                                            <i class="fas fa-exclamation-circle mr-1"></i>{{ form.expense_type.errors.0 }}
+                                        </p>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <label for="{{ form.amount.id_for_label }}" class="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                                        <span class="inline-flex items-center justify-center w-6 h-6 bg-orange-100 text-orange-600 rounded-lg mr-2">
+                                            <i class="fas fa-dollar-sign text-xs"></i>
+                                        </span>
+                                        Amount
+                                    </label>
+                                    {{ form.amount }}
+                                    {% if form.amount.errors %}
+                                        <p class="mt-1.5 text-xs text-red-600 flex items-center">
+                                            <i class="fas fa-exclamation-circle mr-1"></i>{{ form.amount.errors.0 }}
+                                        </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                                <div>
+                                    <label for="{{ form.description.id_for_label }}" class="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                                        <span class="inline-flex items-center justify-center w-6 h-6 bg-blue-100 text-blue-600 rounded-lg mr-2">
+                                            <i class="fas fa-file-alt text-xs"></i>
+                                        </span>
+                                        Description
+                                    </label>
+                                    {{ form.description }}
+                                    {% if form.description.errors %}
+                                        <p class="mt-1.5 text-xs text-red-600 flex items-center">
+                                            <i class="fas fa-exclamation-circle mr-1"></i>{{ form.description.errors.0 }}
+                                        </p>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <label for="{{ form.currency.id_for_label }}" class="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                                        <span class="inline-flex items-center justify-center w-6 h-6 bg-green-100 text-green-600 rounded-lg mr-2">
+                                            <i class="fas fa-globe text-xs"></i>
+                                        </span>
+                                        Currency
+                                    </label>
+                                    {{ form.currency }}
+                                    {% if form.currency.errors %}
+                                        <p class="mt-1.5 text-xs text-red-600 flex items-center">
+                                            <i class="fas fa-exclamation-circle mr-1"></i>{{ form.currency.errors.0 }}
+                                        </p>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <label for="{{ form.exchange_rate.id_for_label }}" class="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                                        <span class="inline-flex items-center justify-center w-6 h-6 bg-indigo-100 text-indigo-600 rounded-lg mr-2">
+                                            <i class="fas fa-exchange-alt text-xs"></i>
+                                        </span>
+                                        Rate
+                                    </label>
+                                    {{ form.exchange_rate }}
+                                    {% if form.exchange_rate.errors %}
+                                        <p class="mt-1.5 text-xs text-red-600 flex items-center">
+                                            <i class="fas fa-exclamation-circle mr-1"></i>{{ form.exchange_rate.errors.0 }}
+                                        </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <!-- Conditional fields: Date Incurred and Receipt Number (only shown when paid is checked) -->
+                            <div x-show="paid" 
+                                 x-transition:enter="transition ease-out duration-200"
+                                 x-transition:enter-start="opacity-0 transform scale-95"
+                                 x-transition:enter-end="opacity-100 transform scale-100"
+                                 x-transition:leave="transition ease-in duration-150"
+                                 x-transition:leave-start="opacity-100 transform scale-100"
+                                 x-transition:leave-end="opacity-0 transform scale-95"
+                                 class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 pt-4 border-t border-orange-200">
+                                <div>
+                                    <label for="{{ form.date_incurred.id_for_label }}" class="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                                        <span class="inline-flex items-center justify-center w-6 h-6 bg-red-100 text-red-600 rounded-lg mr-2">
+                                            <i class="fas fa-calendar-alt text-xs"></i>
+                                        </span>
+                                        Date Incurred
+                                        <span class="ml-2 text-xs text-red-600 font-normal">*</span>
+                                    </label>
+                                    <div class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all">
+                                        {{ form.date_incurred }}
+                                    </div>
+                                    {% if form.date_incurred.errors %}
+                                        <p class="mt-1.5 text-xs text-red-600 flex items-center">
+                                            <i class="fas fa-exclamation-circle mr-1"></i>{{ form.date_incurred.errors.0 }}
+                                        </p>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <label for="{{ form.receipt_number.id_for_label }}" class="flex items-center text-sm font-semibold text-gray-700 mb-2">
+                                        <span class="inline-flex items-center justify-center w-6 h-6 bg-amber-100 text-amber-600 rounded-lg mr-2">
+                                            <i class="fas fa-receipt text-xs"></i>
+                                        </span>
+                                        Receipt Number
+                                        <span class="ml-2 text-xs text-red-600 font-normal">*</span>
+                                    </label>
+                                    <div class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all">
+                                        {{ form.receipt_number }}
+                                    </div>
+                                    {% if form.receipt_number.errors %}
+                                        <p class="mt-1.5 text-xs text-red-600 flex items-center">
+                                            <i class="fas fa-exclamation-circle mr-1"></i>{{ form.receipt_number.errors.0 }}
+                                        </p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <label for="{{ form.paid.id_for_label }}" class="flex items-center cursor-pointer group px-4 py-2 bg-green-50 hover:bg-green-100 rounded-lg transition-colors border border-green-200">
+                                    <input type="checkbox"
+                                           name="{{ form.paid.html_name }}"
+                                           id="{{ form.paid.id_for_label }}"
+                                           value="1"
+                                           {% if form.paid.value %}checked{% endif %}
+                                           @change="paid = $event.target.checked"
+                                           class="form-control">
+                                    <span class="ml-2 text-sm font-semibold text-green-700 group-hover:text-green-800">
+                                        <i class="fas fa-check-circle mr-1"></i>Mark as Paid
+                                    </span>
+                                </label>
+                                <div class="flex gap-2">
+                                    {% if form.DELETE %}
+                                    <label class="flex items-center cursor-pointer px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors border border-red-200">
+                                        {{ form.DELETE }}
+                                        <i class="fas fa-trash-alt ml-2"></i>
+                                        <span class="ml-1 text-sm font-medium">Remove</span>
+                                    </label>
+                                    {% endif %}
+                                    <button type="button" class="remove-form-btn px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors shadow-sm">
+                                        <i class="fas fa-times mr-1"></i>Delete
+                                    </button>
+                                </div>
+                            </div>
+                            {% if form.paid.errors %}
+                                <p class="mt-2 text-xs text-red-600 flex items-center">
+                                    <i class="fas fa-exclamation-circle mr-1"></i>{{ form.paid.errors.0 }}
+                                </p>
+                            {% endif %}
+                            {% if form.id %}
+                                {{ form.id }}
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+
+                    {% if not expenses_formset %}
+                    <div id="no-expenses-message" class="text-center py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
+                        <i class="fas fa-receipt text-gray-400 text-3xl mb-3"></i>
+                        <p class="text-gray-600 font-medium">No expenses added yet</p>
+                        <p class="text-sm text-gray-500 mt-1">Click "Add Expense" below to add import costs</p>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="mt-6 flex justify-between gap-3">
+                    {% if order.status != 'RECEIVED' and order.status != 'COMPLETED' %}
+                    <button type="button"
+                            id="add-expense-btn"
+                            class="px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+                        <i class="fas fa-plus mr-2"></i>Add Another Expense
+                    </button>
+                    <button type="submit"
+                            name="save_expenses"
+                            value="1"
+                            class="px-6 py-3 bg-gradient-to-r from-orange-600 to-orange-700 text-white rounded-xl hover:from-orange-700 hover:to-orange-800 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+                        <i class="fas fa-save mr-2"></i>Save Expenses
+                    </button>
+                    {% else %}
+                    <div class="w-full text-center py-3 bg-gray-100 rounded-xl border border-gray-300">
+                        <i class="fas fa-lock text-gray-400 mr-2"></i>
+                        <span class="text-gray-600 font-medium">Editing disabled - goods have been received</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Invoices Card -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-r from-green-50 to-emerald-50 px-8 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h2 class="text-xl font-bold text-gray-900">
+                <i class="fas fa-file-invoice-dollar text-green-600 mr-2"></i>Supplier Invoices ({{ invoices.count }})
+            </h2>
+            <div class="flex items-center gap-2">
+                {% if order.payment_status == 'PAID' %}
+                    <span class="px-3 py-1 bg-green-100 text-green-800 text-sm font-semibold rounded-full">
+                        <i class="fas fa-check-circle mr-1"></i>Fully Paid
+                    </span>
+                {% elif order.payment_status == 'PARTIAL' %}
+                    <span class="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm font-semibold rounded-full">
+                        <i class="fas fa-clock mr-1"></i>Partially Paid
+                    </span>
+                {% elif order.payment_status == 'UNPAID' %}
+                    <span class="px-3 py-1 bg-red-100 text-red-800 text-sm font-semibold rounded-full">
+                        <i class="fas fa-exclamation-circle mr-1"></i>Unpaid
+                    </span>
+                {% else %}
+                    <span class="px-3 py-1 bg-gray-100 text-gray-800 text-sm font-semibold rounded-full">
+                        <i class="fas fa-file mr-1"></i>No Invoice
+                    </span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="p-8">
+            {% if invoices %}
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="text-left text-gray-500 border-b border-gray-200">
+                            <th class="px-6 py-3 text-xs font-semibold uppercase tracking-wider">
+                                <i class="fas fa-hashtag mr-2"></i>Invoice #
+                            </th>
+                            <th class="px-6 py-3 text-xs font-semibold uppercase tracking-wider">
+                                <i class="fas fa-dollar-sign mr-2"></i>Amount
+                            </th>
+                            <th class="px-6 py-3 text-xs font-semibold uppercase tracking-wider">
+                                <i class="fas fa-money-bill-wave mr-2"></i>Paid
+                            </th>
+                            <th class="px-6 py-3 text-xs font-semibold uppercase tracking-wider">
+                                <i class="fas fa-flag mr-2"></i>Status
+                            </th>
+                            <th class="px-6 py-3 text-xs font-semibold uppercase tracking-wider">
+                                <i class="fas fa-calendar-alt mr-2"></i>Due Date
+                            </th>
+                            <th class="px-6 py-3 text-xs font-semibold uppercase tracking-wider">
+                                Actions
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for inv in invoices %}
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-6 py-4">
+                                <div class="text-sm font-semibold text-gray-900">{{ inv.invoice_number }}</div>
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-900">
+                                <span class="font-medium">${{ inv.total_amount|floatformat:2 }}</span>
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-900">
+                                <span class="font-medium">${{ inv.amount_paid|floatformat:2 }}</span>
+                            </td>
+                            <td class="px-6 py-4">
+                                {% if inv.status == 'PAID' %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        <i class="fas fa-check-circle mr-1"></i>{{ inv.get_status_display }}
+                                    </span>
+                                {% elif inv.status == 'PARTIAL' %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                        <i class="fas fa-clock mr-1"></i>{{ inv.get_status_display }}
+                                    </span>
+                                {% elif inv.status == 'OVERDUE' %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                        <i class="fas fa-exclamation-circle mr-1"></i>{{ inv.get_status_display }}
+                                    </span>
+                                {% else %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                        <i class="fas fa-file-invoice mr-1"></i>{{ inv.get_status_display }}
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-900">
+                                {% if inv.due_date %}
+                                    {{ inv.due_date|date:"M d, Y" }}
+                                {% else %}
+                                    <span class="text-gray-400">Not set</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-4">
+                                <a href="{% url 'add_invoice_payment' inv.id %}"
+                                   class="inline-flex items-center px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium">
+                                    <i class="fas fa-money-bill-wave mr-1"></i>
+                                    Record Payment
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-12">
+                <div class="flex flex-col items-center">
+                    <i class="fas fa-file-invoice text-gray-300 text-4xl mb-3"></i>
+                    <h3 class="text-lg font-medium text-gray-900 mb-1">No invoices yet</h3>
+                    <p class="text-gray-500 mb-4">Add a supplier invoice to track payments</p>
+                    <a href="{% url 'add_supplier_invoice' order.id %}"
+                       class="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                        <i class="fas fa-plus mr-2"></i>
+                        Add Invoice
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Workflow Guide -->
+    <div class="bg-blue-50 border border-blue-200 rounded-2xl p-6">
+        <div class="flex items-start space-x-3">
+            <div class="flex-shrink-0">
+                <i class="fas fa-lightbulb text-2xl text-blue-600"></i>
+            </div>
+            <div class="flex-1">
+                <h4 class="text-lg font-semibold text-gray-900 mb-3">Import Order Workflow</h4>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-700">
+                    <div>
+                        <h5 class="font-semibold text-gray-900 mb-2"><i class="fas fa-1 text-blue-600 mr-2"></i>Add Products</h5>
+                        <p>Start by adding all products you're importing. Specify quantities and unit costs for each item.</p>
+                    </div>
+                    <div>
+                        <h5 class="font-semibold text-gray-900 mb-2"><i class="fas fa-2 text-blue-600 mr-2"></i>Add Expenses</h5>
+                        <p>Add all import-related costs: shipping, customs duties, insurance, clearing fees, etc.</p>
+                    </div>
+                    <div>
+                        <h5 class="font-semibold text-gray-900 mb-2"><i class="fas fa-3 text-blue-600 mr-2"></i>Allocate Costs</h5>
+                        <p>Click "Allocate Costs" to distribute expenses across products based on the allocation method ({{ order.get_allocation_method_display }}).</p>
+                    </div>
+                    <div>
+                        <h5 class="font-semibold text-gray-900 mb-2"><i class="fas fa-4 text-blue-600 mr-2"></i>Receive Goods</h5>
+                        <p>Once goods arrive, mark as received to update stock levels with calculated landed costs.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Dynamic formset management for ITEMS
+    const itemsContainer = document.getElementById('items-container');
+    const addItemBtn = document.getElementById('add-item-btn');
+    const itemsTotalForms = document.querySelector('#id_items-TOTAL_FORMS');
+
+    // Dynamic formset management for EXPENSES
+    const expensesContainer = document.getElementById('expenses-container');
+    const addExpenseBtn = document.getElementById('add-expense-btn');
+    const expensesTotalForms = document.querySelector('#id_expenses-TOTAL_FORMS');
+
+    // Clone template function
+    function cloneFormsetRow(container, formPrefix, totalFormsInput) {
+        const allRows = container.querySelectorAll('.formset-row');
+        if (allRows.length === 0) return null;
+
+        // Clone the first row as template
+        const templateRow = allRows[0].cloneNode(true);
+        const formIndex = parseInt(totalFormsInput.value);
+
+        // Update all name and id attributes
+        const regex = new RegExp(`${formPrefix}-(\\d+)-`, 'g');
+        templateRow.innerHTML = templateRow.innerHTML.replace(regex, `${formPrefix}-${formIndex}-`);
+
+        // Clear all input values
+        templateRow.querySelectorAll('input:not([type="button"]):not([type="submit"])').forEach(input => {
+            if (input.type === 'checkbox') {
+                input.checked = false;
+            } else {
+                input.value = '';
+            }
+        });
+
+        templateRow.querySelectorAll('select').forEach(select => {
+            select.selectedIndex = 0;
+        });
+
+        templateRow.querySelectorAll('textarea').forEach(textarea => {
+            textarea.value = '';
+        });
+
+        // Remove error messages
+        templateRow.querySelectorAll('.text-red-600').forEach(el => el.remove());
+
+        return templateRow;
+    }
+
+    // ADD ITEM button handler
+    if (addItemBtn && itemsContainer && itemsTotalForms) {
+        addItemBtn.addEventListener('click', function() {
+            const newRow = cloneFormsetRow(itemsContainer, 'items', itemsTotalForms);
+            if (newRow) {
+                // Hide "no items" message if present
+                const noItemsMsg = document.getElementById('no-items-message');
+                if (noItemsMsg) noItemsMsg.style.display = 'none';
+
+                itemsContainer.appendChild(newRow);
+                itemsTotalForms.value = parseInt(itemsTotalForms.value) + 1;
+
+                // Attach remove handler to the new row
+                attachRemoveHandler(newRow);
+
+                // Smooth scroll to new form
+                newRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                // Add animation
+                newRow.style.opacity = '0';
+                newRow.style.transform = 'translateY(20px)';
+                setTimeout(() => {
+                    newRow.style.transition = 'all 0.3s ease';
+                    newRow.style.opacity = '1';
+                    newRow.style.transform = 'translateY(0)';
+                }, 10);
+            }
+        });
+    }
+
+    // ADD EXPENSE button handler
+    if (addExpenseBtn && expensesContainer && expensesTotalForms) {
+        addExpenseBtn.addEventListener('click', function() {
+            const newRow = cloneFormsetRow(expensesContainer, 'expenses', expensesTotalForms);
+            if (newRow) {
+                // Hide "no expenses" message if present
+                const noExpensesMsg = document.getElementById('no-expenses-message');
+                if (noExpensesMsg) noExpensesMsg.style.display = 'none';
+
+                expensesContainer.appendChild(newRow);
+                expensesTotalForms.value = parseInt(expensesTotalForms.value) + 1;
+
+                // Attach remove handler to the new row
+                attachRemoveHandler(newRow);
+
+                // Smooth scroll to new form
+                newRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                // Add animation
+                newRow.style.opacity = '0';
+                newRow.style.transform = 'translateY(20px)';
+                setTimeout(() => {
+                    newRow.style.transition = 'all 0.3s ease';
+                    newRow.style.opacity = '1';
+                    newRow.style.transform = 'translateY(0)';
+                }, 10);
+            }
+        });
+    }
+
+    // REMOVE form handler
+    function attachRemoveHandler(row) {
+        const removeBtn = row.querySelector('.remove-form-btn');
+        if (removeBtn) {
+            removeBtn.addEventListener('click', function() {
+                // If there's a DELETE checkbox, check it and hide the row
+                const deleteCheckbox = row.querySelector('input[name$="-DELETE"]');
+                if (deleteCheckbox) {
+                    deleteCheckbox.checked = true;
+                    row.style.display = 'none';
+                } else {
+                    // For new forms without DELETE checkbox, just remove from DOM
+                    row.remove();
+
+                    // Update TOTAL_FORMS count for items or expenses
+                    if (itemsContainer && itemsContainer.contains(row)) {
+                        itemsTotalForms.value = parseInt(itemsTotalForms.value) - 1;
+
+                        // Show "no items" message if no forms left
+                        const visibleRows = itemsContainer.querySelectorAll('.formset-row:not([style*="display: none"])');
+                        if (visibleRows.length === 0) {
+                            const noItemsMsg = document.getElementById('no-items-message');
+                            if (noItemsMsg) noItemsMsg.style.display = 'block';
+                        }
+                    } else if (expensesContainer && expensesContainer.contains(row)) {
+                        expensesTotalForms.value = parseInt(expensesTotalForms.value) - 1;
+
+                        // Show "no expenses" message if no forms left
+                        const visibleRows = expensesContainer.querySelectorAll('.formset-row:not([style*="display: none"])');
+                        if (visibleRows.length === 0) {
+                            const noExpensesMsg = document.getElementById('no-expenses-message');
+                            if (noExpensesMsg) noExpensesMsg.style.display = 'block';
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    // Attach remove handlers to existing forms
+    document.querySelectorAll('.formset-row').forEach(row => {
+        attachRemoveHandler(row);
+    });
+});
+</script>
 {% endblock %}

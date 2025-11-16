@@ -15,35 +15,67 @@
         </a>
     </div>
 
+    <!-- Form Errors -->
+    {% if form.errors %}
+    <div class="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+        <div class="flex items-start space-x-3">
+            <i class="fas fa-exclamation-circle text-red-500 text-xl mt-0.5"></i>
+            <div class="flex-1">
+                <h3 class="text-sm font-semibold text-red-800 mb-2">Please correct the following errors:</h3>
+                <ul class="space-y-1 text-sm text-red-700">
+                    {% for field, errors in form.errors.items %}
+                        {% for error in errors %}
+                        <li><strong>{{ field|title }}:</strong> {{ error }}</li>
+                        {% endfor %}
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Form Card -->
     <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
         <form method="post" class="p-8">
             {% csrf_token %}
-            
+
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <!-- Supplier -->
                 <div>
                     <label for="{{ form.supplier.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-industry text-blue-500 mr-2"></i>Supplier
+                        <i class="fas fa-industry text-blue-500 mr-2"></i>Supplier <span class="text-red-500">*</span>
                     </label>
-                    <select name="supplier" id="{{ form.supplier.id_for_label }}" 
-                            class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
-                        <option value="">Select supplier</option>
-                        {% for choice in form.supplier.field.queryset %}
-                            <option value="{{ choice.id }}" {% if form.supplier.value == choice.id %}selected{% endif %}>{{ choice.name }}</option>
+                    <select name="supplier" id="{{ form.supplier.id_for_label }}" required
+                            class="w-full px-4 py-3 bg-gray-50 border {% if form.supplier.errors %}border-red-300{% else %}border-gray-200{% endif %} rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                        <option value="">Select supplier...</option>
+                        {% for supplier in form.supplier.field.queryset %}
+                            <option value="{{ supplier.id }}" {% if form.supplier.value|stringformat:"s" == supplier.id|stringformat:"s" %}selected{% endif %}>{{ supplier.name }}</option>
                         {% endfor %}
                     </select>
                     {% for error in form.supplier.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
                 </div>
 
+                <!-- Reference Number -->
+                <div>
+                    <label for="{{ form.reference_number.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-hashtag text-teal-500 mr-2"></i>Reference Number
+                    </label>
+                    <input type="text" name="reference_number" id="{{ form.reference_number.id_for_label }}"
+                           value="{{ form.reference_number.value|default:'' }}"
+                           class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                           placeholder="PO-2025-001">
+                    <p class="text-xs text-gray-500 mt-1">Your internal purchase order or reference number</p>
+                    {% for error in form.reference_number.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
+                </div>
+
                 <!-- Order Date -->
                 <div>
                     <label for="{{ form.order_date.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-calendar text-green-500 mr-2"></i>Order Date
+                        <i class="fas fa-calendar text-green-500 mr-2"></i>Order Date <span class="text-red-500">*</span>
                     </label>
-                    <input type="date" name="order_date" id="{{ form.order_date.id_for_label }}" 
+                    <input type="date" name="order_date" id="{{ form.order_date.id_for_label }}" required
                            value="{{ form.order_date.value|default:'' }}"
-                           class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                           class="w-full px-4 py-3 bg-gray-50 border {% if form.order_date.errors %}border-red-300{% else %}border-gray-200{% endif %} rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
                     {% for error in form.order_date.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
                 </div>
 
@@ -52,7 +84,7 @@
                     <label for="{{ form.expected_arrival.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
                         <i class="fas fa-ship text-purple-500 mr-2"></i>Expected Arrival
                     </label>
-                    <input type="date" name="expected_arrival" id="{{ form.expected_arrival.id_for_label }}" 
+                    <input type="date" name="expected_arrival" id="{{ form.expected_arrival.id_for_label }}"
                            value="{{ form.expected_arrival.value|default:'' }}"
                            class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
                     {% for error in form.expected_arrival.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
@@ -61,9 +93,9 @@
                 <!-- Currency -->
                 <div>
                     <label for="{{ form.currency.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-coins text-yellow-500 mr-2"></i>Currency
+                        <i class="fas fa-coins text-yellow-500 mr-2"></i>Currency <span class="text-red-500">*</span>
                     </label>
-                    <select name="currency" id="{{ form.currency.id_for_label }}" 
+                    <select name="currency" id="{{ form.currency.id_for_label }}" required
                             class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
                         {% for choice in form.currency.field.choices %}
                             <option value="{{ choice.0 }}" {% if form.currency.value == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
@@ -75,12 +107,12 @@
                 <!-- Exchange Rate -->
                 <div>
                     <label for="{{ form.exchange_rate.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-exchange-alt text-orange-500 mr-2"></i>Exchange Rate
+                        <i class="fas fa-exchange-alt text-orange-500 mr-2"></i>Exchange Rate <span class="text-red-500">*</span>
                     </label>
                     <div class="relative">
-                        <input type="number" step="0.0001" name="exchange_rate" id="{{ form.exchange_rate.id_for_label }}" 
+                        <input type="number" step="0.0001" name="exchange_rate" id="{{ form.exchange_rate.id_for_label }}" required
                                value="{{ form.exchange_rate.value|default:'' }}"
-                               class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               class="w-full px-4 py-3 bg-gray-50 border {% if form.exchange_rate.errors %}border-red-300{% else %}border-gray-200{% endif %} rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                                placeholder="e.g. 18.5000">
                     </div>
                     <p class="text-xs text-gray-500 mt-1">Rate to USD (auto-filled if available)</p>
@@ -90,15 +122,30 @@
                 <!-- Status -->
                 <div>
                     <label for="{{ form.status.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-flag text-red-500 mr-2"></i>Status
+                        <i class="fas fa-flag text-red-500 mr-2"></i>Status <span class="text-red-500">*</span>
                     </label>
-                    <select name="status" id="{{ form.status.id_for_label }}" 
+                    <select name="status" id="{{ form.status.id_for_label }}" required
                             class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
                         {% for choice in form.status.field.choices %}
                             <option value="{{ choice.0 }}" {% if form.status.value == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
                         {% endfor %}
                     </select>
                     {% for error in form.status.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
+                </div>
+
+                <!-- Allocation Method -->
+                <div>
+                    <label for="{{ form.allocation_method.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-calculator text-pink-500 mr-2"></i>Cost Allocation Method <span class="text-red-500">*</span>
+                    </label>
+                    <select name="allocation_method" id="{{ form.allocation_method.id_for_label }}" required
+                            class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                        {% for choice in form.allocation_method.field.choices %}
+                            <option value="{{ choice.0 }}" {% if form.allocation_method.value == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
+                        {% endfor %}
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1">How to distribute shipping & import costs across products</p>
+                    {% for error in form.allocation_method.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
                 </div>
 
                 <!-- Notes -->

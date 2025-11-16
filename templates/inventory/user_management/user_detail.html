@@ -1,0 +1,277 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ view_user.username }} - User Details{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8">
+        <a href="{% url 'user_management_dashboard' %}"
+           class="inline-flex items-center text-blue-600 hover:text-blue-700 mb-4">
+            <i class="fas fa-arrow-left mr-2"></i>
+            Back to User Management
+        </a>
+
+        <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-4">
+                <div class="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                    <span class="text-white font-bold text-2xl">{{ view_user.username|slice:":1"|upper }}</span>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900">{{ view_user.username }}</h1>
+                    <p class="text-gray-600 mt-1">
+                        {{ view_user.first_name }} {{ view_user.last_name }}
+                        {% if view_user.email %} • {{ view_user.email }}{% endif %}
+                    </p>
+                </div>
+            </div>
+
+            <div class="flex space-x-3">
+                <a href="{% url 'user_edit' view_user.id %}"
+                   class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-edit mr-2"></i>
+                    Edit User
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Info Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <!-- Status Card -->
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <h3 class="text-sm font-medium text-gray-500 mb-3">Status</h3>
+            <div class="space-y-2">
+                {% if view_user.is_active %}
+                    <div class="flex items-center text-green-600">
+                        <i class="fas fa-check-circle mr-2"></i>
+                        <span class="font-medium">Active</span>
+                    </div>
+                {% else %}
+                    <div class="flex items-center text-gray-500">
+                        <i class="fas fa-times-circle mr-2"></i>
+                        <span class="font-medium">Inactive</span>
+                    </div>
+                {% endif %}
+
+                {% if view_user.is_superuser %}
+                    <div class="flex items-center text-red-600">
+                        <i class="fas fa-crown mr-2"></i>
+                        <span class="font-medium">Superuser</span>
+                    </div>
+                {% endif %}
+
+                {% if view_user.is_staff %}
+                    <div class="flex items-center text-blue-600">
+                        <i class="fas fa-user-shield mr-2"></i>
+                        <span class="font-medium">Staff Member</span>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Role Card -->
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <h3 class="text-sm font-medium text-gray-500 mb-3">Role</h3>
+            <div class="text-2xl font-bold text-gray-900 mb-1">
+                {{ view_user.profile.get_role_display }}
+            </div>
+            <p class="text-sm text-gray-600">
+                {% if view_user.profile.role == 'admin' %}
+                    Full administrative access
+                {% elif view_user.profile.role == 'manager' %}
+                    Operational management
+                {% elif view_user.profile.role == 'sales' %}
+                    Point of sale operations
+                {% else %}
+                    Read-only access
+                {% endif %}
+            </p>
+        </div>
+
+        <!-- Member Since Card -->
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <h3 class="text-sm font-medium text-gray-500 mb-3">Member Since</h3>
+            <div class="text-2xl font-bold text-gray-900 mb-1">
+                {{ view_user.date_joined|date:"M Y" }}
+            </div>
+            <p class="text-sm text-gray-600">
+                {{ view_user.date_joined|date:"F d, Y" }}
+            </p>
+        </div>
+    </div>
+
+    <!-- Sales Statistics -->
+    <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+        <h2 class="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+            <i class="fas fa-chart-line mr-2 text-blue-600"></i>
+            Sales Performance
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div class="text-center p-4 bg-blue-50 rounded-lg">
+                <div class="text-3xl font-bold text-blue-600">{{ sales_stats.total_sales }}</div>
+                <div class="text-sm text-gray-600 mt-1">Total Sales</div>
+            </div>
+
+            <div class="text-center p-4 bg-green-50 rounded-lg">
+                <div class="text-3xl font-bold text-green-600">${{ sales_stats.total_amount|floatformat:2 }}</div>
+                <div class="text-sm text-gray-600 mt-1">Total Revenue</div>
+            </div>
+
+            <div class="text-center p-4 bg-purple-50 rounded-lg">
+                <div class="text-3xl font-bold text-purple-600">{{ sales_stats.sales_this_month }}</div>
+                <div class="text-sm text-gray-600 mt-1">Sales This Month</div>
+            </div>
+
+            <div class="text-center p-4 bg-amber-50 rounded-lg">
+                <div class="text-3xl font-bold text-amber-600">${{ sales_stats.amount_this_month|floatformat:2 }}</div>
+                <div class="text-sm text-gray-600 mt-1">Revenue This Month</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Permissions -->
+    <div class="bg-white rounded-xl shadow-md p-6 mb-8">
+        <h2 class="text-xl font-semibold text-gray-900 mb-6 flex items-center">
+            <i class="fas fa-key mr-2 text-blue-600"></i>
+            Permissions
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- POS Permissions -->
+            <div>
+                <h3 class="font-semibold text-gray-900 mb-3 flex items-center">
+                    <i class="fas fa-cash-register mr-2 text-green-600"></i>
+                    POS & Sales
+                </h3>
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between p-2 rounded {% if view_user.profile.can_make_sales %}bg-green-50{% else %}bg-gray-50{% endif %}">
+                        <span class="text-sm text-gray-700">Make Sales</span>
+                        {% if view_user.profile.can_make_sales %}
+                            <i class="fas fa-check-circle text-green-600"></i>
+                        {% else %}
+                            <i class="fas fa-times-circle text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center justify-between p-2 rounded {% if view_user.profile.can_process_returns %}bg-green-50{% else %}bg-gray-50{% endif %}">
+                        <span class="text-sm text-gray-700">Process Returns</span>
+                        {% if view_user.profile.can_process_returns %}
+                            <i class="fas fa-check-circle text-green-600"></i>
+                        {% else %}
+                            <i class="fas fa-times-circle text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center justify-between p-2 rounded {% if view_user.profile.can_apply_discounts %}bg-green-50{% else %}bg-gray-50{% endif %}">
+                        <span class="text-sm text-gray-700">Apply Discounts (Max: {{ view_user.profile.max_discount_percent }}%)</span>
+                        {% if view_user.profile.can_apply_discounts %}
+                            <i class="fas fa-check-circle text-green-600"></i>
+                        {% else %}
+                            <i class="fas fa-times-circle text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Permissions -->
+            <div>
+                <h3 class="font-semibold text-gray-900 mb-3 flex items-center">
+                    <i class="fas fa-cogs mr-2 text-purple-600"></i>
+                    System Access
+                </h3>
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between p-2 rounded {% if view_user.profile.can_view_reports %}bg-purple-50{% else %}bg-gray-50{% endif %}">
+                        <span class="text-sm text-gray-700">View Reports</span>
+                        {% if view_user.profile.can_view_reports %}
+                            <i class="fas fa-check-circle text-purple-600"></i>
+                        {% else %}
+                            <i class="fas fa-times-circle text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center justify-between p-2 rounded {% if view_user.profile.can_manage_inventory %}bg-purple-50{% else %}bg-gray-50{% endif %}">
+                        <span class="text-sm text-gray-700">Manage Inventory</span>
+                        {% if view_user.profile.can_manage_inventory %}
+                            <i class="fas fa-check-circle text-purple-600"></i>
+                        {% else %}
+                            <i class="fas fa-times-circle text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center justify-between p-2 rounded {% if view_user.profile.can_manage_suppliers %}bg-purple-50{% else %}bg-gray-50{% endif %}">
+                        <span class="text-sm text-gray-700">Manage Suppliers</span>
+                        {% if view_user.profile.can_manage_suppliers %}
+                            <i class="fas fa-check-circle text-purple-600"></i>
+                        {% else %}
+                            <i class="fas fa-times-circle text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center justify-between p-2 rounded {% if view_user.profile.can_manage_users %}bg-red-50{% else %}bg-gray-50{% endif %}">
+                        <span class="text-sm text-gray-700 font-medium">Manage Users</span>
+                        {% if view_user.profile.can_manage_users %}
+                            <i class="fas fa-check-circle text-red-600"></i>
+                        {% else %}
+                            <i class="fas fa-times-circle text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Sales -->
+    <div class="bg-white rounded-xl shadow-md overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-900 flex items-center">
+                <i class="fas fa-receipt mr-2 text-blue-600"></i>
+                Recent Sales
+            </h2>
+        </div>
+
+        {% if recent_sales %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for sale in recent_sales %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{ sale.sale_date|date:"M d, Y h:i A" }}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-900">
+                            {{ sale.inventory_item.name }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {{ sale.quantity_sold }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            ${{ sale.total_amount|floatformat:2 }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm">
+                            <span class="px-2 py-1 text-xs rounded-full
+                                {% if sale.payment_method == 'CASH' %}bg-green-100 text-green-800
+                                {% elif sale.payment_method == 'CREDIT' %}bg-amber-100 text-amber-800
+                                {% else %}bg-purple-100 text-purple-800{% endif %}">
+                                {{ sale.get_payment_method_display }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="px-6 py-8 text-center text-gray-500">
+            <i class="fas fa-receipt text-4xl text-gray-300 mb-2"></i>
+            <p>No sales recorded yet</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

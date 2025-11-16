@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     GLAccount, JournalEntry, JournalLine, ARInvoice, ARPayment,
-    LaybyPlan, LaybyItem, LaybyPayment, CashbookEntry, BankReconciliation
+    LaybyPlan, LaybyItem, LaybyPayment, CashbookEntry, BankReconciliation, Expense
 )
 
 # ==================== GENERAL LEDGER ====================
@@ -72,3 +72,9 @@ class BankReconciliationAdmin(admin.ModelAdmin):
     list_display = ['month', 'opening_balance', 'closing_balance', 'bank_statement_balance', 'difference', 'reconciled']
     list_filter = ['reconciled', 'month']
     readonly_fields = ['difference', 'created_date']
+
+@admin.register(Expense)
+class ExpenseAdmin(admin.ModelAdmin):
+    list_display = ['date', 'category', 'description', 'amount', 'gl_account', 'payment_method', 'reference']
+    list_filter = ['category', 'payment_method', 'date']
+    search_fields = ['description', 'reference']

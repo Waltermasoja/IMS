@@ -11,17 +11,33 @@
             <h1 class="text-3xl font-bold text-gray-900">Add New Product</h1>
             <p class="text-gray-500 mt-1">Fill in the details to add a new product to your inventory</p>
         </div>
-        <a href="{% url 'inventory' %}" 
+        {% if return_to == 'import_order' and order_id %}
+        <a href="{% url 'import_order_detail' order_id %}"
+           class="inline-flex items-center space-x-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
+            <i class="fas fa-arrow-left"></i>
+            <span class="font-medium">Back to Import Order</span>
+        </a>
+        {% else %}
+        <a href="{% url 'inventory' %}"
            class="inline-flex items-center space-x-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
             <i class="fas fa-arrow-left"></i>
             <span class="font-medium">Back to Inventory</span>
         </a>
+        {% endif %}
     </div>
 
     <!-- Form Card -->
     <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
-        <form method="POST" action="" class="p-8">
+        <form method="POST" action="" enctype="multipart/form-data" class="p-8">
             {% csrf_token %}
+
+            <!-- Hidden fields for return navigation -->
+            {% if return_to %}
+            <input type="hidden" name="return_to" value="{{ return_to }}">
+            {% endif %}
+            {% if order_id %}
+            <input type="hidden" name="order_id" value="{{ order_id }}">
+            {% endif %}
             
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <!-- Left Column -->
@@ -49,9 +65,9 @@
                     <!-- Name Field -->
                     <div>
                         <label for="{{ form.name.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
-                            <i class="fas fa-box text-purple-500 mr-2"></i>Product Name
+                            <i class="fas fa-box text-purple-500 mr-2"></i>Product Name <span class="text-red-500">*</span>
                         </label>
-                        <input type="text" name="name" id="{{ form.name.id_for_label }}" 
+                        <input type="text" name="name" id="{{ form.name.id_for_label }}"
                                value="{{ form.name.value|default:'' }}" required
                                class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                                placeholder="Enter product name">
@@ -74,11 +90,13 @@
                     <div>
                         <label for="{{ form.size.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
                             <i class="fas fa-ruler text-green-500 mr-2"></i>Size
+                            <span class="text-xs text-gray-500 font-normal">- Optional</span>
                         </label>
-                        <input type="number" name="size" id="{{ form.size.id_for_label }}" 
+                        <input type="text" name="size" id="{{ form.size.id_for_label }}"
                                value="{{ form.size.value|default:'' }}"
                                class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                               placeholder="Enter size">
+                               placeholder="e.g., Small, Medium, 10, 42">
+                        <p class="text-xs text-gray-500 mt-1">Can be text (Small, Medium) or numbers (10, 42)</p>
                     </div>
 
                     <!-- Weight Field (Optional) -->
@@ -178,6 +196,65 @@
                             <span class="text-lg font-bold text-green-600" id="profitMargin">--</span>
                         </div>
                     </div>
+
+                    <!-- Reorder Point Field -->
+                    <div>
+                        <label for="{{ form.reorder_point.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                            <i class="fas fa-exclamation-triangle text-yellow-500 mr-2"></i>Reorder Point
+                            <span class="text-xs text-gray-500 font-normal">- Optional</span>
+                        </label>
+                        <input type="number" name="reorder_point" id="{{ form.reorder_point.id_for_label }}"
+                               value="{{ form.reorder_point.value|default:'0' }}"
+                               class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="Minimum stock level">
+                        <p class="text-xs text-gray-500 mt-1">Alert when stock reaches this level</p>
+                    </div>
+
+                    <!-- Lead Time Field -->
+                    <div>
+                        <label for="{{ form.lead_time_days.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                            <i class="fas fa-clock text-blue-500 mr-2"></i>Lead Time (Days)
+                            <span class="text-xs text-gray-500 font-normal">- Optional</span>
+                        </label>
+                        <input type="number" name="lead_time_days" id="{{ form.lead_time_days.id_for_label }}"
+                               value="{{ form.lead_time_days.value|default:'0' }}"
+                               class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="Supplier delivery time">
+                        <p class="text-xs text-gray-500 mt-1">Days from order to delivery</p>
+                    </div>
+                </div>
+
+                <!-- Product Image Section -->
+                <div class="lg:col-span-2">
+                    <div class="bg-gradient-to-r from-purple-50 to-blue-50 p-6 rounded-xl border border-purple-100">
+                        <label for="{{ form.image.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-3">
+                            <i class="fas fa-camera text-purple-500 mr-2"></i>Product Image
+                            <span class="text-xs text-gray-500 font-normal">- Optional</span>
+                        </label>
+                        <input type="file"
+                               name="image"
+                               id="{{ form.image.id_for_label }}"
+                               accept="image/jpeg,image/jpg,image/png,image/webp"
+                               onchange="previewNewImage(event)"
+                               class="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
+                        <p class="text-xs text-gray-500 mt-2">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            Accepted: JPG, PNG, WebP | Max: 5MB | Auto-resized to 800×600px
+                        </p>
+
+                        <!-- Image Preview -->
+                        <div id="newImagePreview" class="mt-4 hidden">
+                            <p class="text-sm font-semibold text-gray-700 mb-2">Preview:</p>
+                            <div class="relative inline-block">
+                                <img id="newPreviewImg" src="" class="rounded-xl shadow-lg max-h-64 border-2 border-white">
+                                <button type="button"
+                                        onclick="clearImagePreview()"
+                                        class="absolute -top-2 -right-2 w-8 h-8 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors shadow-lg">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Full Width Description Field -->
@@ -193,11 +270,18 @@
             
             <!-- Form Actions -->
             <div class="flex items-center justify-end space-x-4 mt-8 pt-6 border-t border-gray-200">
-                <a href="{% url 'inventory' %}" 
+                {% if return_to == 'import_order' and order_id %}
+                <a href="{% url 'import_order_detail' order_id %}"
                    class="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
                     Cancel
                 </a>
-                <button type="submit" 
+                {% else %}
+                <a href="{% url 'inventory' %}"
+                   class="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
+                    Cancel
+                </a>
+                {% endif %}
+                <button type="submit"
                         class="flex items-center space-x-2 px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
                     <i class="fas fa-plus"></i>
                     <span>Add Product</span>
@@ -205,68 +289,68 @@
             </div>
         </form>
     </div>
-</div>
-{% endblock %}
 
-<!-- Add Category Modal -->
-<div x-show="showAddCategoryModal" 
-     x-transition:enter="transition ease-out duration-300"
-     x-transition:enter-start="opacity-0"
-     x-transition:enter-end="opacity-100"
-     x-transition:leave="transition ease-in duration-200"
-     x-transition:leave-start="opacity-100"
-     x-transition:leave-end="opacity-0"
-     @keydown.escape.window="showAddCategoryModal = false"
-     class="fixed inset-0 z-50 overflow-y-auto" 
-     style="display: none;">
-    <div class="flex items-center justify-center min-h-screen px-4">
-        <div class="fixed inset-0 bg-black/50" @click="showAddCategoryModal = false"></div>
-        
-        <div x-show="showAddCategoryModal"
-             x-transition:enter="transition ease-out duration-300"
-             x-transition:enter-start="opacity-0 scale-95"
-             x-transition:enter-end="opacity-100 scale-100"
-             x-transition:leave="transition ease-in duration-200"
-             x-transition:leave-start="opacity-100 scale-100"
-             x-transition:leave-end="opacity-0 scale-95"
-             class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-            <div class="flex items-center justify-between mb-6">
-                <h3 class="text-2xl font-bold text-gray-900">Add New Category</h3>
-                <button @click="showAddCategoryModal = false" 
-                        class="p-2 hover:bg-gray-100 rounded-lg text-gray-400 transition-colors">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
+    <!-- Add Category Modal -->
+    <div x-show="showAddCategoryModal" 
+         x-cloak
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         @keydown.escape.window="showAddCategoryModal = false"
+         class="fixed inset-0 z-50 overflow-y-auto">
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div class="fixed inset-0 bg-black/50" @click="showAddCategoryModal = false"></div>
             
-            <form id="addCategoryForm">
-                {% csrf_token %}
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Category Name</label>
-                        <input type="text" name="name" required
-                               class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                        <textarea name="description" rows="3"
-                                  class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
-                    </div>
+            <div x-show="showAddCategoryModal"
+                 x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="opacity-0 scale-95"
+                 x-transition:enter-end="opacity-100 scale-100"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="opacity-100 scale-100"
+                 x-transition:leave-end="opacity-0 scale-95"
+                 class="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <h3 class="text-2xl font-bold text-gray-900">Add New Category</h3>
+                    <button @click="showAddCategoryModal = false" 
+                            class="p-2 hover:bg-gray-100 rounded-lg text-gray-400 transition-colors">
+                        <i class="fas fa-times"></i>
+                    </button>
                 </div>
                 
-                <div class="flex items-center space-x-3 mt-6">
-                    <button type="button" @click="showAddCategoryModal = false"
-                            class="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
-                        Cancel
-                    </button>
-                    <button type="submit"
-                            class="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transition-all font-medium">
-                        Add Category
-                    </button>
-                </div>
-            </form>
+                <form id="addCategoryForm">
+                    {% csrf_token %}
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Category Name</label>
+                            <input type="text" name="name" required
+                                   class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                            <textarea name="description" rows="3"
+                                      class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-3 mt-6">
+                        <button type="button" @click="showAddCategoryModal = false"
+                                class="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
+                            Cancel
+                        </button>
+                        <button type="submit"
+                                class="flex-1 px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transition-all font-medium">
+                            Add Category
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 </div>
+{% endblock %}
 
 {% block extra_js %}
 <script>
@@ -337,8 +421,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Reset the form
                     this.reset();
                     
-                    // Close the modal using Alpine.js data
-                    document.querySelector('[x-data]').__x.$data.showAddCategoryModal = false;
+                    // Close the modal - trigger the cancel button click which has @click handler
+                    const cancelButton = document.querySelector('#addCategoryForm').closest('.relative').querySelector('button[type="button"]');
+                    if (cancelButton) {
+                        cancelButton.click();
+                    }
                     
                     // Show success notification
                     const notification = document.createElement('div');
@@ -371,5 +458,51 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Image Preview Functions
+function previewNewImage(event) {
+    const input = event.target;
+    const preview = document.getElementById('newImagePreview');
+    const previewImg = document.getElementById('newPreviewImg');
+
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+
+        // Check file size (5MB max)
+        if (file.size > 5 * 1024 * 1024) {
+            alert('File size must be less than 5MB');
+            input.value = '';
+            preview.classList.add('hidden');
+            return;
+        }
+
+        // Check file type
+        const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+        if (!validTypes.includes(file.type)) {
+            alert('Please upload a valid image file (JPG, PNG, or WebP)');
+            input.value = '';
+            preview.classList.add('hidden');
+            return;
+        }
+
+        // Show preview
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            preview.classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+    } else {
+        preview.classList.add('hidden');
+    }
+}
+
+function clearImagePreview() {
+    const input = document.getElementById('{{ form.image.id_for_label }}');
+    const preview = document.getElementById('newImagePreview');
+
+    input.value = '';
+    preview.classList.add('hidden');
+}
 </script>
 {% endblock %}

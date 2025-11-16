@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <h3 class="mb-3">Stock Control Reports</h3>
+  <ul>
+    <li><a href="{% url 'low_stock_report' %}">Low Stock & Reorder</a></li>
+    <li><a href="{% url 'inventory_valuation_report' %}">Inventory Valuation & Aging</a></li>
+  </ul>
+</div>
+{% endblock %}

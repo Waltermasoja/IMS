@@ -1,0 +1,287 @@
+{% extends 'base.html' %}
+{% block title %}Balance Sheet - IMS Pro{% endblock %}
+{% block content %}
+<div class="space-y-6 animate-fade-in">
+    <!-- Page Header -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Balance Sheet</h1>
+            <p class="text-gray-500 mt-1">Financial position as of {{ as_of_date|date:"F d, Y" }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{% url 'accounting:profit_loss_report' %}"
+               class="inline-flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl hover:from-purple-600 hover:to-purple-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
+                <i class="fas fa-chart-line"></i>
+                <span class="font-medium">P&L Report</span>
+            </a>
+            <a href="{% url 'reports_index' %}"
+               class="inline-flex items-center space-x-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
+                <i class="fas fa-arrow-left"></i>
+                <span class="font-medium">Back to Reports</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Date Filter -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <form method="get" class="flex items-end gap-4">
+            <div class="flex-1">
+                <label class="block text-sm font-semibold text-gray-700 mb-2">
+                    <i class="fas fa-calendar text-blue-500 mr-2"></i>As of Date
+                </label>
+                <input type="date"
+                       name="as_of_date"
+                       value="{{ as_of_date|date:'Y-m-d' }}"
+                       class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <button type="submit"
+                    class="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+                <i class="fas fa-sync mr-2"></i>Update
+            </button>
+        </form>
+    </div>
+
+    <!-- Balance Sheet Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- ASSETS -->
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="bg-gradient-to-r from-green-50 to-emerald-50 px-8 py-4 border-b border-gray-200">
+                <h2 class="text-xl font-bold text-gray-900">
+                    <i class="fas fa-money-bill-wave text-green-600 mr-2"></i>Assets
+                </h2>
+                <p class="text-xs text-gray-600 mt-1">What the business owns</p>
+            </div>
+            <div class="p-8">
+                <div class="space-y-4">
+                    <!-- Cash -->
+                    <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                                <i class="fas fa-dollar-sign text-green-600"></i>
+                            </div>
+                            <div>
+                                <p class="font-semibold text-gray-900">Cash</p>
+                                <p class="text-xs text-gray-500">Available funds</p>
+                            </div>
+                        </div>
+                        <span class="text-lg font-bold text-gray-900">${{ cash_balance|floatformat:2 }}</span>
+                    </div>
+
+                    <!-- Accounts Receivable -->
+                    <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                <i class="fas fa-file-invoice-dollar text-blue-600"></i>
+                            </div>
+                            <div>
+                                <p class="font-semibold text-gray-900">Accounts Receivable</p>
+                                <p class="text-xs text-gray-500">Money owed by customers</p>
+                            </div>
+                        </div>
+                        <span class="text-lg font-bold text-gray-900">${{ ar_balance|floatformat:2 }}</span>
+                    </div>
+
+                    <!-- Inventory -->
+                    <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                                <i class="fas fa-boxes text-purple-600"></i>
+                            </div>
+                            <div>
+                                <p class="font-semibold text-gray-900">Inventory</p>
+                                <p class="text-xs text-gray-500">Stock on hand</p>
+                            </div>
+                        </div>
+                        <span class="text-lg font-bold text-gray-900">${{ inventory_value|floatformat:2 }}</span>
+                    </div>
+
+                    <!-- Total Assets -->
+                    <div class="flex items-center justify-between py-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl px-4 mt-4">
+                        <p class="text-lg font-bold text-gray-900">
+                            <i class="fas fa-equals mr-2 text-green-600"></i>TOTAL ASSETS
+                        </p>
+                        <span class="text-2xl font-bold text-green-600">${{ total_assets|floatformat:2 }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LIABILITIES & EQUITY -->
+        <div class="space-y-6">
+            <!-- LIABILITIES -->
+            <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+                <div class="bg-gradient-to-r from-red-50 to-orange-50 px-8 py-4 border-b border-gray-200">
+                    <h2 class="text-xl font-bold text-gray-900">
+                        <i class="fas fa-credit-card text-red-600 mr-2"></i>Liabilities
+                    </h2>
+                    <p class="text-xs text-gray-600 mt-1">What the business owes</p>
+                </div>
+                <div class="p-8">
+                    <div class="space-y-4">
+                        <!-- Unearned Revenue -->
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fas fa-hourglass-half text-blue-600"></i>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-gray-900">Customer Deposits</p>
+                                    <p class="text-xs text-gray-500">Layby deposits</p>
+                                </div>
+                            </div>
+                            <span class="text-lg font-bold text-gray-900">${{ unearned_revenue|floatformat:2 }}</span>
+                        </div>
+
+                        <!-- Accounts Payable -->
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fas fa-file-invoice text-red-600"></i>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-gray-900">Accounts Payable</p>
+                                    <p class="text-xs text-gray-500">Money owed to suppliers</p>
+                                </div>
+                            </div>
+                            <span class="text-lg font-bold text-gray-900">${{ accounts_payable|floatformat:2 }}</span>
+                        </div>
+
+                        <!-- Total Liabilities -->
+                        <div class="flex items-center justify-between py-4 bg-gradient-to-r from-red-50 to-orange-50 rounded-xl px-4 mt-4">
+                            <p class="text-lg font-bold text-gray-900">
+                                <i class="fas fa-equals mr-2 text-red-600"></i>TOTAL LIABILITIES
+                            </p>
+                            <span class="text-2xl font-bold text-red-600">${{ total_liabilities|floatformat:2 }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EQUITY -->
+            <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+                <div class="bg-gradient-to-r from-indigo-50 to-blue-50 px-8 py-4 border-b border-gray-200">
+                    <h2 class="text-xl font-bold text-gray-900">
+                        <i class="fas fa-balance-scale text-indigo-600 mr-2"></i>Owner's Equity
+                    </h2>
+                    <p class="text-xs text-gray-600 mt-1">Net worth of the business</p>
+                </div>
+                <div class="p-8">
+                    <div class="space-y-4">
+                        <!-- Retained Earnings -->
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fas fa-piggy-bank text-indigo-600"></i>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-gray-900">Retained Earnings</p>
+                                    <p class="text-xs text-gray-500">Historical profits</p>
+                                </div>
+                            </div>
+                            <span class="text-lg font-bold text-gray-900">${{ retained_earnings|floatformat:2 }}</span>
+                        </div>
+
+                        <!-- Current Period Profit -->
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                                    <i class="fas fa-chart-line text-green-600"></i>
+                                </div>
+                                <div>
+                                    <p class="font-semibold text-gray-900">Current Period Profit</p>
+                                    <p class="text-xs text-gray-500">This period's earnings</p>
+                                </div>
+                            </div>
+                            <span class="text-lg font-bold {% if period_profit >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                                ${{ period_profit|floatformat:2 }}
+                            </span>
+                        </div>
+
+                        <!-- Total Equity -->
+                        <div class="flex items-center justify-between py-4 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl px-4 mt-4">
+                            <p class="text-lg font-bold text-gray-900">
+                                <i class="fas fa-equals mr-2 text-indigo-600"></i>TOTAL EQUITY
+                            </p>
+                            <span class="text-2xl font-bold text-indigo-600">${{ owners_equity|floatformat:2 }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Accounting Equation Verification -->
+    <div class="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl p-6 text-white shadow-lg">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm font-medium opacity-90 mb-1">Accounting Equation Check</p>
+                <h3 class="text-2xl font-bold">Assets = Liabilities + Equity</h3>
+            </div>
+            <div class="text-right">
+                <p class="text-sm opacity-90 mb-1">Verification</p>
+                <div class="flex items-center space-x-2">
+                    <span class="text-xl font-bold">${{ total_assets|floatformat:2 }}</span>
+                    <i class="fas fa-equals"></i>
+                    <span class="text-xl font-bold">${{ total_liabilities|add:owners_equity|floatformat:2 }}</span>
+                    {% if total_assets == total_liabilities|add:owners_equity %}
+                        <i class="fas fa-check-circle text-green-300 text-2xl ml-2"></i>
+                    {% else %}
+                        <i class="fas fa-exclamation-triangle text-yellow-300 text-2xl ml-2"></i>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Insights -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Working Capital -->
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-hand-holding-usd text-blue-600 text-xl"></i>
+                </div>
+            </div>
+            <p class="text-sm font-medium text-gray-600 mb-1">Working Capital</p>
+            <h3 class="text-2xl font-bold text-gray-900">${{ cash_balance|add:ar_balance|add:inventory_value|floatformat:2 }}</h3>
+            <p class="text-xs text-gray-500 mt-1">Current assets available</p>
+        </div>
+
+        <!-- Debt Ratio -->
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-percentage text-orange-600 text-xl"></i>
+                </div>
+            </div>
+            <p class="text-sm font-medium text-gray-600 mb-1">Debt Ratio</p>
+            <h3 class="text-2xl font-bold text-gray-900">
+                {% if total_assets > 0 %}
+                    {{ total_liabilities|floatformat:0|add:0|mul:100|div:total_assets|floatformat:1 }}%
+                {% else %}
+                    0%
+                {% endif %}
+            </h3>
+            <p class="text-xs text-gray-500 mt-1">Liabilities / Assets</p>
+        </div>
+
+        <!-- Equity Ratio -->
+        <div class="bg-white rounded-2xl p-6 shadow-sm">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-12 h-12 bg-indigo-100 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-chart-pie text-indigo-600 text-xl"></i>
+                </div>
+            </div>
+            <p class="text-sm font-medium text-gray-600 mb-1">Equity Ratio</p>
+            <h3 class="text-2xl font-bold text-gray-900">
+                {% if total_assets > 0 %}
+                    {{ owners_equity|floatformat:0|add:0|mul:100|div:total_assets|floatformat:1 }}%
+                {% else %}
+                    0%
+                {% endif %}
+            </h3>
+            <p class="text-xs text-gray-500 mt-1">Equity / Assets</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

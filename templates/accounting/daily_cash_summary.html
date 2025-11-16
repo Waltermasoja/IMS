@@ -1,0 +1,218 @@
+{% extends 'base.html' %}
+
+{% block title %}Daily Cash Summary - {{ selected_date|date:"F d, Y" }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                    Daily Cash Summary
+                </h1>
+                <p class="text-gray-600 mt-1">{{ selected_date|date:"l, F d, Y" }}</p>
+            </div>
+            <form method="get" class="flex items-center gap-2">
+                <label class="text-sm font-medium text-gray-700">Date:</label>
+                <input type="date" name="date" value="{{ selected_date|date:'Y-m-d' }}"
+                       class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    Go
+                </button>
+            </form>
+        </div>
+
+        <!-- Alerts -->
+        {% if alerts %}
+        <div class="mb-6 space-y-3">
+            {% for alert in alerts %}
+            <div class="p-4 rounded-xl border-l-4
+                {% if alert.type == 'danger' %}bg-red-50 border-red-500 text-red-800
+                {% elif alert.type == 'warning' %}bg-yellow-50 border-yellow-500 text-yellow-800
+                {% elif alert.type == 'info' %}bg-blue-50 border-blue-500 text-blue-800
+                {% else %}bg-green-50 border-green-500 text-green-800{% endif %}">
+                <div class="flex justify-between items-center">
+                    <strong>{{ alert.message }}</strong>
+                    {% if alert.action_url %}
+                    <a href="{{ alert.action_url }}" class="px-3 py-1 bg-white rounded-lg text-sm font-medium hover:shadow-md transition-shadow">
+                        {{ alert.action_text }}
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Main Metrics -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <!-- Cash Receipts -->
+            <div class="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-green-500 hover:shadow-xl transition-shadow">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-semibold text-gray-600">Cash Receipts</h3>
+                    <i class="fas fa-arrow-down text-green-500"></i>
+                </div>
+                <p class="text-3xl font-bold text-gray-900">${{ total_receipts|floatformat:2 }}</p>
+                <p class="text-xs text-gray-500 mt-1">Money received today</p>
+            </div>
+
+            <!-- Cash Payments -->
+            <div class="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-red-500 hover:shadow-xl transition-shadow">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-semibold text-gray-600">Cash Payments</h3>
+                    <i class="fas fa-arrow-up text-red-500"></i>
+                </div>
+                <p class="text-3xl font-bold text-gray-900">${{ total_payments|floatformat:2 }}</p>
+                <p class="text-xs text-gray-500 mt-1">Money paid out today</p>
+            </div>
+
+            <!-- Net Cash Flow -->
+            <div class="bg-white rounded-2xl shadow-lg p-6 border-l-4 {% if net_cash_today >= 0 %}border-blue-500{% else %}border-orange-500{% endif %} hover:shadow-xl transition-shadow">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-semibold text-gray-600">Net Cash Flow</h3>
+                    <i class="fas fa-exchange-alt {% if net_cash_today >= 0 %}text-blue-500{% else %}text-orange-500{% endif %}"></i>
+                </div>
+                <p class="text-3xl font-bold text-gray-900">${{ net_cash_today|floatformat:2 }}</p>
+                <p class="text-xs text-gray-500 mt-1">
+                    {% if change_from_yesterday > 0 %}
+                    <i class="fas fa-arrow-up text-green-600"></i> ${{ change_from_yesterday|floatformat:2 }} vs yesterday
+                    {% elif change_from_yesterday < 0 %}
+                    <i class="fas fa-arrow-down text-red-600"></i> ${{ change_from_yesterday|floatformat:2 }} vs yesterday
+                    {% else %}
+                    Same as yesterday
+                    {% endif %}
+                </p>
+            </div>
+
+            <!-- Cash on Hand -->
+            <div class="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-lg p-6 text-white hover:shadow-xl transition-shadow">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-sm font-semibold opacity-90">Cash on Hand</h3>
+                    <i class="fas fa-wallet"></i>
+                </div>
+                <p class="text-3xl font-bold">${{ closing_balance|floatformat:2 }}</p>
+                <p class="text-xs opacity-80 mt-1">Started: ${{ opening_balance|floatformat:2 }}</p>
+            </div>
+        </div>
+
+        <!-- Sales Summary -->
+        <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+            <h2 class="text-lg font-bold text-gray-800 mb-4 flex items-center">
+                <i class="fas fa-chart-bar text-blue-600 mr-2"></i>
+                Sales Summary
+            </h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                <div class="text-center">
+                    <p class="text-sm text-gray-600 mb-1">Total Sales</p>
+                    <p class="text-2xl font-bold text-gray-900">${{ total_sales|floatformat:2 }}</p>
+                    <p class="text-xs text-gray-500">{{ sales_count }} transaction(s)</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-sm text-gray-600 mb-1">Cash Sales</p>
+                    <p class="text-2xl font-bold text-green-600">${{ sales_summary.cash.total|default:0|floatformat:2 }}</p>
+                    <p class="text-xs text-gray-500">{{ sales_summary.cash.count|default:0 }} sale(s)</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-sm text-gray-600 mb-1">Credit Sales</p>
+                    <p class="text-2xl font-bold text-orange-600">${{ sales_summary.credit.total|default:0|floatformat:2 }}</p>
+                    <p class="text-xs text-gray-500">{{ sales_summary.credit.count|default:0 }} sale(s)</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-sm text-gray-600 mb-1">Layby Sales</p>
+                    <p class="text-2xl font-bold text-purple-600">${{ sales_summary.layby.total|default:0|floatformat:2 }}</p>
+                    <p class="text-xs text-gray-500">{{ sales_summary.layby.count|default:0 }} sale(s)</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Receipts and Payments Details -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <!-- Cash Receipts Detail -->
+            <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+                <div class="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-4">
+                    <h3 class="font-bold text-lg">Cash Receipts Detail</h3>
+                </div>
+                <div class="p-6">
+                    {% if cash_receipts %}
+                    <div class="space-y-2 max-h-96 overflow-y-auto">
+                        {% for receipt in cash_receipts %}
+                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                            <div class="flex-1">
+                                <span class="inline-block px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded">
+                                    {{ receipt.category|default:"General" }}
+                                </span>
+                                <p class="text-sm text-gray-700 mt-1">{{ receipt.description|truncatewords:8 }}</p>
+                            </div>
+                            <p class="text-lg font-bold text-green-600">${{ receipt.receipt_amount|floatformat:2 }}</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
+                        <span class="font-bold text-gray-700">Total Receipts</span>
+                        <span class="text-xl font-bold text-green-600">${{ total_receipts|floatformat:2 }}</span>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-inbox fa-3x mb-3 opacity-50"></i>
+                        <p>No cash receipts recorded for this date.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Cash Payments Detail -->
+            <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+                <div class="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-4">
+                    <h3 class="font-bold text-lg">Cash Payments Detail</h3>
+                </div>
+                <div class="p-6">
+                    {% if cash_payments %}
+                    <div class="space-y-2 max-h-96 overflow-y-auto">
+                        {% for payment in cash_payments %}
+                        <div class="flex justify-between items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                            <div class="flex-1">
+                                <span class="inline-block px-2 py-1 bg-red-100 text-red-800 text-xs font-semibold rounded">
+                                    {{ payment.category|default:"General" }}
+                                </span>
+                                <p class="text-sm text-gray-700 mt-1">{{ payment.description|truncatewords:8 }}</p>
+                            </div>
+                            <p class="text-lg font-bold text-red-600">${{ payment.payment_amount|floatformat:2 }}</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-gray-200 flex justify-between items-center">
+                        <span class="font-bold text-gray-700">Total Payments</span>
+                        <span class="text-xl font-bold text-red-600">${{ total_payments|floatformat:2 }}</span>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-inbox fa-3x mb-3 opacity-50"></i>
+                        <p>No cash payments recorded for this date.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="bg-white rounded-2xl shadow-lg p-6">
+            <h3 class="font-bold text-gray-800 mb-4">Quick Actions</h3>
+            <div class="flex flex-wrap gap-3">
+                <a href="{% url 'accounting:cashbook_list' %}" class="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors font-medium">
+                    <i class="fas fa-book mr-2"></i>View Full Cashbook
+                </a>
+                <a href="{% url 'accounting:profit_loss_report' %}" class="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors font-medium">
+                    <i class="fas fa-chart-line mr-2"></i>Monthly P&L Report
+                </a>
+                <a href="{% url 'accounting:ar_invoice_list' %}" class="px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors font-medium">
+                    <i class="fas fa-file-invoice mr-2"></i>Customer Invoices
+                </a>
+                <a href="{% url 'accounting:expense_list' %}" class="px-4 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors font-medium">
+                    <i class="fas fa-receipt mr-2"></i>Expenses
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

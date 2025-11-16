@@ -14,6 +14,30 @@
                 </a>
             </div>
 
+            <!-- Product Image Section -->
+            <div class="row mb-4">
+                <div class="col-md-12">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            {% if inventory.image %}
+                                <img src="{{ inventory.image.url }}"
+                                     alt="{{ inventory.name }}"
+                                     class="img-fluid rounded shadow-sm"
+                                     style="max-height: 400px; object-fit: contain;">
+                            {% else %}
+                                <div class="p-5 bg-light rounded">
+                                    <i class="fas fa-box fa-5x text-muted"></i>
+                                    <p class="text-muted mt-3">No product image available</p>
+                                    <a href="{% url 'inventory_update' inventory.pk %}" class="btn btn-sm btn-primary mt-2">
+                                        <i class="fas fa-upload me-1"></i>Upload Image
+                                    </a>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="row">
                 <div class="col-md-6">
                     <table class="table table-sm">
@@ -61,7 +85,7 @@
 
             <div class="d-flex justify-content-between mt-4"></div>
                 <a class="btn btn-outline-success btn-sm" href="{% url 'make_sale' inventory.id %}">Make a Sale</a>
-                <a class="btn btn-outline-success btn-sm" href="{% url 'returnInventory' inventory.id %}">Record a Return</a>
+                
                 <a class="btn btn-outline-danger btn-sm" href="{% url 'delete_inventory' inventory.id %}">Delete Inventory</a>
             </div>
         </div>

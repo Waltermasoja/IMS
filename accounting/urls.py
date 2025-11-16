@@ -26,4 +26,24 @@ urlpatterns = [
     path('layby/', views.layby_list, name='layby_list'),
     path('layby/<int:plan_id>/', views.layby_detail, name='layby_detail'),
     path('layby/<int:plan_id>/payment/', views.layby_payment_add, name='layby_payment_add'),
+    path('layby/<int:plan_id>/fulfill/', views.layby_fulfill_action, name='layby_fulfill_action'),
+    path('layby/<int:plan_id>/cancel/', views.layby_cancel_action, name='layby_cancel_action'),
+
+    # Expenses
+    path('expenses/', views.expense_list, name='expense_list'),
+    path('expenses/add/', views.expense_add, name='expense_add'),
+
+    # AR Reports
+    path('reports/ar-aging/', views.ar_aging_report, name='ar_aging_report'),
+    path('reports/credit-utilization/', views.customer_credit_utilization_report, name='customer_credit_utilization_report'),
+    path('reports/credit-sales-summary/', views.credit_sales_summary_report, name='credit_sales_summary_report'),
+
+    # AP Reports
+    path('payables/', views.accounts_payable_list, name='accounts_payable_list'),
+
+    # Simple Business Reports
+    path('reports/daily-cash/', views.daily_cash_summary, name='daily_cash_summary'),
+    path('reports/profit-loss/', views.profit_loss_report, name='profit_loss_report'),
+    path('reports/balance-sheet/', views.balance_sheet, name='balance_sheet'),
+    path('reports/customer-statement/<int:customer_id>/', views.customer_statement, name='customer_statement'),
 ]

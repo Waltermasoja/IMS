@@ -7,6 +7,16 @@ import calendar
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django_resized import ResizedImageField
+from django.core.exceptions import ValidationError
+
+
+def validate_image_size(image):
+    """Validate uploaded image size (max 5MB)"""
+    max_size_mb = 5
+    if image.size > max_size_mb * 1024 * 1024:
+        raise ValidationError(f'Image file too large (max {max_size_mb}MB)')
+
 
 class UserProfile(models.Model):
     """Extended user profile for role-based access"""
@@ -50,6 +60,9 @@ class UserProfile(models.Model):
     
     @property
     def can_access_pos(self):
+        # Admins and superusers always have POS access
+        if self.is_admin or self.user.is_superuser:
+            return True
         return self.can_make_sales and self.role in ['admin', 'manager', 'sales']
 
 @receiver(post_save, sender=User)
@@ -84,19 +97,56 @@ def save_user_profile(sender, instance, **kwargs):
             can_manage_users=instance.is_superuser
         )
 
+
+@receiver(post_save, sender='inventory.Inventory')
+def auto_generate_thumbnail(sender, instance, created, **kwargs):
+    """Auto-generate thumbnail from main image if main image exists but thumbnail doesn't"""
+    if instance.image and not instance.thumbnail:
+        # Copy the main image to thumbnail field - django-resized will handle resizing
+        instance.thumbnail = instance.image
+        # Use update to avoid triggering another post_save signal
+        Inventory.objects.filter(pk=instance.pk).update(thumbnail=instance.thumbnail)
+
 class Inventory(models.Model):
-    bought_from = models.CharField(max_length=100)
+    bought_from = models.CharField(max_length=100, blank=True, null=True)
     name = models.CharField(max_length=100)
     product_code = models.CharField(max_length=20, unique=True, blank=True, help_text="Unique product code for quick lookup")
-    purchase_price = models.DecimalField(max_digits=10, decimal_places=2)
-    selling_price = models.DecimalField(max_digits=10, decimal_places=2)
-    quantity_in_Stock = models.IntegerField()
+    purchase_price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True, default=0)
+    selling_price = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True, default=0)
+    quantity_in_Stock = models.IntegerField(default=0)
     description = models.TextField(blank=True)
-    label = models.CharField(max_length=50)
-    size = models.CharField(max_length=20)
-    weight = models.DecimalField(max_digits=8, decimal_places=2, default=0, help_text="Weight in kg")
+    label = models.CharField(max_length=50, blank=True, null=True)
+    size = models.CharField(max_length=20, blank=True, null=True)
+    weight = models.DecimalField(max_digits=8, decimal_places=2, default=0, blank=True, null=True, help_text="Weight in kg")
     on_sale = models.BooleanField(default=True)
     category = models.ForeignKey('Inventory_category', on_delete=models.SET_NULL, null=True, blank=True)
+
+    # Product Images - Optimized for performance
+    image = ResizedImageField(
+        size=[800, 600],
+        quality=85,
+        force_format='JPEG',
+        upload_to='products/images/',
+        blank=True,
+        null=True,
+        validators=[validate_image_size],
+        help_text="Main product image (auto-resized to 800x600, max 5MB)"
+    )
+    thumbnail = ResizedImageField(
+        size=[200, 200],
+        quality=80,
+        crop=['smart', 'smart'],  # Smart crop - detects faces/objects for better framing
+        force_format='JPEG',
+        upload_to='products/thumbnails/',
+        blank=True,
+        null=True,
+        help_text="Thumbnail (auto-generated 200x200 with smart crop)"
+    )
+    
+    # Stock control fields
+    reorder_point = models.IntegerField(default=0, help_text="Minimum stock level before reordering")
+    lead_time_days = models.IntegerField(default=0, help_text="Supplier lead time in days")
+
     source_import_order = models.ForeignKey('ImportOrder', on_delete=models.SET_NULL, null=True, blank=True,
                                            related_name='created_products',
                                            help_text="Import order this product was first added from")
@@ -176,6 +226,10 @@ class Sales(models.Model):
     payment_method = models.CharField(max_length=10, choices=PAYMENT_METHODS, default='CASH')
     recorded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='sales_made')
     customer = models.ForeignKey('Customer', on_delete=models.SET_NULL, null=True, blank=True, related_name='sales')
+
+    # Accounting posting flags
+    posted_to_gl = models.BooleanField(default=False)
+    posted_to_cashbook = models.BooleanField(default=False)
 
     @property
     def can_be_returned(self):
@@ -599,11 +653,19 @@ class ImportExpense(models.Model):
     created_date = models.DateTimeField(auto_now_add=True)
     
     def save(self, *args, **kwargs):
-        # Auto-calculate local amount if not provided
-        if not self.amount_in_local:
-            if self.currency == self.import_order.currency:
-                self.exchange_rate = self.import_order.exchange_rate
-            self.amount_in_local = self.amount * self.exchange_rate
+        # Smart exchange rate and local amount calculation
+
+        # If expense currency matches order currency, use order's exchange rate
+        if self.currency == self.import_order.currency:
+            self.exchange_rate = self.import_order.exchange_rate
+        # If expense is in USD (base currency), exchange rate should be 1.0
+        elif self.currency == 'USD':
+            self.exchange_rate = Decimal('1.0')
+        # Otherwise, keep the manually entered exchange rate
+
+        # Calculate local amount
+        self.amount_in_local = self.amount * self.exchange_rate
+
         super().save(*args, **kwargs)
     
     def __str__(self):
@@ -700,28 +762,56 @@ class ImportOrderItem(models.Model):
         
         return inventory_item
     
-    def receive_goods(self, quantity_received=None, update_stock=True):
-        """Mark goods as received and optionally update stock"""
+    def receive_goods(self, quantity_received=None, update_stock=True, update_selling_price=None):
+        """
+        Mark goods as received and optionally update stock
+
+        Args:
+            quantity_received: Quantity to receive (defaults to ordered quantity)
+            update_stock: Whether to update stock levels
+            update_selling_price: Optional bool to control selling price update
+                                 - None (default): Auto-update for NEW products only
+                                 - True: Force update selling price
+                                 - False: Never update selling price
+        """
         if quantity_received is None:
             quantity_received = self.quantity
-        
+
         self.quantity_received = quantity_received
         self.is_received = True
         self.received_date = timezone.now().date()
-        
+
+        # Determine if this is a new product being created
+        is_new_product_creation = self.is_new_product and not self.inventory_item
+
         # Create inventory item if it's a new product
-        if self.is_new_product and not self.inventory_item:
+        if is_new_product_creation:
             self.create_inventory_item()
-        
+
         # Update stock if requested
         if update_stock and self.inventory_item:
             self.inventory_item.quantity_in_Stock += quantity_received
-            
-            # Update prices with landed cost
+
+            # SMART PRICING LOGIC (Option B):
+            # Always update purchase price to landed cost
             self.inventory_item.purchase_price = self.landed_cost_per_unit
-            self.inventory_item.selling_price = self.suggested_selling_price
+
+            # Selling price update logic:
+            if update_selling_price is True:
+                # Explicitly requested to update
+                self.inventory_item.selling_price = self.suggested_selling_price
+            elif update_selling_price is False:
+                # Explicitly requested NOT to update
+                pass  # Keep existing selling price
+            elif update_selling_price is None:
+                # Default behavior: Only update for NEW products
+                if is_new_product_creation:
+                    self.inventory_item.selling_price = self.suggested_selling_price
+                # For existing products, keep current selling price
+                # Suggested price is available via self.suggested_selling_price property
+
             self.inventory_item.save()
-            
+
             # Create stock movement
             StockMovement.objects.create(
                 inventory_item=self.inventory_item,
@@ -729,7 +819,7 @@ class ImportOrderItem(models.Model):
                 quantity=quantity_received,
                 reason=f'Import Order {self.import_order.order_number} received'
             )
-        
+
         self.save()
     
     def __str__(self):

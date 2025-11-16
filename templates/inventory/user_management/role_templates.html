@@ -1,0 +1,290 @@
+{% extends 'base.html' %}
+
+{% block title %}Role Templates - IMS{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8">
+        <a href="{% url 'user_management_dashboard' %}"
+           class="inline-flex items-center text-blue-600 hover:text-blue-700 mb-4">
+            <i class="fas fa-arrow-left mr-2"></i>
+            Back to User Management
+        </a>
+        <h1 class="text-3xl font-bold text-gray-900 flex items-center">
+            <i class="fas fa-layer-group mr-3 text-blue-600"></i>
+            Role Templates
+        </h1>
+        <p class="text-gray-600 mt-2">Pre-configured permission sets for different user roles</p>
+    </div>
+
+    <!-- Role Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {% for role_key, role_info in roles.items %}
+        <div class="bg-white rounded-xl shadow-md overflow-hidden border-l-4 border-{{ role_info.color }}-500">
+            <div class="p-6">
+                <!-- Role Header -->
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-3">
+                        <div class="w-12 h-12 bg-{{ role_info.color }}-100 rounded-lg flex items-center justify-center">
+                            <i class="fas
+                                {% if role_key == 'admin' %}fa-user-shield
+                                {% elif role_key == 'manager' %}fa-user-tie
+                                {% elif role_key == 'sales' %}fa-shopping-cart
+                                {% else %}fa-eye
+                                {% endif %}
+                                text-{{ role_info.color }}-600 text-xl"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-bold text-gray-900">{{ role_info.name }}</h2>
+                            <span class="px-2 py-1 text-xs rounded-full bg-{{ role_info.color }}-100 text-{{ role_info.color }}-700">
+                                {{ role_key|upper }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Description -->
+                <p class="text-gray-600 mb-6">{{ role_info.description }}</p>
+
+                <!-- Permissions List -->
+                <div>
+                    <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                        <i class="fas fa-key mr-2 text-{{ role_info.color }}-600"></i>
+                        Included Permissions
+                    </h3>
+                    <div class="space-y-2">
+                        {% for perm in role_info.permissions %}
+                        <div class="flex items-center space-x-2 p-2 bg-{{ role_info.color }}-50 rounded-lg">
+                            <i class="fas fa-check-circle text-{{ role_info.color }}-600 text-sm"></i>
+                            <span class="text-sm text-gray-700">
+                                {% if perm == 'can_make_sales' %}
+                                    Make Sales Transactions
+                                {% elif perm == 'can_process_returns' %}
+                                    Process Returns & Refunds
+                                {% elif perm == 'can_apply_discounts' %}
+                                    Apply Sales Discounts
+                                {% elif perm == 'can_view_reports' %}
+                                    View Reports & Analytics
+                                {% elif perm == 'can_manage_inventory' %}
+                                    Manage Inventory & Products
+                                {% elif perm == 'can_manage_suppliers' %}
+                                    Manage Suppliers & Orders
+                                {% elif perm == 'can_manage_users' %}
+                                    Manage Users & Permissions
+                                {% endif %}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Use Case Examples -->
+                <div class="mt-6 pt-6 border-t border-gray-200">
+                    <h3 class="text-sm font-semibold text-gray-700 mb-2">Best For:</h3>
+                    <div class="text-sm text-gray-600">
+                        {% if role_key == 'admin' %}
+                            <ul class="list-disc list-inside space-y-1">
+                                <li>Business owners</li>
+                                <li>IT administrators</li>
+                                <li>System managers</li>
+                            </ul>
+                        {% elif role_key == 'manager' %}
+                            <ul class="list-disc list-inside space-y-1">
+                                <li>Store managers</li>
+                                <li>Operations supervisors</li>
+                                <li>Department heads</li>
+                            </ul>
+                        {% elif role_key == 'sales' %}
+                            <ul class="list-disc list-inside space-y-1">
+                                <li>Cashiers</li>
+                                <li>Sales associates</li>
+                                <li>Customer service reps</li>
+                            </ul>
+                        {% else %}
+                            <ul class="list-disc list-inside space-y-1">
+                                <li>Accountants (read-only)</li>
+                                <li>Auditors</li>
+                                <li>External consultants</li>
+                            </ul>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Permission Matrix -->
+    <div class="mt-8 bg-white rounded-xl shadow-md overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-900 flex items-center">
+                <i class="fas fa-table mr-2 text-blue-600"></i>
+                Permission Comparison Matrix
+            </h2>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Permission</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Admin</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Manager</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Sales</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Viewer</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <i class="fas fa-cash-register mr-2 text-green-600"></i>
+                            Make Sales
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-times-circle text-gray-300 text-lg"></i>
+                        </td>
+                    </tr>
+                    <tr class="bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <i class="fas fa-undo mr-2 text-blue-600"></i>
+                            Process Returns
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-times-circle text-gray-300 text-lg"></i>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <i class="fas fa-percentage mr-2 text-amber-600"></i>
+                            Apply Discounts
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-times-circle text-gray-300 text-lg"></i>
+                        </td>
+                    </tr>
+                    <tr class="bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <i class="fas fa-chart-bar mr-2 text-blue-600"></i>
+                            View Reports
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-times-circle text-gray-300 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <i class="fas fa-boxes mr-2 text-purple-600"></i>
+                            Manage Inventory
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-times-circle text-gray-300 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-times-circle text-gray-300 text-lg"></i>
+                        </td>
+                    </tr>
+                    <tr class="bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <i class="fas fa-truck mr-2 text-orange-600"></i>
+                            Manage Suppliers
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-times-circle text-gray-300 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-times-circle text-gray-300 text-lg"></i>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                            <i class="fas fa-users-cog mr-2 text-red-600"></i>
+                            Manage Users
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-check-circle text-green-600 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-times-circle text-gray-300 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-times-circle text-gray-300 text-lg"></i>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <i class="fas fa-times-circle text-gray-300 text-lg"></i>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Information Banner -->
+    <div class="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">
+        <div class="flex items-start space-x-4">
+            <div class="flex-shrink-0">
+                <i class="fas fa-info-circle text-blue-600 text-2xl"></i>
+            </div>
+            <div>
+                <h3 class="text-lg font-semibold text-gray-900 mb-2">About Role Templates</h3>
+                <p class="text-gray-700 mb-3">
+                    Role templates provide pre-configured permission sets for common user types. When creating a new user,
+                    simply select their role and the appropriate permissions will be automatically assigned.
+                </p>
+                <p class="text-gray-700">
+                    You can still customize individual permissions after selecting a role. Changes to role templates
+                    do not affect existing users.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

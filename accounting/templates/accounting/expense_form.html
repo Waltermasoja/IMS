@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% load form_tags %}
+{% block title %}Add Expense{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-6">
+  <h1 class="text-2xl font-bold text-gray-900">Add Expense</h1>
+  <div class="bg-white rounded-2xl p-6 shadow-sm">
+    <form method="POST" class="space-y-4">
+      {% csrf_token %}
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium">Date</label>
+          {{ form.date|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium">Category</label>
+          {{ form.category|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium">Description</label>
+          {{ form.description|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium">Amount</label>
+          {{ form.amount|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium">GL Account</label>
+          {{ form.gl_account|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium">Payment Method</label>
+          {{ form.payment_method|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+        <div>
+          <label class="block text-sm font-medium">Reference</label>
+          {{ form.reference|addclass:'w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl' }}
+        </div>
+      </div>
+      <div class="flex justify-end gap-3">
+        <a href="{% url 'accounting:expense_list' %}" class="px-4 py-2 bg-white border border-gray-200 rounded-xl">Cancel</a>
+        <button class="px-4 py-2 bg-blue-600 text-white rounded-xl">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

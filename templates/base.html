@@ -5,16 +5,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Inventory Management System{% endblock %}</title>
-    
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- Alpine.js for interactivity -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-    
+
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    
+
     <!-- Custom Tailwind Config -->
     <script>
         tailwind.config = {
@@ -57,56 +57,71 @@
             }
         }
     </script>
-    
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
-        
+
         body {
             font-family: 'Inter', sans-serif;
         }
-        
+
         /* Custom scrollbar */
         ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
         }
-        
+
         ::-webkit-scrollbar-track {
             background: #f1f5f9;
         }
-        
+
         ::-webkit-scrollbar-thumb {
             background: #cbd5e1;
             border-radius: 4px;
         }
-        
+
         ::-webkit-scrollbar-thumb:hover {
             background: #94a3b8;
         }
-        
+
         /* Glass morphism effect */
         .glass {
             background: rgba(255, 255, 255, 0.7);
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.3);
         }
-        
+
         /* Smooth transitions */
         * {
             transition-property: background-color, border-color, color, fill, stroke, opacity, box-shadow, transform;
             transition-duration: 200ms;
             transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
         }
+
+        /* Submenu styles */
+        .submenu-enter {
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+        }
+        .submenu-enter-active {
+            max-height: 500px;
+            opacity: 1;
+            transition: all 0.3s ease-out;
+        }
+        [x-cloak] {
+            display: none !important;
+        }
     </style>
-    
+
     {% block extra_css %}{% endblock %}
 </head>
 
-<body class="h-full bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100" x-data="{ sidebarOpen: false, mobileMenuOpen: false }" x-init="sidebarOpen = window.innerWidth >= 1024; window.addEventListener('resize', () => { sidebarOpen = window.innerWidth >= 1024 })" :class="mobileMenuOpen ? 'overflow-hidden' : ''" @keydown.escape.window="mobileMenuOpen = false">
+<body class="h-full bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100" x-data="{ sidebarOpen: false, mobileMenuOpen: false, stockReportsOpen: false, stockAdjustmentsOpen: false, salesReportsOpen: false }" x-init="sidebarOpen = window.innerWidth >= 1024; window.addEventListener('resize', () => { sidebarOpen = window.innerWidth >= 1024 })" :class="mobileMenuOpen ? 'overflow-hidden' : ''" @keydown.escape.window="mobileMenuOpen = false">
     {% if user.is_authenticated %}
     <!-- Mobile menu button -->
     <div class="lg:hidden fixed top-4 left-4 z-50">
-        <button @click="mobileMenuOpen = !mobileMenuOpen" 
+        <button @click="mobileMenuOpen = !mobileMenuOpen"
                 class="p-2 rounded-lg bg-white shadow-lg text-gray-700 hover:bg-gray-50" aria-label="Toggle menu" :aria-expanded="mobileMenuOpen.toString()">
             <i class="fas fa-bars text-xl"></i>
         </button>
@@ -116,7 +131,7 @@
     <div x-show="mobileMenuOpen" x-transition.opacity class="fixed inset-0 z-40 bg-black/40 lg:hidden" @click="mobileMenuOpen = false"></div>
 
     <!-- Sidebar -->
-    <aside 
+    <aside
         x-show="sidebarOpen || mobileMenuOpen"
         x-transition:enter="transition ease-out duration-300"
         x-transition:enter-start="-translate-x-full"
@@ -145,153 +160,591 @@
             </div>
 
             <!-- Navigation -->
-            <nav class="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+            <nav class="flex-1 px-4 py-6 space-y-2 overflow-y-auto" id="sidebar-nav">
+                <!-- Role Badge -->
+                <div class="mb-4 px-4" x-show="sidebarOpen">
+                    <div class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold
+                        {% if user.profile.is_admin %}bg-red-100 text-red-700
+                        {% elif user.profile.role == 'manager' %}bg-blue-100 text-blue-700
+                        {% elif user.profile.role == 'sales' %}bg-green-100 text-green-700
+                        {% else %}bg-gray-100 text-gray-700{% endif %}">
+                        <i class="fas fa-user-shield mr-1.5"></i>
+                        <span>{{ user.profile.get_role_display }}</span>
+                    </div>
+                </div>
+
                 {% if user.profile.role == 'sales' %}
-                <!-- Sales Person Menu -->
-                <a href="{% url 'pos_interface' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-green-50 hover:text-green-600 group"
+                <!-- ==================== SALES PERSON VIEW ==================== -->
+                <!-- Focused on POS operations and customer service -->
+
+                <!-- INVENTORY (For Sales - Product Lookup) -->
+                <div class="mb-4">
+                    <p class="px-4 text-xs font-semibold text-blue-600 uppercase tracking-wider mb-3" :class="sidebarOpen ? 'block' : 'hidden'">Inventory</p>
+
+                    <a href="{% url 'inventory' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-boxes w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Product Lookup</span>
+                    </a>
+
+                    <a href="{% url 'search' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-search w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Search Products</span>
+                    </a>
+                </div>
+
+                <!-- SALES -->
+                <div class="pt-4 mt-4 border-t border-gray-200">
+                    <p class="px-4 text-xs font-semibold text-green-600 uppercase tracking-wider mb-3" :class="sidebarOpen ? 'block' : 'hidden'">Sales</p>
+
+                    <a href="{% url 'pos_interface' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-green-50 hover:text-green-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-cash-register w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Point of Sale</span>
+                    </a>
+
+                    <a href="{% url 'sales_summary' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-receipt w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">My Sales</span>
+                    </a>
+
+                    <a href="{% url 'customers_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-users w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Customers</span>
+                    </a>
+                </div>
+
+                <!-- ACCOUNTING (Layby only for sales) -->
+                <div class="pt-4 mt-4 border-t border-gray-200">
+                    <p class="px-4 text-xs font-semibold text-purple-600 uppercase tracking-wider mb-3" :class="sidebarOpen ? 'block' : 'hidden'">Payments</p>
+
+                    <a href="{% url 'accounting:layby_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-purple-50 hover:text-purple-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-hand-holding-usd w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Layby Plans</span>
+                    </a>
+                </div>
+
+                {% elif user.profile.role == 'manager' %}
+                <!-- ==================== MANAGER VIEW ==================== -->
+                <!-- Operational focus with inventory, sales, and basic reporting -->
+
+                <!-- Dashboard -->
+                <a href="{% url 'dashboard' %}"
+                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:text-blue-600 group"
                    @click="mobileMenuOpen=false">
-                    <i class="fas fa-cash-register w-5 text-center group-hover:scale-110 transition-transform"></i>
-                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Point of Sale</span>
-                </a>
-                
-                <a href="{% url 'sales_summary' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
-                   @click="mobileMenuOpen=false">
-                    <i class="fas fa-receipt w-5 text-center group-hover:scale-110 transition-transform"></i>
-                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">My Sales</span>
-                </a>
-                
-                <a href="{% url 'inventory' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
-                   @click="mobileMenuOpen=false">
-                    <i class="fas fa-search w-5 text-center group-hover:scale-110 transition-transform"></i>
-                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Product Lookup</span>
+                    <i class="fas fa-tachometer-alt w-5 text-center group-hover:scale-110 transition-transform"></i>
+                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Dashboard</span>
                 </a>
 
-                <a href="{% url 'accounting:layby_list' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-purple-50 hover:text-purple-600 group"
-                   @click="mobileMenuOpen=false">
-                    <i class="fas fa-hand-holding-usd w-5 text-center group-hover:scale-110 transition-transform"></i>
-                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Layby Plans</span>
-                </a>
-                
+                <!-- ==================== INVENTORY (MANAGER - PRIMARY) ==================== -->
+                <div class="pt-4 mt-4 border-t-2 border-blue-200 bg-gradient-to-br from-blue-50/50 to-indigo-50/50 -mx-4 px-4 pb-2 rounded-lg">
+                    <div class="flex items-center justify-between mb-3">
+                        <p class="px-4 text-xs font-bold text-blue-700 uppercase tracking-wider" :class="sidebarOpen ? 'block' : 'hidden'">Inventory</p>
+                    </div>
+
+                    <a href="{% url 'inventory' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-100 hover:text-blue-700 font-medium group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-boxes w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">All Products</span>
+                    </a>
+
+                    {% if user.profile.can_manage_inventory %}
+                    <a href="{% url 'add_inventory' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-100 hover:text-blue-700 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-plus-circle w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Add Product</span>
+                    </a>
+
+                    <a href="{% url 'inventory_category' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-100 hover:text-blue-700 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-tags w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Categories</span>
+                    </a>
+
+                    <!-- Stock Reports -->
+                    <div>
+                        <button @click="stockReportsOpen = !stockReportsOpen"
+                                class="flex items-center justify-between w-full px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-100 hover:text-blue-700 group">
+                            <div class="flex items-center space-x-3">
+                                <i class="fas fa-chart-bar w-5 text-center group-hover:scale-110 transition-transform"></i>
+                                <span :class="sidebarOpen ? 'inline' : 'hidden'">Stock Reports</span>
+                            </div>
+                            <i class="fas fa-chevron-down text-xs transition-transform" :class="stockReportsOpen ? 'rotate-180' : ''" x-show="sidebarOpen"></i>
+                        </button>
+                        <div x-show="stockReportsOpen && sidebarOpen" x-transition class="ml-8 mt-1 space-y-1">
+                            <a href="{% url 'inventory_valuation_report' %}"
+                               class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                               @click="mobileMenuOpen=false">
+                                <i class="fas fa-gem w-4"></i>
+                                <span>Stock Valuation</span>
+                            </a>
+                            <a href="{% url 'low_stock_report' %}"
+                               class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                               @click="mobileMenuOpen=false">
+                                <i class="fas fa-exclamation-triangle w-4"></i>
+                                <span>Low Stock Alert</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Stock Adjustments -->
+                    <div>
+                        <button @click="stockAdjustmentsOpen = !stockAdjustmentsOpen"
+                                class="flex items-center justify-between w-full px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-100 hover:text-blue-700 group">
+                            <div class="flex items-center space-x-3">
+                                <i class="fas fa-sync-alt w-5 text-center group-hover:scale-110 transition-transform"></i>
+                                <span :class="sidebarOpen ? 'inline' : 'hidden'">Stock Adjustments</span>
+                            </div>
+                            <i class="fas fa-chevron-down text-xs transition-transform" :class="stockAdjustmentsOpen ? 'rotate-180' : ''" x-show="sidebarOpen"></i>
+                        </button>
+                        <div x-show="stockAdjustmentsOpen && sidebarOpen" x-transition class="ml-8 mt-1 space-y-1">
+                            <a href="{% url 'return_summary' %}"
+                               class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                               @click="mobileMenuOpen=false">
+                                <i class="fas fa-undo w-4"></i>
+                                <span>Returns</span>
+                            </a>
+                            <a href="{% url 'obsolete_summary' %}"
+                               class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                               @click="mobileMenuOpen=false">
+                                <i class="fas fa-times-circle w-4"></i>
+                                <span>Damages</span>
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <a href="{% url 'search' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-100 hover:text-blue-700 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-search w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Search</span>
+                    </a>
+                </div>
+
+                <!-- ==================== SALES & POS (MANAGER) ==================== -->
+                <div class="pt-4 mt-4 border-t border-gray-200">
+                    <p class="px-4 text-xs font-semibold text-green-600 uppercase tracking-wider mb-3" :class="sidebarOpen ? 'block' : 'hidden'">Sales & POS</p>
+
+                    <a href="{% url 'pos_interface' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-green-50 hover:text-green-600 font-medium group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-cash-register w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Point of Sale</span>
+                    </a>
+
+                    <a href="{% url 'sales_summary' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-chart-line w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Sales Summary</span>
+                    </a>
+
+                    <a href="{% url 'customers_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-users w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Customers</span>
+                    </a>
+
+                    {% if user.profile.can_view_reports %}
+                    <div>
+                        <button @click="salesReportsOpen = !salesReportsOpen"
+                                class="flex items-center justify-between w-full px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group">
+                            <div class="flex items-center space-x-3">
+                                <i class="fas fa-file-alt w-5 text-center group-hover:scale-110 transition-transform"></i>
+                                <span :class="sidebarOpen ? 'inline' : 'hidden'">Sales Reports</span>
+                            </div>
+                            <i class="fas fa-chevron-down text-xs transition-transform" :class="salesReportsOpen ? 'rotate-180' : ''" x-show="sidebarOpen"></i>
+                        </button>
+                        <div x-show="salesReportsOpen && sidebarOpen" x-transition class="ml-8 mt-1 space-y-1">
+                            <a href="{% url 'sales_report_simple' %}"
+                               class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                               @click="mobileMenuOpen=false">
+                                <i class="fas fa-chart-simple w-4"></i>
+                                <span>Sales Report</span>
+                            </a>
+                            <a href="{% url 'sales_report_detailed' %}"
+                               class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                               @click="mobileMenuOpen=false">
+                                <i class="fas fa-list w-4"></i>
+                                <span>Detailed Sales</span>
+                            </a>
+                            <a href="{% url 'sales_report_export_csv' %}"
+                               class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                               @click="mobileMenuOpen=false">
+                                <i class="fas fa-download w-4"></i>
+                                <span>Export Data</span>
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- ==================== PROCUREMENT (MANAGER) ==================== -->
+                {% if user.profile.can_manage_suppliers %}
+                <div class="pt-4 mt-4 border-t border-gray-200">
+                    <p class="px-4 text-xs font-semibold text-orange-600 uppercase tracking-wider mb-3" :class="sidebarOpen ? 'block' : 'hidden'">Procurement</p>
+
+                    <a href="{% url 'import_orders_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-orange-50 hover:text-orange-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-ship w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Import Orders</span>
+                    </a>
+
+                    <a href="{% url 'suppliers_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-orange-50 hover:text-orange-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-industry w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Suppliers</span>
+                    </a>
+                </div>
+                {% endif %}
+
+                <!-- ==================== FINANCE (MANAGER - Limited) ==================== -->
+                <div class="pt-4 mt-4 border-t border-gray-200">
+                    <p class="px-4 text-xs font-semibold text-purple-600 uppercase tracking-wider mb-3" :class="sidebarOpen ? 'block' : 'hidden'">Finance</p>
+
+                    <a href="{% url 'accounting:cashbook_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-green-50 hover:text-green-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-book w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Cashbook</span>
+                    </a>
+
+                    <a href="{% url 'accounting:ar_invoice_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-amber-50 hover:text-amber-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-file-invoice-dollar w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Receivables</span>
+                    </a>
+
+                    <a href="{% url 'accounting:layby_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-purple-50 hover:text-purple-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-hand-holding-usd w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Layby Plans</span>
+                    </a>
+
+                    <a href="{% url 'accounting:expense_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-red-50 hover:text-red-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-money-bill-wave w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Expenses</span>
+                    </a>
+                </div>
+
+                <!-- ==================== REPORTS (MANAGER) ==================== -->
+                {% if user.profile.can_view_reports %}
+                <div class="pt-4 mt-4 border-t border-gray-200">
+                    <p class="px-4 text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-3" :class="sidebarOpen ? 'block' : 'hidden'">Reports</p>
+
+                    <a href="{% url 'reports_index' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-chart-pie w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">All Reports</span>
+                    </a>
+                </div>
+                {% endif %}
+
                 {% else %}
-                <!-- Admin/Manager Menu -->
-                <a href="{% url 'dashboard' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
+                <!-- ==================== ADMIN VIEW ==================== -->
+                <!-- Full system access with all administrative features -->
+
+                <!-- Dashboard -->
+                <a href="{% url 'dashboard' %}"
+                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-gradient-to-r hover:from-red-50 hover:to-pink-50 hover:text-red-600 group"
                    @click="mobileMenuOpen=false">
                     <i class="fas fa-chart-line w-5 text-center group-hover:scale-110 transition-transform"></i>
                     <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Dashboard</span>
-                </a>
-                
-                <a href="{% url 'pos_interface' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-green-50 hover:text-green-600 group"
-                   @click="mobileMenuOpen=false">
-                    <i class="fas fa-cash-register w-5 text-center group-hover:scale-110 transition-transform"></i>
-                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Point of Sale</span>
-                </a>
-                
-                <a href="{% url 'inventory' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
-                   @click="mobileMenuOpen=false">
-                    <i class="fas fa-box w-5 text-center group-hover:scale-110 transition-transform"></i>
-                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Inventory</span>
-                </a>
-                
-                <a href="{% url 'sales_summary' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
-                   @click="mobileMenuOpen=false">
-                    <i class="fas fa-dollar-sign w-5 text-center group-hover:scale-110 transition-transform"></i>
-                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Sales</span>
+                    {% if user.is_superuser %}
+                    <span class="ml-auto px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded" :class="sidebarOpen ? 'inline' : 'hidden'">Super</span>
+                    {% endif %}
                 </a>
 
-                <a href="{% url 'customers_list' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 group"
-                   @click="mobileMenuOpen=false">
-                    <i class="fas fa-user-friends w-5 text-center group-hover:scale-110 transition-transform"></i>
-                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Customers</span>
-                </a>
+                <!-- ==================== INVENTORY (PRIMARY SECTION) ==================== -->
+                <div class="pt-4 mt-4 border-t-2 border-blue-200 bg-gradient-to-br from-blue-50/50 to-indigo-50/50 -mx-4 px-4 pb-2 rounded-lg">
+                    <div class="flex items-center justify-between mb-3">
+                        <p class="px-4 text-xs font-bold text-blue-700 uppercase tracking-wider" :class="sidebarOpen ? 'block' : 'hidden'">Inventory</p>
+                    </div>
 
-                <a href="{% url 'accounting:ar_invoice_list' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-amber-50 hover:text-amber-600 group"
-                   @click="mobileMenuOpen=false">
-                    <i class="fas fa-file-invoice-dollar w-5 text-center group-hover:scale-110 transition-transform"></i>
-                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Accounts Receivable</span>
-                </a>
-
-                <a href="{% url 'accounting:layby_list' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-purple-50 hover:text-purple-600 group"
-                   @click="mobileMenuOpen=false">
-                    <i class="fas fa-hand-holding-usd w-5 text-center group-hover:scale-110 transition-transform"></i>
-                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Layby Plans</span>
-                </a>
-
-                <a href="{% url 'accounting:cashbook_list' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-green-50 hover:text-green-600 group"
-                   @click="mobileMenuOpen=false">
-                    <i class="fas fa-book w-5 text-center group-hover:scale-110 transition-transform"></i>
-                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Cashbook</span>
-                </a>
-
-                <a href="{% url 'accounting:cashflow_report' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-teal-50 hover:text-teal-600 group"
-                   @click="mobileMenuOpen=false">
-                    <i class="fas fa-chart-line w-5 text-center group-hover:scale-110 transition-transform"></i>
-                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Cashflow</span>
-                </a>
-                {% endif %}
-                
-                {% if user.profile.can_manage_inventory %}
-                <a href="{% url 'inventory_category' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
-                   @click="mobileMenuOpen=false">
-                    <i class="fas fa-tags w-5 text-center group-hover:scale-110 transition-transform"></i>
-                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Categories</span>
-                </a>
-                {% endif %}
-
-                {% if user.profile.can_manage_suppliers %}
-                <a href="{% url 'import_orders_list' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
-                   @click="mobileMenuOpen=false">
-                    <i class="fas fa-ship w-5 text-center group-hover:scale-110 transition-transform"></i>
-                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Import Orders</span>
-                </a>
-
-                <a href="{% url 'suppliers_list' %}" 
-                   class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
-                   @click="mobileMenuOpen=false">
-                    <i class="fas fa-industry w-5 text-center group-hover:scale-110 transition-transform"></i>
-                    <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Suppliers</span>
-                </a>
-                {% endif %}
-
-                {% if user.profile.can_view_reports %}
-                <div class="pt-4 mt-4 border-t border-gray-200">
-                    <p class="px-4 text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3" :class="sidebarOpen ? 'block' : 'hidden'">Reports</p>
-                    
-                    <a href="{% url 'return_summary' %}" 
-                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
+                    <a href="{% url 'inventory' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-100 hover:text-blue-700 font-medium group"
                        @click="mobileMenuOpen=false">
-                        <i class="fas fa-undo w-5 text-center group-hover:scale-110 transition-transform"></i>
-                        <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Returns</span>
+                        <i class="fas fa-boxes w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">All Products</span>
                     </a>
 
-                    <a href="{% url 'sales_report_simple' %}" 
-                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
+                    {% if user.profile.can_manage_inventory %}
+                    <a href="{% url 'add_inventory' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-100 hover:text-blue-700 group"
                        @click="mobileMenuOpen=false">
-                        <i class="fas fa-chart-bar w-5 text-center group-hover:scale-110 transition-transform"></i>
-                        <span class="font-medium" :class="sidebarOpen ? 'inline' : 'hidden'">Sales (Simple)</span>
+                        <i class="fas fa-plus-circle w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Add Product</span>
+                    </a>
+
+                    <a href="{% url 'inventory_category' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-100 hover:text-blue-700 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-tags w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Categories</span>
+                    </a>
+
+                    <!-- Stock Reports Submenu -->
+                    <div>
+                        <button @click="stockReportsOpen = !stockReportsOpen"
+                                class="flex items-center justify-between w-full px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-100 hover:text-blue-700 group">
+                            <div class="flex items-center space-x-3">
+                                <i class="fas fa-chart-bar w-5 text-center group-hover:scale-110 transition-transform"></i>
+                                <span :class="sidebarOpen ? 'inline' : 'hidden'">Stock Reports</span>
+                            </div>
+                            <i class="fas fa-chevron-down text-xs transition-transform" :class="stockReportsOpen ? 'rotate-180' : ''" x-show="sidebarOpen"></i>
+                        </button>
+                        <div x-show="stockReportsOpen && sidebarOpen" x-transition class="ml-8 mt-1 space-y-1">
+                            <a href="{% url 'inventory_valuation_report' %}"
+                               class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                               @click="mobileMenuOpen=false">
+                                <i class="fas fa-gem w-4"></i>
+                                <span>Stock Valuation</span>
+                            </a>
+                            <a href="{% url 'low_stock_report' %}"
+                               class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                               @click="mobileMenuOpen=false">
+                                <i class="fas fa-exclamation-triangle w-4"></i>
+                                <span>Low Stock Alert</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Stock Adjustments Submenu -->
+                    <div>
+                        <button @click="stockAdjustmentsOpen = !stockAdjustmentsOpen"
+                                class="flex items-center justify-between w-full px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-100 hover:text-blue-700 group">
+                            <div class="flex items-center space-x-3">
+                                <i class="fas fa-sync-alt w-5 text-center group-hover:scale-110 transition-transform"></i>
+                                <span :class="sidebarOpen ? 'inline' : 'hidden'">Stock Adjustments</span>
+                            </div>
+                            <i class="fas fa-chevron-down text-xs transition-transform" :class="stockAdjustmentsOpen ? 'rotate-180' : ''" x-show="sidebarOpen"></i>
+                        </button>
+                        <div x-show="stockAdjustmentsOpen && sidebarOpen" x-transition class="ml-8 mt-1 space-y-1">
+                            <a href="{% url 'return_summary' %}"
+                               class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                               @click="mobileMenuOpen=false">
+                                <i class="fas fa-undo w-4"></i>
+                                <span>Returns</span>
+                            </a>
+                            <a href="{% url 'obsolete_summary' %}"
+                               class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                               @click="mobileMenuOpen=false">
+                                <i class="fas fa-times-circle w-4"></i>
+                                <span>Damages</span>
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <a href="{% url 'search' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-100 hover:text-blue-700 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-search w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Search</span>
                     </a>
                 </div>
+
+                <!-- ==================== SALES & POS (SECONDARY) ==================== -->
+                <div class="pt-4 mt-4 border-t border-gray-200">
+                    <p class="px-4 text-xs font-semibold text-green-600 uppercase tracking-wider mb-3" :class="sidebarOpen ? 'block' : 'hidden'">Sales & POS</p>
+
+                    <a href="{% url 'pos_interface' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-green-50 hover:text-green-600 font-medium group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-cash-register w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Point of Sale</span>
+                    </a>
+
+                    <a href="{% url 'sales_summary' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-chart-line w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Sales Summary</span>
+                    </a>
+
+                    <a href="{% url 'customers_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-users w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Customers</span>
+                    </a>
+
+                    <!-- Sales Reports Submenu -->
+                    {% if user.profile.can_view_reports %}
+                    <div>
+                        <button @click="salesReportsOpen = !salesReportsOpen"
+                                class="flex items-center justify-between w-full px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group">
+                            <div class="flex items-center space-x-3">
+                                <i class="fas fa-file-alt w-5 text-center group-hover:scale-110 transition-transform"></i>
+                                <span :class="sidebarOpen ? 'inline' : 'hidden'">Sales Reports</span>
+                            </div>
+                            <i class="fas fa-chevron-down text-xs transition-transform" :class="salesReportsOpen ? 'rotate-180' : ''" x-show="sidebarOpen"></i>
+                        </button>
+                        <div x-show="salesReportsOpen && sidebarOpen" x-transition class="ml-8 mt-1 space-y-1">
+                            <a href="{% url 'sales_report_simple' %}"
+                               class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                               @click="mobileMenuOpen=false">
+                                <i class="fas fa-chart-simple w-4"></i>
+                                <span>Sales Report</span>
+                            </a>
+                            <a href="{% url 'sales_report_detailed' %}"
+                               class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                               @click="mobileMenuOpen=false">
+                                <i class="fas fa-list w-4"></i>
+                                <span>Detailed Sales</span>
+                            </a>
+                            <a href="{% url 'sales_report_export_csv' %}"
+                               class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-blue-50 hover:text-blue-600"
+                               @click="mobileMenuOpen=false">
+                                <i class="fas fa-download w-4"></i>
+                                <span>Export Data</span>
+                            </a>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- ==================== PROCUREMENT ==================== -->
+                {% if user.profile.can_manage_suppliers %}
+                <div class="pt-4 mt-4 border-t border-gray-200">
+                    <p class="px-4 text-xs font-semibold text-orange-600 uppercase tracking-wider mb-3" :class="sidebarOpen ? 'block' : 'hidden'">Procurement</p>
+
+                    <a href="{% url 'import_orders_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-orange-50 hover:text-orange-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-ship w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Import Orders</span>
+                    </a>
+
+                    <a href="{% url 'suppliers_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-orange-50 hover:text-orange-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-industry w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Suppliers</span>
+                    </a>
+                </div>
+                {% endif %}
+
+                <!-- ==================== FINANCE & ACCOUNTING ==================== -->
+                <div class="pt-4 mt-4 border-t border-gray-200">
+                    <p class="px-4 text-xs font-semibold text-purple-600 uppercase tracking-wider mb-3" :class="sidebarOpen ? 'block' : 'hidden'">Finance</p>
+
+                    <a href="{% url 'accounting:cashbook_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-green-50 hover:text-green-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-book w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Cashbook</span>
+                    </a>
+
+                    <a href="{% url 'accounting:cashflow_report' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-teal-50 hover:text-teal-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-chart-area w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Cashflow</span>
+                    </a>
+
+                    <a href="{% url 'accounting:ar_invoice_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-amber-50 hover:text-amber-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-file-invoice-dollar w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Receivables</span>
+                    </a>
+
+                    <a href="{% url 'accounting:layby_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-purple-50 hover:text-purple-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-hand-holding-usd w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Layby Plans</span>
+                    </a>
+
+                    <a href="{% url 'accounting:expense_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-red-50 hover:text-red-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-money-bill-wave w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Expenses</span>
+                    </a>
+
+                    <!-- Bank Reconciliation - Admin Only -->
+                    <a href="{% url 'accounting:bank_reconciliation_list' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-blue-50 hover:text-blue-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-university w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Bank Reconciliation</span>
+                        <span class="ml-auto px-2 py-0.5 bg-red-100 text-red-600 text-xs rounded" :class="sidebarOpen ? 'inline' : 'hidden'">Admin</span>
+                    </a>
+                </div>
+
+                <!-- ==================== SYSTEM ADMINISTRATION (ADMIN ONLY) ==================== -->
+                {% if user.profile.can_manage_users or user.is_superuser %}
+                <div class="pt-4 mt-4 border-t-2 border-red-200">
+                    <p class="px-4 text-xs font-semibold text-red-600 uppercase tracking-wider mb-3" :class="sidebarOpen ? 'block' : 'hidden'">⚙️ Administration</p>
+
+                    <a href="{% url 'user_management_dashboard' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-red-50 hover:text-red-600 font-medium group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-users-cog w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">User Management</span>
+                        <span class="ml-auto px-2 py-0.5 bg-gradient-to-r from-red-500 to-red-600 text-white text-xs rounded" :class="sidebarOpen ? 'inline' : 'hidden'">New</span>
+                    </a>
+
+                    <a href="/admin/"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-red-50 hover:text-red-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-cog w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Django Admin</span>
+                    </a>
+
+                    <a href="/admin/inventory/userprofile/"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-red-50 hover:text-red-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-id-badge w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">Advanced Permissions</span>
+                    </a>
+                </div>
+                {% endif %}
+
+                <!-- ==================== REPORTS & ANALYTICS ==================== -->
+                {% if user.profile.can_view_reports %}
+                <div class="pt-4 mt-4 border-t border-gray-200">
+                    <p class="px-4 text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-3" :class="sidebarOpen ? 'block' : 'hidden'">Reports</p>
+
+                    <a href="{% url 'reports_index' %}"
+                       class="flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-700 hover:bg-indigo-50 hover:text-indigo-600 group"
+                       @click="mobileMenuOpen=false">
+                        <i class="fas fa-chart-pie w-5 text-center group-hover:scale-110 transition-transform"></i>
+                        <span :class="sidebarOpen ? 'inline' : 'hidden'">All Reports</span>
+                    </a>
+                </div>
+                {% endif %}
                 {% endif %}
             </nav>
 
             <!-- User section -->
             <div class="p-4 border-t border-gray-200" x-data="{ userMenuOpen: false }">
                 <div class="relative">
-                    <button @click="userMenuOpen = !userMenuOpen" 
+                    <button @click="userMenuOpen = !userMenuOpen"
                             class="flex items-center space-x-3 w-full px-4 py-3 rounded-xl hover:bg-gray-50 transition-colors">
                         <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
                             <span class="text-white font-semibold text-sm">{{ user.username|slice:":1"|upper }}</span>
@@ -302,9 +755,9 @@
                         </div>
                         <i class="fas fa-chevron-down text-gray-400 text-sm" :class="sidebarOpen ? 'block' : 'hidden'"></i>
                     </button>
-                    
+
                     <!-- User dropdown -->
-                    <div x-show="userMenuOpen" 
+                    <div x-show="userMenuOpen"
                          @click.away="userMenuOpen = false"
                          x-transition
                          class="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-xl shadow-xl border border-gray-100 py-2">
@@ -328,31 +781,41 @@
         <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-200">
             <div class="flex items-center justify-between h-20 px-4 lg:px-8">
                 <div class="flex items-center space-x-4">
-                    <button @click="sidebarOpen = !sidebarOpen" 
+                    <button @click="sidebarOpen = !sidebarOpen"
                             class="hidden lg:block p-2 rounded-lg hover:bg-gray-100 text-gray-600">
                         <i class="fas fa-bars"></i>
                     </button>
-                    
+
                     <!-- Search -->
                     <div class="relative">
-                        <input type="search" 
-                               placeholder="Search products..." 
-                               class="w-64 xl:w-96 px-4 py-2 pl-10 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                        <form action="{% url 'search_results' %}" method="get">
+                            <input type="search"
+                                   name="q"
+                                   placeholder="Search products..."
+                                   class="w-64 xl:w-96 px-4 py-2 pl-10 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                        </form>
                     </div>
                 </div>
 
-                <div class="flex items-center space-x-4">
-                    <!-- Notifications -->
-                    <button class="relative p-2 rounded-lg hover:bg-gray-100 text-gray-600">
-                        <i class="fas fa-bell text-lg"></i>
-                        <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                    </button>
-                    
-                    <!-- Quick actions -->
+                <div class="flex items-center space-x-3">
+                    <!-- Low Stock Notification -->
+                    <a href="{% url 'low_stock_report' %}" class="relative p-2 rounded-lg hover:bg-gray-100 text-gray-600 group" title="Low Stock Alerts">
+                        <i class="fas fa-bell text-lg group-hover:text-amber-500"></i>
+                        <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                    </a>
+
+                    <!-- Quick Action: New Sale -->
+                    <a href="{% url 'pos_interface' %}"
+                       class="hidden sm:flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg hover:from-green-600 hover:to-green-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
+                        <i class="fas fa-cash-register"></i>
+                        <span class="font-medium">New Sale</span>
+                    </a>
+
+                    <!-- Quick Action: Add Product -->
                     {% if user.profile.can_manage_inventory or user.profile.role == 'manager' or user.profile.is_admin %}
-                    <a href="{% url 'add_inventory' %}" 
-                       class="hidden sm:flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
+                    <a href="{% url 'add_inventory' %}"
+                       class="hidden md:flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
                         <i class="fas fa-plus"></i>
                         <span class="font-medium">Add Product</span>
                     </a>
@@ -365,14 +828,14 @@
         {% if messages %}
         <div class="px-4 lg:px-8 py-4" x-data="{ show: true }">
             {% for message in messages %}
-            <div x-show="show" 
+            <div x-show="show"
                  x-transition
-                 class="flex items-center justify-between p-4 mb-3 rounded-xl {% if message.tags == 'success' %}bg-green-50 border border-green-200 text-green-800{% elif message.tags == 'error' %}bg-red-50 border border-red-200 text-red-800{% elif message.tags == 'warning' %}bg-yellow-50 border border-yellow-200 text-yellow-800{% else %}bg-blue-50 border border-blue-200 text-blue-800{% endif %}">
-                <div class="flex items-center space-x-3">
-                    <i class="fas {% if message.tags == 'success' %}fa-check-circle{% elif message.tags == 'error' %}fa-exclamation-circle{% elif message.tags == 'warning' %}fa-exclamation-triangle{% else %}fa-info-circle{% endif %}"></i>
-                    <span class="font-medium">{{ message }}</span>
+                 class="flex items-start justify-between p-4 mb-3 rounded-xl {% if message.tags == 'success' %}bg-green-50 border border-green-200 text-green-800{% elif message.tags == 'error' %}bg-red-50 border border-red-200 text-red-800{% elif message.tags == 'warning' %}bg-yellow-50 border border-yellow-200 text-yellow-800{% else %}bg-blue-50 border border-blue-200 text-blue-800{% endif %}">
+                <div class="flex items-start space-x-3 flex-1">
+                    <i class="fas {% if message.tags == 'success' %}fa-check-circle{% elif message.tags == 'error' %}fa-exclamation-circle{% elif message.tags == 'warning' %}fa-exclamation-triangle{% else %}fa-info-circle{% endif %} mt-0.5"></i>
+                    <div class="font-medium flex-1">{{ message|safe }}</div>
                 </div>
-                <button @click="show = false" class="text-current opacity-50 hover:opacity-100">
+                <button @click="show = false" class="text-current opacity-50 hover:opacity-100 ml-4 flex-shrink-0">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -388,5 +851,115 @@
     {% endif %}
 
     {% block extra_js %}{% endblock %}
+    
+    <script>
+        // Preserve sidebar scroll position
+        (function() {
+            const sidebar = document.getElementById('sidebar-nav');
+            if (!sidebar) return;
+
+            // Restore sidebar scroll position on page load
+            const savedSidebarScroll = sessionStorage.getItem('sidebarScrollPosition');
+            if (savedSidebarScroll) {
+                sidebar.scrollTop = parseInt(savedSidebarScroll);
+            }
+
+            // Save sidebar scroll position when scrolling
+            let sidebarScrollTimeout;
+            sidebar.addEventListener('scroll', function() {
+                clearTimeout(sidebarScrollTimeout);
+                sidebarScrollTimeout = setTimeout(function() {
+                    sessionStorage.setItem('sidebarScrollPosition', sidebar.scrollTop.toString());
+                }, 100);
+            }, { passive: true });
+
+            // Save sidebar scroll position before navigating
+            document.addEventListener('click', function(e) {
+                const link = e.target.closest('a[href]');
+                if (link && link.href) {
+                    try {
+                        const url = new URL(link.href, window.location.origin);
+                        // Only handle internal links
+                        if (url.origin === window.location.origin) {
+                            sessionStorage.setItem('sidebarScrollPosition', sidebar.scrollTop.toString());
+                        }
+                    } catch (err) {
+                        // Invalid URL, ignore
+                    }
+                }
+            }, true);
+        })();
+
+        // Preserve main page scroll position when navigating within the same page
+        (function() {
+            // Save scroll position periodically
+            let scrollTimeout;
+            function saveScrollPosition() {
+                const scrollPos = window.pageYOffset || document.documentElement.scrollTop;
+                const currentPath = window.location.pathname + window.location.search;
+                sessionStorage.setItem('scrollPosition_' + currentPath, scrollPos.toString());
+            }
+
+            // Save scroll position on scroll (debounced)
+            window.addEventListener('scroll', function() {
+                clearTimeout(scrollTimeout);
+                scrollTimeout = setTimeout(saveScrollPosition, 150);
+            }, { passive: true });
+
+            // Save scroll position before navigation
+            document.addEventListener('click', function(e) {
+                const link = e.target.closest('a[href]');
+                if (link && link.href) {
+                    try {
+                        const url = new URL(link.href, window.location.origin);
+                        // Only handle internal links
+                        if (url.origin === window.location.origin && !url.hash) {
+                            saveScrollPosition();
+                        }
+                    } catch (err) {
+                        // Invalid URL, ignore
+                    }
+                }
+            }, true);
+
+            // Restore scroll position on page load
+            window.addEventListener('load', function() {
+                const currentPath = window.location.pathname + window.location.search;
+                const savedScroll = sessionStorage.getItem('scrollPosition_' + currentPath);
+
+                if (savedScroll) {
+                    // Small delay to ensure page is fully rendered
+                    setTimeout(function() {
+                        const scrollPos = parseInt(savedScroll);
+                        if (scrollPos > 0) {
+                            window.scrollTo({
+                                top: scrollPos,
+                                behavior: 'auto' // Use 'auto' for instant, 'smooth' for animated
+                            });
+                        }
+                    }, 50);
+                } else {
+                    // If no saved position, ensure we're at the top
+                    window.scrollTo(0, 0);
+                }
+            });
+
+            // Clean up old scroll positions (keep only last 10 pages)
+            try {
+                const keys = Object.keys(sessionStorage).filter(k => k.startsWith('scrollPosition_'));
+                if (keys.length > 10) {
+                    // Remove oldest entries (simple approach: remove all except current)
+                    const currentPath = window.location.pathname + window.location.search;
+                    keys.forEach(function(key) {
+                        if (key !== 'scrollPosition_' + currentPath) {
+                            sessionStorage.removeItem(key);
+                        }
+                    });
+                }
+            } catch (err) {
+                // Ignore errors
+            }
+        })();
+    </script>
 </body>
 </html>

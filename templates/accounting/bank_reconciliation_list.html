@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+
+{% block title %}Bank Reconciliation{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                    Bank Reconciliation
+                </h1>
+                <p class="text-gray-600 mt-1">Reconcile bank statements with cashbook entries</p>
+            </div>
+            <a href="{% url 'accounting:bank_reconciliation_add' %}" class="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-shadow font-medium">
+                <i class="fas fa-plus mr-2"></i>New Reconciliation
+            </a>
+        </div>
+
+        <!-- Reconciliation History -->
+        <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4">
+                <h2 class="font-bold text-lg">Reconciliation History</h2>
+            </div>
+            <div class="p-6">
+                {% if reconciliations %}
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr class="text-left text-sm font-semibold text-gray-700">
+                                <th class="py-3 px-4">Month</th>
+                                <th class="py-3 px-4 text-right">Opening Balance</th>
+                                <th class="py-3 px-4 text-right">Closing Balance</th>
+                                <th class="py-3 px-4 text-right">Bank Statement</th>
+                                <th class="py-3 px-4 text-right">Difference</th>
+                                <th class="py-3 px-4">Status</th>
+                                <th class="py-3 px-4">Created</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            {% for recon in reconciliations %}
+                            <tr class="hover:bg-gray-50 transition-colors">
+                                <td class="py-3 px-4 font-semibold text-gray-900">{{ recon.month|date:"F Y" }}</td>
+                                <td class="py-3 px-4 text-right">${{ recon.opening_balance|floatformat:2 }}</td>
+                                <td class="py-3 px-4 text-right">${{ recon.closing_balance|floatformat:2 }}</td>
+                                <td class="py-3 px-4 text-right">${{ recon.bank_statement_balance|floatformat:2 }}</td>
+                                <td class="py-3 px-4 text-right {% if recon.difference == 0 %}text-green-600{% else %}text-orange-600{% endif %} font-semibold">
+                                    ${{ recon.difference|floatformat:2 }}
+                                </td>
+                                <td class="py-3 px-4">
+                                    {% if recon.reconciled %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                                        <i class="fas fa-check-circle mr-1"></i> Reconciled
+                                    </span>
+                                    {% else %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+                                        <i class="fas fa-clock mr-1"></i> Pending
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td class="py-3 px-4 text-gray-600">{{ recon.created_date|date:"M d, Y" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-12">
+                    <i class="fas fa-balance-scale text-gray-300 text-6xl mb-4"></i>
+                    <p class="text-gray-500 mb-6">No bank reconciliations yet.</p>
+                    <a href="{% url 'accounting:bank_reconciliation_add' %}" class="inline-block px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-shadow font-medium">
+                        <i class="fas fa-plus mr-2"></i>Create First Reconciliation
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Info Card -->
+        <div class="mt-6 bg-blue-50 border-l-4 border-blue-500 rounded-lg p-6">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-info-circle text-blue-500 text-2xl"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-sm font-semibold text-blue-800 mb-2">About Bank Reconciliation</h3>
+                    <p class="text-sm text-blue-700">
+                        Bank reconciliation helps you match your internal cashbook records with your bank statement.
+                        Any differences should be investigated and resolved to ensure accurate financial records.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

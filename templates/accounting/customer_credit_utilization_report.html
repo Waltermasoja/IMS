@@ -1,0 +1,171 @@
+{% extends 'base.html' %}
+{% block title %}Customer Credit Utilization - IMS Pro{% endblock %}
+{% block content %}
+<div class="space-y-6 animate-fade-in">
+  <!-- Page Header -->
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-900">Customer Credit Utilization Report</h1>
+      <p class="text-gray-500 mt-1">Monitor credit limits and customer payment behavior</p>
+    </div>
+    <a href="{% url 'reports_index' %}"
+       class="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-xl hover:from-gray-600 hover:to-gray-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
+      <i class="fas fa-arrow-left"></i>
+      <span class="font-medium">Back to Reports</span>
+    </a>
+  </div>
+
+  <!-- Summary Stats -->
+  <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+    <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg">
+      <div class="flex items-center justify-between mb-3">
+        <h6 class="text-sm font-medium opacity-90">Total Credit Limit</h6>
+        <i class="fas fa-credit-card text-xl opacity-75"></i>
+      </div>
+      <h3 class="text-3xl font-bold mb-1">${{ total_credit_limit|floatformat:2 }}</h3>
+      <p class="text-sm opacity-90">Available to all customers</p>
+    </div>
+    <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
+      <div class="flex items-center justify-between mb-3">
+        <h6 class="text-sm font-medium opacity-90">Total Outstanding</h6>
+        <i class="fas fa-dollar-sign text-xl opacity-75"></i>
+      </div>
+      <h3 class="text-3xl font-bold mb-1">${{ total_outstanding|floatformat:2 }}</h3>
+      <p class="text-sm opacity-90">Currently utilized</p>
+    </div>
+    <div class="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl p-6 text-white shadow-lg">
+      <div class="flex items-center justify-between mb-3">
+        <h6 class="text-sm font-medium opacity-90">Over Limit</h6>
+        <i class="fas fa-exclamation-triangle text-xl opacity-75"></i>
+      </div>
+      <h3 class="text-3xl font-bold mb-1">{{ over_limit_count }}</h3>
+      <p class="text-sm opacity-90">customers</p>
+    </div>
+    <div class="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-2xl p-6 text-white shadow-lg">
+      <div class="flex items-center justify-between mb-3">
+        <h6 class="text-sm font-medium opacity-90">High Utilization ≥90%</h6>
+        <i class="fas fa-chart-line text-xl opacity-75"></i>
+      </div>
+      <h3 class="text-3xl font-bold mb-1">{{ high_utilization_count }}</h3>
+      <p class="text-sm opacity-90">customers</p>
+    </div>
+  </div>
+
+  <!-- Utilization Table -->
+  <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200">
+      <h3 class="text-lg font-semibold text-gray-900">Credit Limit Utilization by Customer</h3>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full">
+        <thead>
+          <tr class="bg-gray-50 border-b border-gray-200">
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Customer</th>
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Contact</th>
+            <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Credit Limit</th>
+            <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Current Balance</th>
+            <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Available Credit</th>
+            <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Utilization %</th>
+            <th class="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+            <th class="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+          {% for data in utilization_data %}
+          <tr class="hover:bg-gray-50 transition-colors {% if data.status == 'over_limit' %}bg-red-50{% elif data.status == 'high' %}bg-yellow-50{% endif %}">
+            <td class="px-6 py-4">
+              <div>
+                <p class="font-semibold text-gray-900">{{ data.customer.name }}</p>
+                <p class="text-sm text-gray-500">{{ data.customer.email|default:"No email" }}</p>
+              </div>
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-700">{{ data.customer.phone|default:"-" }}</td>
+            <td class="px-6 py-4 text-right text-sm text-gray-900">${{ data.credit_limit|floatformat:2 }}</td>
+            <td class="px-6 py-4 text-right text-sm font-semibold text-gray-900">${{ data.current_balance|floatformat:2 }}</td>
+            <td class="px-6 py-4 text-right text-sm">
+              {% if data.available_credit >= 0 %}
+                <span class="font-semibold text-green-600">${{ data.available_credit|floatformat:2 }}</span>
+              {% else %}
+                <span class="font-semibold text-red-600">${{ data.available_credit|floatformat:2 }}</span>
+              {% endif %}
+            </td>
+            <td class="px-6 py-4 text-right">
+              <span class="font-bold {% if data.utilization_percent >= 100 %}text-red-600{% elif data.utilization_percent >= 90 %}text-yellow-600{% else %}text-gray-900{% endif %}">
+                {{ data.utilization_percent }}%
+              </span>
+            </td>
+            <td class="px-6 py-4 text-center whitespace-nowrap">
+              {% if data.status == 'over_limit' %}
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                  OVER LIMIT
+                </span>
+              {% elif data.status == 'high' %}
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                  HIGH ≥90%
+                </span>
+              {% elif data.status == 'medium' %}
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  MEDIUM 75-89%
+                </span>
+              {% else %}
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  GOOD &lt;75%
+                </span>
+              {% endif %}
+            </td>
+            <td class="px-6 py-4 text-center">
+              <a href="{% url 'customer_update' data.customer.id %}"
+                 class="inline-flex items-center px-3 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium">
+                <i class="fas fa-edit mr-1"></i>Adjust Limit
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="8" class="px-6 py-16 text-center">
+              <i class="fas fa-users text-gray-300 text-6xl mb-4"></i>
+              <h3 class="text-xl font-semibold text-gray-900 mb-2">No customers with credit limits</h3>
+              <p class="text-gray-500">Set up customer credit limits to start tracking utilization</p>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Credit Management Guidelines -->
+  <div class="bg-blue-50 border border-blue-200 rounded-2xl p-6">
+    <div class="flex items-start space-x-3">
+      <div class="flex-shrink-0">
+        <i class="fas fa-info-circle text-2xl text-blue-600"></i>
+      </div>
+      <div class="flex-1">
+        <h4 class="text-lg font-semibold text-gray-900 mb-3">Credit Management Guidelines</h4>
+        <ul class="space-y-2 text-sm text-gray-700">
+          <li class="flex items-start">
+            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 mr-2 mt-0.5">OVER LIMIT</span>
+            <span>Customer has exceeded credit limit. <strong>Stop new credit sales immediately</strong> and contact for payment.</span>
+          </li>
+          <li class="flex items-start">
+            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 mr-2 mt-0.5">HIGH</span>
+            <span>Utilization ≥90%. <strong>Monitor closely</strong>, consider reducing limit or requiring payment before new sales.</span>
+          </li>
+          <li class="flex items-start">
+            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mr-2 mt-0.5">MEDIUM</span>
+            <span>Utilization 75-89%. Approaching limit, <strong>monitor for timely payments</strong>.</span>
+          </li>
+          <li class="flex items-start">
+            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 mr-2 mt-0.5">GOOD</span>
+            <span>Utilization &lt;75%. Healthy credit usage pattern.</span>
+          </li>
+          <li class="flex items-start">
+            <i class="fas fa-lightbulb text-yellow-500 mr-2 mt-1"></i>
+            <span><strong>Best Practice:</strong> Review credit limits quarterly and adjust based on payment history and business growth.</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

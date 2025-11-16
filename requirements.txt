@@ -1,34 +1,39 @@
-asgiref==3.7.2
-bootstrap4==0.1.0
-certifi==2024.2.2
-charset-normalizer==3.3.2
-colorama==0.4.6
-crispy-bootstrap4==2024.1
-dj-database-url==2.3.0
-Django==5.0.3
-django-crispy-forms==2.1
-django-heroku==0.3.1
-django-pandas==0.6.6
-django-resized==1.0.2
-django-tinymce==3.7.1
-gunicorn==21.2.0
-idna==3.6
+# Core Django Framework
+Django==5.0.6
+asgiref==3.8.1
+
+# Django Extensions & Utilities
+django-crispy-forms==2.4
+crispy-bootstrap4==2024.10
+django-resized==1.0.3
+django-tinymce==4.1.0
+django-pandas==0.6.7
+whitenoise==6.9.0
+
+# Database Support
+dj-database-url==2.2.0
 mysqlclient==2.2.6
-numpy==1.26.4
-packaging==23.2
+psycopg2==2.9.10
+
+# Production Server
+gunicorn==23.0.0
+
+# Image Processing
+Pillow==10.4.0
+
+# Data Processing & Analysis
 pandas==2.2.3
-pillow==10.2.0
-plotly==5.24.1
-psycopg2==2.9.9
+numpy==1.26.4
+plotly==6.0.0
+
+# Utilities
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
-pytz==2024.2
-requests==2.31.0
+pytz==2025.2
+requests==2.32.4
 requests-toolbelt==1.0.0
 six==1.17.0
-sqlparse==0.4.4
-tenacity==9.0.0
-typing_extensions==4.12.2
-tzdata==2024.1
-urllib3==2.2.1
-whitenoise==6.8.2
+sqlparse==0.5.3
+typing_extensions==4.13.2
+tzdata==2025.1
+urllib3==2.4.0

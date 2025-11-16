@@ -1,0 +1,291 @@
+{% extends 'base.html' %}
+
+{% block title %}Profit & Loss - {{ month_name }} {{ year }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-6">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+            <div>
+                <h1 class="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                    Profit & Loss Statement
+                </h1>
+                <p class="text-gray-600 mt-1">{{ month_name }} {{ year }}</p>
+            </div>
+            <form method="get" class="flex items-center gap-2">
+                <select name="month" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    {% for m in months %}
+                    <option value="{{ m.value }}" {% if m.value == month %}selected{% endif %}>{{ m.name }}</option>
+                    {% endfor %}
+                </select>
+                <select name="year" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    {% for y in years %}
+                    <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    Go
+                </button>
+            </form>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+            <div class="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-blue-500">
+                <h3 class="text-sm font-semibold text-gray-600 mb-2">Total Revenue</h3>
+                <p class="text-3xl font-bold text-blue-600">${{ total_revenue|floatformat:2 }}</p>
+                {% if revenue_change > 0 %}
+                <p class="text-xs text-green-600 mt-1">
+                    <i class="fas fa-arrow-up"></i> ${{ revenue_change|floatformat:2 }} vs last month
+                </p>
+                {% elif revenue_change < 0 %}
+                <p class="text-xs text-red-600 mt-1">
+                    <i class="fas fa-arrow-down"></i> ${{ revenue_change|floatformat:2 }} vs last month
+                </p>
+                {% else %}
+                <p class="text-xs text-gray-500 mt-1">Same as last month</p>
+                {% endif %}
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-green-500">
+                <h3 class="text-sm font-semibold text-gray-600 mb-2">Gross Profit</h3>
+                <p class="text-3xl font-bold text-green-600">${{ gross_profit|floatformat:2 }}</p>
+                <p class="text-xs text-gray-500 mt-1">{{ gross_margin }}% margin</p>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-lg p-6 border-l-4 border-orange-500">
+                <h3 class="text-sm font-semibold text-gray-600 mb-2">Total Expenses</h3>
+                <p class="text-3xl font-bold text-orange-600">${{ total_expenses|floatformat:2 }}</p>
+                <p class="text-xs text-gray-500 mt-1">Operating costs</p>
+            </div>
+
+            <div class="{% if net_profit >= 0 %}bg-gradient-to-br from-green-500 to-green-600{% else %}bg-gradient-to-br from-red-500 to-red-600{% endif %} rounded-2xl shadow-lg p-6 text-white">
+                <h3 class="text-sm font-semibold opacity-90 mb-2">Net Profit</h3>
+                <p class="text-3xl font-bold">${{ net_profit|floatformat:2 }}</p>
+                <p class="text-xs opacity-80 mt-1">{{ net_margin }}% net margin</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Main P&L Statement -->
+            <div class="lg:col-span-2">
+                <div class="bg-white rounded-2xl shadow-lg overflow-hidden">
+                    <div class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 flex justify-between items-center">
+                        <h2 class="font-bold text-lg">Income Statement</h2>
+                        {% if not show_details %}
+                        <a href="?month={{ month }}&year={{ year }}&details=true" class="px-3 py-1 bg-white/20 rounded-lg hover:bg-white/30 transition-colors text-sm">
+                            <i class="fas fa-eye mr-1"></i> Show Details
+                        </a>
+                        {% else %}
+                        <a href="?month={{ month }}&year={{ year }}" class="px-3 py-1 bg-white/20 rounded-lg hover:bg-white/30 transition-colors text-sm">
+                            <i class="fas fa-eye-slash mr-1"></i> Hide Details
+                        </a>
+                        {% endif %}
+                    </div>
+                    <div class="p-6">
+                        <table class="w-full">
+                            <tbody class="divide-y divide-gray-200">
+                                <!-- REVENUE -->
+                                <tr class="bg-blue-50">
+                                    <td colspan="2" class="py-2 px-4 font-bold text-gray-800">REVENUE</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-2 px-8 text-gray-700">Sales Revenue</td>
+                                    <td class="py-2 px-4 text-right font-semibold">${{ sales_revenue|floatformat:2 }}</td>
+                                </tr>
+                                {% if other_income > 0 %}
+                                <tr>
+                                    <td class="py-2 px-8 text-gray-700">Other Income</td>
+                                    <td class="py-2 px-4 text-right font-semibold">${{ other_income|floatformat:2 }}</td>
+                                </tr>
+                                {% endif %}
+                                <tr class="bg-blue-100">
+                                    <td class="py-2 px-4 font-bold text-gray-900">Total Revenue</td>
+                                    <td class="py-2 px-4 text-right font-bold text-blue-600">${{ total_revenue|floatformat:2 }}</td>
+                                </tr>
+
+                                <!-- COGS -->
+                                <tr class="bg-gray-50">
+                                    <td colspan="2" class="py-2 px-4 font-bold text-gray-800">COST OF GOODS SOLD</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-2 px-8 text-gray-700">Cost of Goods Sold</td>
+                                    <td class="py-2 px-4 text-right font-semibold">${{ cogs|floatformat:2 }}</td>
+                                </tr>
+                                <tr class="bg-green-100">
+                                    <td class="py-2 px-4 font-bold text-gray-900">Gross Profit</td>
+                                    <td class="py-2 px-4 text-right font-bold text-green-600">${{ gross_profit|floatformat:2 }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="py-1 px-8 text-sm text-gray-500 italic">Gross Margin</td>
+                                    <td class="py-1 px-4 text-right text-sm text-gray-500 italic">{{ gross_margin }}%</td>
+                                </tr>
+
+                                <!-- EXPENSES -->
+                                <tr class="bg-orange-50">
+                                    <td colspan="2" class="py-2 px-4 font-bold text-gray-800">OPERATING EXPENSES</td>
+                                </tr>
+                                {% if expense_categories %}
+                                    {% for cat in expense_categories %}
+                                    <tr>
+                                        <td class="py-2 px-8 text-gray-700">{{ cat.category }}</td>
+                                        <td class="py-2 px-4 text-right font-semibold">${{ cat.total|floatformat:2 }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td class="py-2 px-8 text-gray-500 italic" colspan="2">No expenses recorded</td>
+                                    </tr>
+                                {% endif %}
+                                <tr class="bg-orange-100">
+                                    <td class="py-2 px-4 font-bold text-gray-900">Total Operating Expenses</td>
+                                    <td class="py-2 px-4 text-right font-bold text-orange-600">${{ total_expenses|floatformat:2 }}</td>
+                                </tr>
+
+                                <!-- NET PROFIT -->
+                                <tr class="{% if net_profit >= 0 %}bg-green-200{% else %}bg-red-200{% endif %}">
+                                    <td class="py-3 px-4 font-bold text-gray-900">NET PROFIT (LOSS)</td>
+                                    <td class="py-3 px-4 text-right font-bold text-xl {% if net_profit >= 0 %}text-green-700{% else %}text-red-700{% endif %}">
+                                        ${{ net_profit|floatformat:2 }}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="py-1 px-8 text-sm text-gray-500 italic">Net Profit Margin</td>
+                                    <td class="py-1 px-4 text-right text-sm text-gray-500 italic">{{ net_margin }}%</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Drill-down Details -->
+                {% if show_details and detail_data %}
+                <div class="bg-white rounded-2xl shadow-lg p-6 mt-6">
+                    <h3 class="font-bold text-gray-800 mb-4">Detailed Breakdown</h3>
+
+                    {% if detail_data.sales_by_method %}
+                    <h4 class="text-sm font-semibold text-gray-600 mb-2">Sales by Payment Method</h4>
+                    <div class="grid grid-cols-3 gap-4 mb-6">
+                        {% for method in detail_data.sales_by_method %}
+                        <div class="p-3 bg-gray-50 rounded-lg">
+                            <span class="text-xs font-semibold text-blue-600">{{ method.payment_method }}</span>
+                            <p class="text-lg font-bold text-gray-900">${{ method.total|floatformat:2 }}</p>
+                            <p class="text-xs text-gray-500">{{ method.count }} sales</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    {% if detail_data.expense_details %}
+                    <h4 class="text-sm font-semibold text-gray-600 mb-2">Top Expenses</h4>
+                    <div class="space-y-2">
+                        {% for expense in detail_data.expense_details|slice:":10" %}
+                        <div class="flex justify-between items-center p-2 bg-gray-50 rounded">
+                            <div>
+                                <span class="text-xs font-semibold text-orange-600">{{ expense.category }}</span>
+                                <p class="text-sm text-gray-700">{{ expense.description|truncatewords:10 }}</p>
+                            </div>
+                            <span class="font-bold">${{ expense.amount|floatformat:2 }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Insights Sidebar -->
+            <div class="space-y-6">
+                <!-- Profitability Status -->
+                <div class="bg-white rounded-2xl shadow-lg p-6">
+                    <h3 class="font-bold text-gray-800 mb-4">Key Insights</h3>
+
+                    {% if net_margin >= 20 %}
+                    <div class="p-4 bg-green-100 border-l-4 border-green-500 rounded-lg mb-4">
+                        <strong class="text-green-800">Excellent!</strong>
+                        <p class="text-sm text-green-700 mt-1">Net profit margin of {{ net_margin }}% is very healthy.</p>
+                    </div>
+                    {% elif net_margin >= 10 %}
+                    <div class="p-4 bg-blue-100 border-l-4 border-blue-500 rounded-lg mb-4">
+                        <strong class="text-blue-800">Good</strong>
+                        <p class="text-sm text-blue-700 mt-1">Net profit margin of {{ net_margin }}% is solid.</p>
+                    </div>
+                    {% elif net_margin >= 0 %}
+                    <div class="p-4 bg-yellow-100 border-l-4 border-yellow-500 rounded-lg mb-4">
+                        <strong class="text-yellow-800">Low Margin</strong>
+                        <p class="text-sm text-yellow-700 mt-1">Net profit margin of {{ net_margin }}% could be improved.</p>
+                    </div>
+                    {% else %}
+                    <div class="p-4 bg-red-100 border-l-4 border-red-500 rounded-lg mb-4">
+                        <strong class="text-red-800">Loss</strong>
+                        <p class="text-sm text-red-700 mt-1">Business operated at a loss this month.</p>
+                    </div>
+                    {% endif %}
+
+                    <h4 class="font-semibold text-gray-700 mb-2">Month-over-Month</h4>
+                    <div class="space-y-2 mb-4">
+                        <div class="flex justify-between text-sm">
+                            <span>Revenue Change:</span>
+                            <span class="font-bold {% if revenue_change > 0 %}text-green-600{% elif revenue_change < 0 %}text-red-600{% endif %}">
+                                {% if revenue_change > 0 %}+{% endif %}{{ revenue_change_percent|floatformat:1 }}%
+                            </span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span>Previous Month:</span>
+                            <span class="font-semibold">${{ prev_revenue|floatformat:2 }}</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span>This Month:</span>
+                            <span class="font-semibold">${{ sales_revenue|floatformat:2 }}</span>
+                        </div>
+                    </div>
+
+                    <h4 class="font-semibold text-gray-700 mb-2">Expense Ratios</h4>
+                    {% if total_revenue > 0 %}
+                    <div class="space-y-3">
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span>COGS as % of Revenue</span>
+                                <span class="font-semibold">{{ cogs|floatformat:0|add:0|mul:100|div:total_revenue|floatformat:0 }}%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-blue-500 h-2 rounded-full" style="width: {{ cogs|floatformat:0|add:0|mul:100|div:total_revenue|floatformat:0 }}%"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span>Expenses as % of Revenue</span>
+                                <span class="font-semibold">{{ total_expenses|floatformat:0|add:0|mul:100|div:total_revenue|floatformat:0 }}%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-orange-500 h-2 rounded-full" style="width: {{ total_expenses|floatformat:0|add:0|mul:100|div:total_revenue|floatformat:0 }}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="bg-white rounded-2xl shadow-lg p-6">
+                    <h3 class="font-bold text-gray-800 mb-4">Quick Actions</h3>
+                    <div class="space-y-2">
+                        <a href="{% url 'accounting:daily_cash_summary' %}" class="block px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium text-center">
+                            Daily Cash Summary
+                        </a>
+                        <a href="{% url 'accounting:expense_list' %}" class="block px-4 py-2 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors text-sm font-medium text-center">
+                            View All Expenses
+                        </a>
+                        <a href="{% url 'accounting:cashbook_list' %}" class="block px-4 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors text-sm font-medium text-center">
+                            Cashbook
+                        </a>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-4">
+                        <strong>Note:</strong> This report shows transactions posted to the general ledger during the selected period.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python manage.py check:*)",
+      "Bash(timeout 5 python:*)",
+      "Bash(python manage.py makemigrations:*)",
+      "Bash(python manage.py showmigrations:*)",
+      "Bash(python manage.py shell:*)",
+      "Bash(python manage.py show_urls:*)",
+      "Bash(mkdir:*)",
+      "Bash(python manage.py runserver:*)",
+      "Bash(timeout 3 python:*)",
+      "Bash(nul)",
+      "Bash(python manage.py diffsettings:*)",
+      "Bash(findstr:*)",
+      "Bash(dir:*)",
+      "Bash(\"c:\\Users\\Kudzai Bosha\\Documents\\GitHub\\IMS\\templates\\accounting\\dashboard.html\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

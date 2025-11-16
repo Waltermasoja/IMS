@@ -1,0 +1,274 @@
+{% extends 'base.html' %}
+
+{% block title %}User Management - IMS{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto" x-data="{ showDeleteModal: false, deleteUserId: null, deleteUsername: '' }">
+    <!-- Header -->
+    <div class="mb-8">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 flex items-center">
+                    <i class="fas fa-users-cog mr-3 text-blue-600"></i>
+                    User Management
+                </h1>
+                <p class="text-gray-600 mt-2">Manage system users, roles, and permissions</p>
+            </div>
+            <a href="{% url 'user_create' %}"
+               class="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
+                <i class="fas fa-user-plus"></i>
+                <span class="font-medium">Add New User</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-blue-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm font-medium">Total Users</p>
+                    <p class="text-3xl font-bold text-gray-900 mt-2">{{ total_users }}</p>
+                </div>
+                <div class="bg-blue-100 p-3 rounded-lg">
+                    <i class="fas fa-users text-blue-600 text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm font-medium">Active Users</p>
+                    <p class="text-3xl font-bold text-gray-900 mt-2">{{ active_users }}</p>
+                </div>
+                <div class="bg-green-100 p-3 rounded-lg">
+                    <i class="fas fa-user-check text-green-600 text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-red-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm font-medium">Administrators</p>
+                    <p class="text-3xl font-bold text-gray-900 mt-2">{{ admin_users }}</p>
+                </div>
+                <div class="bg-red-100 p-3 rounded-lg">
+                    <i class="fas fa-user-shield text-red-600 text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-md p-6 border-l-4 border-purple-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm font-medium">Sales Staff</p>
+                    <p class="text-3xl font-bold text-gray-900 mt-2">{{ sales_users }}</p>
+                </div>
+                <div class="bg-purple-100 p-3 rounded-lg">
+                    <i class="fas fa-cash-register text-purple-600 text-2xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 mb-8 border border-blue-200">
+        <div class="flex items-center space-x-4">
+            <i class="fas fa-lightbulb text-blue-600 text-2xl"></i>
+            <div class="flex-1">
+                <h3 class="font-semibold text-gray-900">Quick Actions</h3>
+                <p class="text-sm text-gray-600">Common user management tasks</p>
+            </div>
+            <div class="flex space-x-3">
+                <a href="{% url 'role_templates' %}"
+                   class="px-4 py-2 bg-white text-blue-600 rounded-lg hover:bg-blue-50 border border-blue-200 text-sm font-medium transition-colors">
+                    <i class="fas fa-layer-group mr-2"></i>Role Templates
+                </a>
+                <a href="{% url 'user_create' %}"
+                   class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors">
+                    <i class="fas fa-plus mr-2"></i>New User
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Users Table -->
+    <div class="bg-white rounded-xl shadow-md overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">All Users</h2>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sales</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Permissions</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Joined</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for user in users %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center flex-shrink-0">
+                                    <span class="text-white font-semibold text-sm">{{ user.username|slice:":1"|upper }}</span>
+                                </div>
+                                <div class="ml-4">
+                                    <div class="text-sm font-medium text-gray-900">{{ user.username }}</div>
+                                    <div class="text-sm text-gray-500">{{ user.email|default:"No email" }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if user.is_superuser %}
+                                <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                                    <i class="fas fa-crown mr-1"></i> Super Admin
+                                </span>
+                            {% elif user.profile.role == 'admin' %}
+                                <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-700">
+                                    <i class="fas fa-user-shield mr-1"></i> Administrator
+                                </span>
+                            {% elif user.profile.role == 'manager' %}
+                                <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-700">
+                                    <i class="fas fa-user-tie mr-1"></i> Manager
+                                </span>
+                            {% elif user.profile.role == 'sales' %}
+                                <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-700">
+                                    <i class="fas fa-shopping-cart mr-1"></i> Sales
+                                </span>
+                            {% else %}
+                                <span class="px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-700">
+                                    <i class="fas fa-eye mr-1"></i> Viewer
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if user.is_active %}
+                                <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                    <i class="fas fa-circle text-green-500 mr-1 text-xs"></i> Active
+                                </span>
+                            {% else %}
+                                <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                                    <i class="fas fa-circle text-gray-400 mr-1 text-xs"></i> Inactive
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <div class="text-sm">
+                                <div class="font-medium">{{ user.total_sales|default:0 }} sales</div>
+                                <div class="text-gray-500">${{ user.sales_amount|default:0|floatformat:2 }}</div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex flex-wrap gap-1">
+                                {% if user.profile.can_make_sales %}
+                                    <span class="px-2 py-1 text-xs bg-green-50 text-green-700 rounded" title="Can make sales">
+                                        <i class="fas fa-cash-register"></i>
+                                    </span>
+                                {% endif %}
+                                {% if user.profile.can_view_reports %}
+                                    <span class="px-2 py-1 text-xs bg-blue-50 text-blue-700 rounded" title="Can view reports">
+                                        <i class="fas fa-chart-bar"></i>
+                                    </span>
+                                {% endif %}
+                                {% if user.profile.can_manage_inventory %}
+                                    <span class="px-2 py-1 text-xs bg-purple-50 text-purple-700 rounded" title="Can manage inventory">
+                                        <i class="fas fa-boxes"></i>
+                                    </span>
+                                {% endif %}
+                                {% if user.profile.can_manage_users %}
+                                    <span class="px-2 py-1 text-xs bg-red-50 text-red-700 rounded" title="Can manage users">
+                                        <i class="fas fa-users-cog"></i>
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ user.date_joined|date:"M d, Y" }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div class="flex items-center justify-end space-x-2">
+                                <a href="{% url 'user_detail' user.id %}"
+                                   class="text-blue-600 hover:text-blue-900" title="View Details">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="{% url 'user_edit' user.id %}"
+                                   class="text-green-600 hover:text-green-900" title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                {% if user != request.user %}
+                                <button @click="showDeleteModal = true; deleteUserId = {{ user.id }}; deleteUsername = '{{ user.username }}'"
+                                        class="text-red-600 hover:text-red-900" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="px-6 py-8 text-center text-gray-500">
+                            <i class="fas fa-users text-4xl text-gray-300 mb-2"></i>
+                            <p>No users found</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div x-show="showDeleteModal"
+         x-transition.opacity
+         class="fixed inset-0 z-50 overflow-y-auto"
+         style="display: none;">
+        <div class="flex items-center justify-center min-h-screen px-4">
+            <div class="fixed inset-0 bg-black opacity-50" @click="showDeleteModal = false"></div>
+
+            <div class="relative bg-white rounded-xl shadow-2xl max-w-md w-full p-6 z-10">
+                <div class="text-center">
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                        <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Delete User</h3>
+                    <p class="text-gray-600 mb-6">
+                        Are you sure you want to delete user <span class="font-semibold" x-text="deleteUsername"></span>? This action cannot be undone.
+                    </p>
+
+                    <form :action="`/user-management/${deleteUserId}/delete/`" method="post">
+                        {% csrf_token %}
+                        <div class="flex space-x-3">
+                            <button type="button"
+                                    @click="showDeleteModal = false"
+                                    class="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium transition-colors">
+                                Cancel
+                            </button>
+                            <button type="submit"
+                                    name="action"
+                                    value="deactivate"
+                                    class="flex-1 px-4 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 font-medium transition-colors">
+                                Deactivate
+                            </button>
+                            <button type="submit"
+                                    name="action"
+                                    value="delete"
+                                    class="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors">
+                                Delete
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

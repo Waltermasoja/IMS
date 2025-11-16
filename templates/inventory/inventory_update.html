@@ -1,83 +1,374 @@
 {% extends 'base.html' %}
-{% load form_tags %}
+{% load static %}
+
+{% block title %}Edit Product - {{ inventory.name }} - IMS Pro{% endblock %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <h3 class="card-title mb-4">Edit Product - {{ inventory.name }}</h3>
+<div class="max-w-6xl mx-auto space-y-6 animate-fade-in">
+    <!-- Page Header -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Edit Product</h1>
+            <p class="text-gray-500 mt-1">Update details for <span class="font-semibold text-gray-700">{{ inventory.name }}</span></p>
+        </div>
+        <a href="{% url 'inventory' %}"
+           class="inline-flex items-center space-x-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
+            <i class="fas fa-arrow-left"></i>
+            <span class="font-medium">Back to Inventory</span>
+        </a>
+    </div>
 
-            {% include 'inventory/includes/form_errors.html' %}
+    <!-- Form Card -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <form method="POST" action="" enctype="multipart/form-data" class="p-8">
+            {% csrf_token %}
 
-            <form method="POST">
-                {% csrf_token %}
-                <div class="row">
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Category</label>
-                        <select name="category" class="form-control" required>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Left Column -->
+                <div class="space-y-6">
+                    <!-- Category Field -->
+                    <div>
+                        <label for="id_category" class="block text-sm font-semibold text-gray-700 mb-2">
+                            <i class="fas fa-folder text-blue-500 mr-2"></i>Category
+                        </label>
+                        <select name="category" id="id_category"
+                                class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
                             {% for category in categories %}
-                            <option value="{{ category.id }}" {% if category.id == inventory.category.id %}selected{% endif %}>
-                                {{ category.name }}
-                            </option>
+                                <option value="{{ category.id }}" {% if category.id == inventory.category.id %}selected{% endif %}>{{ category.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Supplier</label>
-                        <input type="text" name="bought_from" class="form-control" value="{{ inventory.bought_from }}" required>
+
+                    <!-- Name Field -->
+                    <div>
+                        <label for="id_name" class="block text-sm font-semibold text-gray-700 mb-2">
+                            <i class="fas fa-box text-purple-500 mr-2"></i>Product Name <span class="text-red-500">*</span>
+                        </label>
+                        <input type="text" name="name" id="id_name"
+                               value="{{ inventory.name }}" required
+                               class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="Enter product name">
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Product Name</label>
-                        <input type="text" name="name" class="form-control" value="{{ inventory.name }}" required>
+
+                    <!-- Product Code Field (read-only) -->
+                    <div>
+                        <label for="id_product_code" class="block text-sm font-semibold text-gray-700 mb-2">
+                            <i class="fas fa-barcode text-blue-500 mr-2"></i>Product Code
+                        </label>
+                        <input type="text" name="product_code" id="id_product_code"
+                               value="{{ inventory.product_code }}" readonly
+                               class="w-full px-4 py-3 bg-gray-100 border border-gray-200 rounded-xl font-mono text-gray-600 cursor-not-allowed"
+                               title="Product code cannot be changed">
+                        <p class="text-xs text-gray-500 mt-1">Product code is auto-generated and cannot be changed</p>
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Label</label>
-                        <input type="text" name="label" class="form-control" value="{{ inventory.label }}">
+
+                    <!-- Size Field -->
+                    <div>
+                        <label for="id_size" class="block text-sm font-semibold text-gray-700 mb-2">
+                            <i class="fas fa-ruler text-green-500 mr-2"></i>Size
+                            <span class="text-xs text-gray-500 font-normal">- Optional</span>
+                        </label>
+                        <input type="text" name="size" id="id_size"
+                               value="{{ inventory.size|default:'' }}"
+                               class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="e.g., Small, Medium, 10, 42">
+                        <p class="text-xs text-gray-500 mt-1">Can be text (Small, Medium) or numbers (10, 42)</p>
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Size</label>
-                        <input type="number" name="size" class="form-control" value="{{ inventory.size }}">
+
+                    <!-- Weight Field (Optional) -->
+                    <div>
+                        <label for="id_weight" class="block text-sm font-semibold text-gray-700 mb-2">
+                            <i class="fas fa-weight-hanging text-gray-700 mr-2"></i>Weight (kg)
+                            <span class="text-xs text-gray-500 font-normal">- Optional</span>
+                        </label>
+                        <input type="number" step="0.01" name="weight" id="id_weight"
+                               value="{{ inventory.weight|default:'' }}"
+                               class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="Product weight">
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Quantity in Stock</label>
-                        <input type="number" name="quantity_in_Stock" class="form-control" value="{{ inventory.quantity_in_Stock }}" required min="0">
-                    </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Purchase Price</label>
-                        <div class="input-group">
-                            <span class="input-group-text">$</span>
-                            <input type="number" name="purchase_price" class="form-control" step="0.01" value="{{ inventory.purchase_price }}" required min="0">
+
+                    <!-- Purchase Price Field -->
+                    <div>
+                        <label for="id_purchase_price" class="block text-sm font-semibold text-gray-700 mb-2">
+                            <i class="fas fa-dollar-sign text-orange-500 mr-2"></i>Purchase Price
+                        </label>
+                        <div class="relative">
+                            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</span>
+                            <input type="number" step="0.01" name="purchase_price" id="id_purchase_price"
+                                   value="{{ inventory.purchase_price }}"
+                                   class="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                   placeholder="0.00">
                         </div>
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label class="form-label">Selling Price</label>
-                        <div class="input-group">
-                            <span class="input-group-text">$</span>
-                            <input type="number" name="selling_price" class="form-control" step="0.01" value="{{ inventory.selling_price }}" required min="0">
+
+                    <!-- Quantity in Stock Field -->
+                    <div>
+                        <label for="id_quantity_in_Stock" class="block text-sm font-semibold text-gray-700 mb-2">
+                            <i class="fas fa-cubes text-indigo-500 mr-2"></i>Quantity in Stock <span class="text-red-500">*</span>
+                        </label>
+                        <input type="number" name="quantity_in_Stock" id="id_quantity_in_Stock"
+                               value="{{ inventory.quantity_in_Stock }}" required min="0"
+                               class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="Enter quantity">
+                    </div>
+                </div>
+
+                <!-- Right Column -->
+                <div class="space-y-6">
+                    <!-- Supplier Field -->
+                    <div>
+                        <label for="id_bought_from" class="block text-sm font-semibold text-gray-700 mb-2">
+                            <i class="fas fa-truck text-teal-500 mr-2"></i>Supplier
+                        </label>
+                        <input type="text" name="bought_from" id="id_bought_from"
+                               value="{{ inventory.bought_from|default:'' }}"
+                               class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="Enter supplier name">
+                    </div>
+
+                    <!-- Label Field -->
+                    <div>
+                        <label for="id_label" class="block text-sm font-semibold text-gray-700 mb-2">
+                            <i class="fas fa-tag text-pink-500 mr-2"></i>Label
+                        </label>
+                        <input type="text" name="label" id="id_label"
+                               value="{{ inventory.label|default:'' }}"
+                               class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="Enter product label">
+                    </div>
+
+                    <!-- On Sale Field -->
+                    <div class="bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-xl border border-blue-100">
+                        <label class="flex items-center cursor-pointer group">
+                            <input type="checkbox" name="on_sale" id="id_on_sale"
+                                   {% if inventory.on_sale %}checked{% endif %}
+                                   class="w-5 h-5 text-blue-600 bg-white border-gray-300 rounded focus:ring-2 focus:ring-blue-500 transition-all">
+                            <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-blue-600 transition-colors">
+                                <i class="fas fa-shopping-cart mr-2"></i>Available for Sale
+                            </span>
+                        </label>
+                    </div>
+
+                    <!-- Selling Price Field -->
+                    <div>
+                        <label for="id_selling_price" class="block text-sm font-semibold text-gray-700 mb-2">
+                            <i class="fas fa-money-bill-wave text-emerald-500 mr-2"></i>Selling Price
+                        </label>
+                        <div class="relative">
+                            <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</span>
+                            <input type="number" step="0.01" name="selling_price" id="id_selling_price"
+                                   value="{{ inventory.selling_price }}"
+                                   class="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                                   placeholder="0.00">
                         </div>
                     </div>
-                    <div class="col-12 mb-3">
-                        <label class="form-label">Description</label>
-                        <textarea name="description" class="form-control" rows="3">{{ inventory.description }}</textarea>
+
+                    <!-- Profit Margin Display -->
+                    <div class="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-xl border border-green-100">
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-semibold text-gray-700">
+                                <i class="fas fa-chart-line text-green-600 mr-2"></i>Current Profit Margin
+                            </span>
+                            <span class="text-lg font-bold text-green-600" id="profitMargin">--</span>
+                        </div>
                     </div>
-                    <div class="col-12">
-                        <div class="form-check">
-                            <input type="checkbox" name="on_sale" class="form-check-input" id="onSale" {% if inventory.on_sale %}checked{% endif %}>
-                            <label class="form-check-label" for="onSale">Available for Sale</label>
+
+                    <!-- Reorder Point Field -->
+                    <div>
+                        <label for="id_reorder_point" class="block text-sm font-semibold text-gray-700 mb-2">
+                            <i class="fas fa-exclamation-triangle text-yellow-500 mr-2"></i>Reorder Point
+                            <span class="text-xs text-gray-500 font-normal">- Optional</span>
+                        </label>
+                        <input type="number" name="reorder_point" id="id_reorder_point"
+                               value="{{ inventory.reorder_point|default:'0' }}" min="0"
+                               class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="Minimum stock level">
+                        <p class="text-xs text-gray-500 mt-1">Alert when stock reaches this level</p>
+                    </div>
+
+                    <!-- Lead Time Field -->
+                    <div>
+                        <label for="id_lead_time_days" class="block text-sm font-semibold text-gray-700 mb-2">
+                            <i class="fas fa-clock text-blue-500 mr-2"></i>Lead Time (Days)
+                            <span class="text-xs text-gray-500 font-normal">- Optional</span>
+                        </label>
+                        <input type="number" name="lead_time_days" id="id_lead_time_days"
+                               value="{{ inventory.lead_time_days|default:'0' }}" min="0"
+                               class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="Supplier delivery time">
+                        <p class="text-xs text-gray-500 mt-1">Days from order to delivery</p>
+                    </div>
+                </div>
+
+                <!-- Product Image Section -->
+                <div class="lg:col-span-2">
+                    <div class="bg-gradient-to-r from-purple-50 to-blue-50 p-6 rounded-xl border border-purple-100">
+                        <label class="block text-sm font-semibold text-gray-700 mb-3">
+                            <i class="fas fa-camera text-purple-500 mr-2"></i>Product Image
+                            <span class="text-xs text-gray-500 font-normal">- Optional</span>
+                        </label>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- Current Image -->
+                            <div>
+                                <p class="text-sm font-medium text-gray-700 mb-2">Current Image</p>
+                                <div class="text-center">
+                                    {% if inventory.image %}
+                                        <img src="{{ inventory.image.url }}"
+                                             alt="{{ inventory.name }}"
+                                             class="rounded-xl shadow-lg max-h-64 mx-auto border-2 border-white"
+                                             style="object-fit: cover;">
+                                        <p class="text-xs text-gray-500 mt-2">Current product image</p>
+                                    {% else %}
+                                        <div class="border-2 border-dashed border-gray-300 rounded-xl p-8 bg-white">
+                                            <i class="fas fa-image fa-4x text-gray-300"></i>
+                                            <p class="text-gray-400 mt-2 text-sm">No image uploaded</p>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- Upload New Image -->
+                            <div>
+                                <p class="text-sm font-medium text-gray-700 mb-2">Upload New Image</p>
+                                <input type="file"
+                                       name="image"
+                                       id="id_image"
+                                       accept="image/jpeg,image/jpg,image/png,image/webp"
+                                       onchange="previewImage(event)"
+                                       class="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
+                                <p class="text-xs text-gray-500 mt-2">
+                                    <i class="fas fa-info-circle mr-1"></i>
+                                    Accepted: JPG, PNG, WebP | Max: 5MB | Auto-resized to 800×600px
+                                </p>
+
+                                <!-- Image Preview -->
+                                <div id="imagePreview" class="mt-4 hidden">
+                                    <p class="text-sm font-semibold text-gray-700 mb-2">Preview:</p>
+                                    <div class="relative inline-block">
+                                        <img id="previewImg" src="" class="rounded-xl shadow-lg max-h-48 border-2 border-white">
+                                        <button type="button"
+                                                onclick="clearImagePreview()"
+                                                class="absolute -top-2 -right-2 w-8 h-8 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors shadow-lg">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="form-group pt-4">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save me-2"></i>Save Changes
-                    </button>
-                    <a href="{% url 'inventory' %}" class="btn btn-outline-secondary ms-2">
-                        <i class="fas fa-times-circle me-2"></i>Cancel
-                    </a>
+                <!-- Full Width Description Field -->
+                <div class="lg:col-span-2">
+                    <label for="id_description" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-align-left text-gray-500 mr-2"></i>Description
+                    </label>
+                    <textarea name="description" id="id_description" rows="4"
+                              class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                              placeholder="Enter product description (optional)">{{ inventory.description|default:'' }}</textarea>
                 </div>
-            </form>
-        </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex items-center justify-end space-x-4 mt-8 pt-6 border-t border-gray-200">
+                <a href="{% url 'inventory' %}"
+                   class="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
+                    Cancel
+                </a>
+                <button type="submit"
+                        class="flex items-center space-x-2 px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+                    <i class="fas fa-save"></i>
+                    <span>Save Changes</span>
+                </button>
+            </div>
+        </form>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Profit Margin Calculator
+    const purchasePriceInput = document.getElementById('id_purchase_price');
+    const sellingPriceInput = document.getElementById('id_selling_price');
+    const profitMarginDisplay = document.getElementById('profitMargin');
+
+    function calculateProfitMargin() {
+        const purchasePrice = parseFloat(purchasePriceInput.value) || 0;
+        const sellingPrice = parseFloat(sellingPriceInput.value) || 0;
+
+        if (purchasePrice > 0 && sellingPrice > 0) {
+            const profit = sellingPrice - purchasePrice;
+            const margin = (profit / sellingPrice) * 100;
+            profitMarginDisplay.textContent = margin.toFixed(1) + '%';
+
+            // Color code based on margin
+            if (margin < 10) {
+                profitMarginDisplay.className = 'text-lg font-bold text-red-600';
+            } else if (margin < 30) {
+                profitMarginDisplay.className = 'text-lg font-bold text-yellow-600';
+            } else {
+                profitMarginDisplay.className = 'text-lg font-bold text-green-600';
+            }
+        } else {
+            profitMarginDisplay.textContent = '--';
+            profitMarginDisplay.className = 'text-lg font-bold text-gray-400';
+        }
+    }
+
+    purchasePriceInput.addEventListener('input', calculateProfitMargin);
+    sellingPriceInput.addEventListener('input', calculateProfitMargin);
+
+    // Initial calculation
+    calculateProfitMargin();
+});
+
+// Image Preview Functions
+function previewImage(event) {
+    const input = event.target;
+    const preview = document.getElementById('imagePreview');
+    const previewImg = document.getElementById('previewImg');
+
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+
+        // Check file size (5MB max)
+        if (file.size > 5 * 1024 * 1024) {
+            alert('File size must be less than 5MB');
+            input.value = '';
+            preview.classList.add('hidden');
+            return;
+        }
+
+        // Check file type
+        const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+        if (!validTypes.includes(file.type)) {
+            alert('Please upload a valid image file (JPG, PNG, or WebP)');
+            input.value = '';
+            preview.classList.add('hidden');
+            return;
+        }
+
+        // Show preview
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            previewImg.src = e.target.result;
+            preview.classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+    } else {
+        preview.classList.add('hidden');
+    }
+}
+
+function clearImagePreview() {
+    const input = document.getElementById('id_image');
+    const preview = document.getElementById('imagePreview');
+
+    input.value = '';
+    preview.classList.add('hidden');
+}
+</script>
 {% endblock %}

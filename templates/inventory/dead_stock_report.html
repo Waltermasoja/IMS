@@ -1,0 +1,167 @@
+{% extends 'base.html' %}
+{% block title %}Dead Stock Report - IMS Pro{% endblock %}
+{% block content %}
+<div class="space-y-6 animate-fade-in">
+  <!-- Page Header -->
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-900">Dead Stock / Slow-Moving Inventory</h1>
+      <p class="text-gray-500 mt-1">Identify items with no sales - clearance candidates</p>
+    </div>
+    <a href="{% url 'reports_index' %}"
+       class="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-xl hover:from-gray-600 hover:to-gray-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
+      <i class="fas fa-arrow-left"></i>
+      <span class="font-medium">Back to Reports</span>
+    </a>
+  </div>
+
+  <!-- Filters -->
+  <div class="bg-white rounded-2xl p-6 shadow-sm">
+    <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Days Without Sale</label>
+        <input type="number" name="days" value="{{ days_threshold }}" min="30" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Category</label>
+        <select name="category" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">All Categories</option>
+          {% for cat in categories %}
+          <option value="{{ cat.id }}" {% if selected_category|stringformat:"s" == cat.id|stringformat:"s" %}selected{% endif %}>
+            {{ cat.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-2">Minimum Stock Value</label>
+        <input type="number" name="min_value" value="{{ min_value }}" min="0" step="0.01" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div class="flex items-end">
+        <button type="submit" class="w-full px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+          <i class="fas fa-filter mr-2"></i>Apply Filters
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div class="bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-2xl p-6 text-white shadow-lg">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-yellow-100 text-sm font-medium">Total Items</p>
+          <h3 class="text-3xl font-bold mt-2">{{ total_items }}</h3>
+        </div>
+        <div class="bg-white bg-opacity-20 rounded-xl p-4">
+          <i class="fas fa-box text-3xl"></i>
+        </div>
+      </div>
+    </div>
+    <div class="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl p-6 text-white shadow-lg">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-red-100 text-sm font-medium">Total Units</p>
+          <h3 class="text-3xl font-bold mt-2">{{ total_units }}</h3>
+        </div>
+        <div class="bg-white bg-opacity-20 rounded-xl p-4">
+          <i class="fas fa-cubes text-3xl"></i>
+        </div>
+      </div>
+    </div>
+    <div class="bg-gradient-to-br from-gray-700 to-gray-800 rounded-2xl p-6 text-white shadow-lg">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-gray-100 text-sm font-medium">Total Value at Risk</p>
+          <h3 class="text-3xl font-bold mt-2">${{ total_value|floatformat:2 }}</h3>
+        </div>
+        <div class="bg-white bg-opacity-20 rounded-xl p-4">
+          <i class="fas fa-exclamation-triangle text-3xl"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dead Stock Table -->
+  <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200">
+      <h3 class="text-lg font-semibold text-gray-900">Items with No Sales in {{ days_threshold }} Days</h3>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full">
+        <thead>
+          <tr class="bg-gray-50 border-b border-gray-200">
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Product</th>
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
+            <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Stock</th>
+            <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Stock Value</th>
+            <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Days Since Sale</th>
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Last Sale Date</th>
+            <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+          {% for item in items %}
+          <tr class="hover:bg-gray-50 transition-colors {% if item.days_since_sale > 180 %}bg-red-50{% elif item.days_since_sale > 90 %}bg-yellow-50{% endif %}">
+            <td class="px-6 py-4">
+              <a href="{% url 'per_product' item.item.id %}" class="text-blue-600 hover:text-blue-800 font-medium">
+                {{ item.item.name }}
+              </a>
+              <p class="text-xs text-gray-500 mt-1">{{ item.item.product_code }}</p>
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-900">{{ item.item.category.name|default:"-" }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-medium">{{ item.stock }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900 font-semibold">${{ item.stock_value|floatformat:2 }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-right">
+              <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium {% if item.days_since_sale > 180 %}bg-red-100 text-red-800{% elif item.days_since_sale > 90 %}bg-yellow-100 text-yellow-800{% else %}bg-gray-100 text-gray-800{% endif %}">
+                {{ item.days_since_sale }} days
+              </span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ item.last_sale_date|date:"Y-m-d"|default:"Never" }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-right">
+              <a href="{% url 'inventory_update' item.item.id %}" class="inline-flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-xs font-medium">
+                <i class="fas fa-edit mr-1"></i>Adjust
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="7" class="px-6 py-12 text-center text-gray-500">
+              <i class="fas fa-check-circle text-4xl mb-3 text-green-400"></i>
+              <p class="text-lg font-medium text-gray-700">No dead stock found!</p>
+              <p class="text-sm text-gray-500 mt-1">All items are selling well</p>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Recommendations -->
+  <div class="bg-blue-50 border border-blue-200 rounded-2xl p-6">
+    <div class="flex items-start space-x-3">
+      <div class="flex-shrink-0">
+        <i class="fas fa-lightbulb text-2xl text-blue-600"></i>
+      </div>
+      <div class="flex-1">
+        <h4 class="text-lg font-semibold text-gray-900 mb-3">Recommendations</h4>
+        <ul class="space-y-2 text-sm text-gray-700">
+          <li class="flex items-start">
+            <i class="fas fa-circle text-xs text-red-500 mt-1 mr-2"></i>
+            <span>Items in <strong class="text-red-600">red</strong> have not sold in over 180 days - consider clearance sales or bundle deals</span>
+          </li>
+          <li class="flex items-start">
+            <i class="fas fa-circle text-xs text-yellow-500 mt-1 mr-2"></i>
+            <span>Items in <strong class="text-yellow-600">yellow</strong> have not sold in 90-180 days - consider price adjustments or promotions</span>
+          </li>
+          <li class="flex items-start">
+            <i class="fas fa-circle text-xs text-blue-500 mt-1 mr-2"></i>
+            <span>Total value at risk represents capital tied up in slow-moving inventory</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

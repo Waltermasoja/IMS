@@ -1,144 +1,197 @@
-{% extends "base.html" %}
+{% extends 'base.html' %}
 {% load custom_filters %}
 {% block content %}
-<div class="container-fluid">
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <h3 class="card-title mb-1">Stock Movement Summary</h3>
-                    <p class="text-muted mb-0">{{ inventory_item.name }}</p>
-                </div>
-                <a href="{% url 'inventory' %}" class="btn btn-outline-primary">
-                    <i class="fas fa-arrow-left me-2"></i>Back to Inventory
-                </a>
-            </div>
-
-            {% if stock_movements %}
-
-            <form method="GET" class="mb-4">
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label class="form-label">Start Date</label>
-                        {{ form.start_date|addclass:'form-control' }}
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label">End Date</label>
-                        {{ form.end_date|addclass:'form-control' }}
-                    </div>
-                    <div class="col-md-4 d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-filter me-2"></i>Filter
-                        </button>
-                    </div>
-                </div>
-            </form>
-
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Movement Type</th>
-                            <th>Quantity</th>
-                            <th>Opening Balance</th>
-                            <th>Closing Balance</th>
-                            <th>Reason</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in stock_movements %}
-                        <tr>
-                            <td>{{ item.movement.stock_date|date:"M d, Y H:i" }}</td>
-                            <td>
-                                {% if item.movement.movement_type == 'IN' %}
-                                <span class="badge bg-success">STOCK IN</span>
-                                {% else %}
-                                <span class="badge bg-warning text-dark">STOCK OUT</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if item.movement.movement_type == 'IN' %}
-                                <span class="text-success">+{{ item.movement.quantity }}</span>
-                                {% else %}
-                                <span class="text-danger">-{{ item.movement.quantity }}</span>
-                                {% endif %}
-                            </td>
-                            <td>{{ item.opening_balance }}</td>
-                            <td>{{ item.closing_balance }}</td>
-                            <td>
-                                <span class="text-muted">{{ item.movement.reason }}</span>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                    <tfoot class="table-light">
-                        <tr>
-                            <td colspan="3"><strong>Current Stock Level</strong></td>
-                            <td colspan="3">
-                                {% if inventory_item.quantity_in_Stock == 0 %}
-                                <span class="badge bg-danger">Out of Stock</span>
-                                {% elif inventory_item.quantity_in_Stock <= 10 %}
-                                <span class="badge bg-warning text-dark">Low Stock: {{inventory_item.quantity_in_Stock}}</span>
-                                {% else %}
-                                <span class="badge bg-success">{{ inventory_item.quantity_in_Stock }} in Stock</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-            {% else %}
-            <div class="text-center py-5">
-                <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
-                <h4 class="text-muted">No Stock Movements</h4>
-                <p class="text-muted">This product has no recorded stock movements yet.</p>
-            </div>
-            {% endif %}
+<div class="space-y-6 animate-fade-in">
+    <!-- Header -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Stock Movement Summary</h1>
+            <p class="text-gray-500 mt-1">{{ inventory_item.name }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{% url 'returnInventory' inventory_item.id %}"
+               class="inline-flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
+                <i class="fas fa-undo"></i>
+                <span class="font-medium">Record Return</span>
+            </a>
+            <a href="{% url 'damagedInventory' inventory_item.id %}"
+               class="inline-flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span class="font-medium">Record Damage</span>
+            </a>
+            <a href="{% url 'inventory' %}"
+               class="inline-flex items-center space-x-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
+                <i class="fas fa-arrow-left"></i>
+                <span class="font-medium">Back to Inventory</span>
+            </a>
         </div>
     </div>
 
-    <!-- Product Details Card -->
-    <div class="card shadow-sm mt-4">
-        <div class="card-body">
-            <h4 class="card-title mb-4">Product Details</h4>
-            <div class="row">
-                <div class="col-md-6">
-                    <table class="table table-sm">
-                        <tr>
-                            <th class="w-50">Product Name:</th>
-                            <td>{{ inventory_item.name }}</td>
-                        </tr>
-                        <tr>
-                            <th>Label:</th>
-                            <td><span class="badge bg-info">{{ inventory_item.label }}</span></td>
-                        </tr>
-                        <tr>
-                            <th>Size:</th>
-                            <td>{{ inventory_item.size }}</td>
-                        </tr>
+    {% if stock_movements %}
+    <!-- Filters -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <form method="GET" id="stock-filter-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                {{ form.start_date|addclass:'w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500' }}
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+                {{ form.end_date|addclass:'w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500' }}
+            </div>
+            <div class="flex items-end gap-2 flex-wrap">
+                <button type="submit"
+                        class="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-sm transition-all font-medium">
+                    <i class="fas fa-filter mr-2"></i>Filter
+                </button>
+                <div class="flex items-center gap-2">
+                    <button class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50" type="button" data-range="7">7d</button>
+                    <button class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50" type="button" data-range="30">30d</button>
+                    <button class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50" type="button" data-range="90">90d</button>
+                    <button class="px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-700 hover:bg-gray-50" type="button" id="clear-range">
+                        <i class="fas fa-times mr-1"></i>Clear
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
+                    <tr>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Movement Type</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Quantity</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Opening Balance</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Closing Balance</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Reason</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for item in stock_movements %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-4 text-sm text-gray-700">{{ item.movement.stock_date|date:"M d, Y H:i" }}</td>
+                        <td class="px-6 py-4">
+                            {% if item.movement.movement_type == 'IN' %}
+                                {% if "return" in item.movement.reason|lower %}
+                                <span class="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded-full">
+                                    <i class="fas fa-undo mr-1"></i>RETURN
+                                </span>
+                                {% else %}
+                                <span class="px-3 py-1 bg-green-50 text-green-700 text-xs font-semibold rounded-full">
+                                    <i class="fas fa-arrow-down mr-1"></i>STOCK IN
+                                </span>
+                                {% endif %}
+                            {% else %}
+                                {% if "damage" in item.movement.reason|lower or "obsolete" in item.movement.reason|lower %}
+                                <span class="px-3 py-1 bg-red-50 text-red-700 text-xs font-semibold rounded-full">
+                                    <i class="fas fa-exclamation-triangle mr-1"></i>DAMAGE
+                                </span>
+                                {% elif "sale" in item.movement.reason|lower %}
+                                <span class="px-3 py-1 bg-purple-50 text-purple-700 text-xs font-semibold rounded-full">
+                                    <i class="fas fa-shopping-cart mr-1"></i>SALE
+                                </span>
+                                {% else %}
+                                <span class="px-3 py-1 bg-yellow-50 text-yellow-700 text-xs font-semibold rounded-full">
+                                    <i class="fas fa-arrow-up mr-1"></i>STOCK OUT
+                                </span>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-sm">
+                            {% if item.movement.movement_type == 'IN' %}
+                            <span class="text-green-600 font-semibold">+{{ item.movement.quantity }}</span>
+                            {% else %}
+                            <span class="text-red-600 font-semibold">-{{ item.movement.quantity }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-700">{{ item.opening_balance }}</td>
+                        <td class="px-6 py-4 text-sm text-gray-700">{{ item.closing_balance }}</td>
+                        <td class="px-6 py-4 text-sm text-gray-600">
+                            {% if item.movement.reason %}
+                                {{ item.movement.reason }}
+                            {% else %}
+                                <span class="text-gray-400 italic">No reason provided</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="bg-gray-50 border-t">
+                    <tr>
+                        <td colspan="2" class="px-6 py-4 text-sm font-bold text-gray-900">Current Stock Level</td>
+                        <td colspan="4" class="px-6 py-4">
+                            {% if inventory_item.quantity_in_Stock == 0 %}
+                            <span class="px-3 py-1 bg-red-50 text-red-600 text-xs font-semibold rounded-full">Out of Stock</span>
+                            {% elif inventory_item.quantity_in_Stock <= 10 %}
+                            <span class="px-3 py-1 bg-yellow-50 text-yellow-600 text-xs font-semibold rounded-full">Low Stock: {{inventory_item.quantity_in_Stock}}</span>
+                            {% else %}
+                            <span class="px-3 py-1 bg-green-50 text-green-600 text-xs font-semibold rounded-full">{{ inventory_item.quantity_in_Stock }} in Stock</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="bg-white rounded-2xl p-12 shadow-sm text-center">
+        <i class="fas fa-box-open text-gray-300 text-5xl mb-4"></i>
+        <h3 class="text-xl font-semibold text-gray-900 mb-2">No Stock Movements</h3>
+        <p class="text-gray-500">This product has no recorded stock movements yet.</p>
+    </div>
+    {% endif %}
+
+    <!-- Product Details -->
+    <div class="bg-white rounded-2xl p-6 shadow-sm">
+        <h4 class="text-lg font-semibold text-gray-900 mb-4">Product Details</h4>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <div class="overflow-hidden rounded-xl border border-gray-200">
+                    <table class="w-full">
+                        <tbody class="divide-y divide-gray-200">
+                            <tr>
+                                <th class="w-1/2 px-4 py-3 text-left text-sm font-medium text-gray-600">Product Name</th>
+                                <td class="px-4 py-3 text-sm text-gray-900">{{ inventory_item.name }}</td>
+                            </tr>
+                            <tr>
+                                <th class="w-1/2 px-4 py-3 text-left text-sm font-medium text-gray-600">Label</th>
+                                <td class="px-4 py-3"><span class="px-2 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded">{{ inventory_item.label }}</span></td>
+                            </tr>
+                            <tr>
+                                <th class="w-1/2 px-4 py-3 text-left text-sm font-medium text-gray-600">Size</th>
+                                <td class="px-4 py-3 text-sm text-gray-900">{{ inventory_item.size }}</td>
+                            </tr>
+                        </tbody>
                     </table>
                 </div>
-                <div class="col-md-6">
-                    <table class="table table-sm">
-                        <tr>
-                            <th class="w-50">Purchase Price:</th>
-                            <td>${{ inventory_item.purchase_price }}</td>
-                        </tr>
-                        <tr>
-                            <th>Selling Price:</th>
-                            <td>${{ inventory_item.selling_price }}</td>
-                        </tr>
-                        <tr>
-                            <th>Status:</th>
-                            <td>
-                                {% if inventory_item.on_sale %}
-                                <span class="badge bg-success">On Sale</span>
-                                {% else %}
-                                <span class="badge bg-secondary">Regular Price</span>
-                                {% endif %}
-                            </td>
-                        </tr>
+            </div>
+            <div>
+                <div class="overflow-hidden rounded-xl border border-gray-200">
+                    <table class="w-full">
+                        <tbody class="divide-y divide-gray-200">
+                            <tr>
+                                <th class="w-1/2 px-4 py-3 text-left text-sm font-medium text-gray-600">Purchase Price</th>
+                                <td class="px-4 py-3 text-sm text-gray-900">${{ inventory_item.purchase_price }}</td>
+                            </tr>
+                            <tr>
+                                <th class="w-1/2 px-4 py-3 text-left text-sm font-medium text-gray-600">Selling Price</th>
+                                <td class="px-4 py-3 text-sm text-gray-900">${{ inventory_item.selling_price }}</td>
+                            </tr>
+                            <tr>
+                                <th class="w-1/2 px-4 py-3 text-left text-sm font-medium text-gray-600">Status</th>
+                                <td class="px-4 py-3">
+                                    {% if inventory_item.on_sale %}
+                                    <span class="px-2 py-1 bg-green-50 text-green-700 text-xs font-semibold rounded">On Sale</span>
+                                    {% else %}
+                                    <span class="px-2 py-1 bg-gray-100 text-gray-700 text-xs font-semibold rounded">Regular Price</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -146,46 +199,37 @@
     </div>
 </div>
 
-<style>
-    .card {
-        border: none;
-        border-radius: 15px;
-        margin-bottom: 1rem;
-    }
+<script>
+    (function(){
+        const form = document.getElementById('stock-filter-form');
+        if(!form) return;
+        const start = form.querySelector('input[name="start_date"]');
+        const end = form.querySelector('input[name="end_date"]');
 
-    .table th {
-        background-color: var(--light-blue);
-        color: var(--dark-blue);
-    }
+        function formatDate(d){
+            const pad = (n)=> n.toString().padStart(2,'0');
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+        }
 
-    .table td {
-        vertical-align: middle;
-    }
+        form.querySelectorAll('button[data-range]').forEach(btn=>{
+            btn.addEventListener('click', ()=>{
+                const days = parseInt(btn.getAttribute('data-range')) || 7;
+                const today = new Date();
+                const from = new Date();
+                from.setDate(today.getDate() - days);
+                if(start) start.value = formatDate(from);
+                if(end) end.value = formatDate(today);
+                form.submit();
+            });
+        });
 
-    .badge {
-        font-weight: 500;
-        padding: 0.5em 0.8em;
-    }
-
-    .table-hover tbody tr:hover {
-        background-color: var(--light-blue);
-    }
-
-    .text-success {
-        color: #28a745 !important;
-    }
-
-    .text-danger {
-        color: #dc3545 !important;
-    }
-
-    .table-sm th,
-    .table-sm td {
-        padding: 0.5rem;
-    }
-
-    .card-title {
-        color: var(--dark-blue);
-    }
-</style>
+        const clearBtn = document.getElementById('clear-range');
+        if(clearBtn){
+            clearBtn.addEventListener('click', ()=>{
+                if(start) start.value = '';
+                if(end) end.value = '';
+            });
+        }
+    })();
+</script>
 {% endblock %}

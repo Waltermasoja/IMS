@@ -36,15 +36,33 @@
             
             <div x-show="searchResults.length > 0" class="space-y-2 max-h-80 overflow-y-auto">
                 <template x-for="product in searchResults" :key="product.id">
-                    <div @click="addToCart(product)" 
+                    <div @click="addToCart(product)"
                          class="p-3 bg-gray-50 rounded-xl hover:bg-green-50 cursor-pointer transition-colors">
-                        <div class="flex justify-between items-start">
-                            <div>
+                        <div class="flex gap-3 items-start">
+                            <!-- Product Image -->
+                            <div class="flex-shrink-0">
+                                <template x-if="product.thumbnail_url">
+                                    <img :src="product.thumbnail_url"
+                                         :alt="product.name"
+                                         class="w-16 h-16 object-cover rounded-lg shadow-sm"
+                                         loading="lazy">
+                                </template>
+                                <template x-if="!product.thumbnail_url">
+                                    <div class="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center">
+                                        <i class="fas fa-box text-gray-400"></i>
+                                    </div>
+                                </template>
+                            </div>
+
+                            <!-- Product Info -->
+                            <div class="flex-1">
                                 <p class="font-semibold" x-text="product.name"></p>
                                 <p class="text-sm text-blue-600 font-mono" x-text="product.product_code"></p>
                                 <p class="text-xs text-gray-500">Stock: <span x-text="product.quantity_in_stock"></span></p>
                             </div>
-                            <p class="font-bold text-green-600" x-text="'$' + product.selling_price"></p>
+
+                            <!-- Price -->
+                            <p class="font-bold text-green-600 text-right" x-text="'$' + product.selling_price"></p>
                         </div>
                     </div>
                 </template>
@@ -210,6 +228,12 @@
 
 <script>
 function posInterface() {
+    // Set default due date to 7 days from now
+    const today = new Date();
+    const defaultDueDate = new Date(today);
+    defaultDueDate.setDate(today.getDate() + 7);
+    const dueDateString = defaultDueDate.toISOString().split('T')[0];
+    
     return {
         searchQuery: '',
         searchResults: [],
@@ -221,7 +245,7 @@ function posInterface() {
         processing: false,
         payment_method: 'CASH',
         customer_id: '',
-        due_date: '',
+        due_date: dueDateString,
         deposit: 0,
         openCustomerModal: false,
         newCustomer: { name: '', phone: '', email: '', credit_limit: 0, status: 'ACTIVE', opt_in_for_emails: false },
@@ -351,11 +375,15 @@ function posInterface() {
                     this.discount = 0;
                     this.calculateTotals();
                 } else {
-                    alert('Some items failed to process');
+                    // Show actual error messages
+                    const errors = results.filter(r => !r.success).map(r => r.error || 'Unknown error').join('\n');
+                    alert('Sale failed:\n\n' + errors);
+                    console.error('Sale errors:', results.filter(r => !r.success));
                 }
-            }).catch(() => {
+            }).catch((err) => {
                 this.processing = false;
-                alert('Error processing sale');
+                console.error('Sale request failed:', err);
+                alert('Error processing sale: ' + err.message);
             });
         }
     }

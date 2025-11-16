@@ -13,10 +13,10 @@ class AddInventoryForm(ModelForm):
     category = forms.ModelChoiceField(
         queryset=Inventory_category.objects.all(),
         empty_label="Select a category",
-        required=True,
+        required=False,
         widget=forms.Select(attrs={'class': 'form-control'})
     )
-    
+
     class Meta:
         model = Inventory
         fields = [
@@ -31,14 +31,37 @@ class AddInventoryForm(ModelForm):
             'label',
             'size',
             'weight',
-            'on_sale'
+            'image',
+            'on_sale',
+            'reorder_point',
+            'lead_time_days'
         ]
+        widgets = {
+            'image': forms.FileInput(attrs={
+                'class': 'form-control',
+                'accept': 'image/jpeg,image/jpg,image/png,image/webp'
+            })
+        }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # Make fields optional
+        self.fields['category'].required = False
+        self.fields['bought_from'].required = False
+        self.fields['purchase_price'].required = False
+        self.fields['selling_price'].required = False
+        self.fields['label'].required = False
+        self.fields['size'].required = False
+        self.fields['weight'].required = False
+
         self.fields['category'].help_text = '<a href="#" data-bs-toggle="modal" data-bs-target="#addCategoryModal">+ Add New Category</a>'
         self.fields['product_code'].help_text = 'Leave blank to auto-generate based on category'
         self.fields['product_code'].widget.attrs.update({'placeholder': 'e.g., SHI-0001 (auto-generated if empty)'})
+        self.fields['reorder_point'].help_text = 'Minimum stock level before reordering'
+        self.fields['lead_time_days'].help_text = 'Supplier lead time in days'
+        self.fields['image'].help_text = 'Upload product image (max 5MB, auto-resized to 800x600px). Accepted formats: JPG, PNG, WebP'
+        self.fields['size'].help_text = 'Size can be text (e.g., "Small", "Medium") or numeric (e.g., "10", "42")'
 
     def clean(self):
         cleaned_data = super().clean()
@@ -55,8 +78,10 @@ class AddInventoryForm(ModelForm):
         if quantity_in_Stock is not None and quantity_in_Stock < 0:
             self.add_error('quantity_in_Stock', 'Stock quantity cannot be negative')
 
-        if selling_price and purchase_price and selling_price < purchase_price:
-            self.add_error('selling_price', 'Selling price cannot be less than purchase price')
+        # Only validate selling price vs purchase price if both are provided and non-zero
+        if selling_price and purchase_price and selling_price > 0 and purchase_price > 0:
+            if selling_price < purchase_price:
+                self.add_error('selling_price', 'Selling price cannot be less than purchase price')
 
         return cleaned_data
 
@@ -101,16 +126,82 @@ class DateRangeForm(forms.Form):
 class Inventory_categoryForm(ModelForm):
     class Meta:
         model = Inventory_category
-        fields = ['name', 'description']
+        fields = ['name', 'description', 'default_markup']
 
     def __init__(self, *args, **kwargs):
         super(Inventory_categoryForm, self).__init__(*args, **kwargs)
         for field in self.fields.values():
             field.widget.attrs.update({'class': 'form-control'})
 
+        # Set help text for default_markup
+        self.fields['default_markup'].help_text = 'Default markup percentage for products in this category (e.g., 40 for 40%)'
+
 # ==================== IMPORT ORDER & LANDED COST FORMS ====================
 
 class SupplierForm(ModelForm):
+    # Add country as a choice field
+    COUNTRY_CHOICES = [
+        ('China', 'China'),
+        ('Turkey', 'Turkey'),
+        ('South Africa', 'South Africa'),
+        ('United Kingdom', 'United Kingdom'),
+        ('United States', 'United States'),
+        ('India', 'India'),
+        ('Germany', 'Germany'),
+        ('Italy', 'Italy'),
+        ('France', 'France'),
+        ('Spain', 'Spain'),
+        ('Japan', 'Japan'),
+        ('South Korea', 'South Korea'),
+        ('Thailand', 'Thailand'),
+        ('Vietnam', 'Vietnam'),
+        ('Malaysia', 'Malaysia'),
+        ('Indonesia', 'Indonesia'),
+        ('UAE', 'United Arab Emirates'),
+        ('Kenya', 'Kenya'),
+        ('Zimbabwe', 'Zimbabwe'),
+        ('Botswana', 'Botswana'),
+        ('Zambia', 'Zambia'),
+        ('Other', 'Other'),
+    ]
+
+    PAYMENT_TERMS_CHOICES = [
+        ('', 'Select payment terms'),
+        ('NET 7', 'NET 7 days'),
+        ('NET 15', 'NET 15 days'),
+        ('NET 30', 'NET 30 days'),
+        ('NET 45', 'NET 45 days'),
+        ('NET 60', 'NET 60 days'),
+        ('NET 90', 'NET 90 days'),
+        ('COD', 'Cash on Delivery'),
+        ('PREPAID', 'Prepaid'),
+        ('CIA', 'Cash in Advance'),
+    ]
+
+    CURRENCY_CHOICES = [
+        ('USD', 'US Dollar'),
+        ('TRY', 'Turkish Lira'),
+        ('RMB', 'Renminbi'),
+        ('ZAR', 'South African Rand'),
+        ('GBP', 'British Pound'),
+        ('CNY', 'Chinese Yuan'),
+        ('EUR', 'Euro')
+    ]
+    country = forms.ChoiceField(
+        choices=COUNTRY_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+
+    payment_terms = forms.ChoiceField(
+        choices=PAYMENT_TERMS_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+
+    currency_preference = forms.ChoiceField(
+        choices=CURRENCY_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+
     class Meta:
         model = Supplier
         fields = [
@@ -119,16 +210,6 @@ class SupplierForm(ModelForm):
         ]
         widgets = {
             'address': forms.Textarea(attrs={'rows': 3}),
-            'payment_terms': forms.Select(choices=[
-                ('NET 7', 'NET 7 days'),
-                ('NET 15', 'NET 15 days'),
-                ('NET 30', 'NET 30 days'),
-                ('NET 45', 'NET 45 days'),
-                ('NET 60', 'NET 60 days'),
-                ('NET 90', 'NET 90 days'),
-                ('COD', 'Cash on Delivery'),
-                ('PREPAID', 'Prepaid'),
-            ])
         }
 
     def __init__(self, *args, **kwargs):
@@ -184,7 +265,7 @@ ImportOrderItemFormSet = inlineformset_factory(
     ImportOrder, 
     ImportOrderItem,
     form=ImportOrderItemForm,
-    extra=1,
+    extra=0,  # Don't show extra forms by default - we'll handle it in the view
     min_num=1,
     validate_min=True,
     can_delete=True
@@ -208,10 +289,36 @@ class ImportExpenseForm(ModelForm):
         for field in self.fields.values():
             field.widget.attrs.update({'class': 'form-control'})
         
+        # Make date_incurred and receipt_number optional by default
+        self.fields['date_incurred'].required = False
+        self.fields['receipt_number'].required = False
+        
         # Pre-populate currency and exchange rate from import order
         if import_order:
             self.fields['currency'].initial = import_order.currency
             self.fields['exchange_rate'].initial = import_order.exchange_rate
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        paid = cleaned_data.get('paid')
+        date_incurred = cleaned_data.get('date_incurred')
+        receipt_number = cleaned_data.get('receipt_number')
+        currency = cleaned_data.get('currency')
+        exchange_rate = cleaned_data.get('exchange_rate')
+
+        # Only require date_incurred and receipt_number if expense is marked as paid
+        if paid:
+            if not date_incurred:
+                self.add_error('date_incurred', 'Date incurred is required when expense is marked as paid.')
+            if not receipt_number:
+                self.add_error('receipt_number', 'Receipt number is required when expense is marked as paid.')
+
+        # Smart exchange rate handling:
+        # If expense currency is USD (base currency), exchange rate should be 1.0
+        if currency == 'USD' and exchange_rate and float(exchange_rate) != 1.0:
+            cleaned_data['exchange_rate'] = 1.0
+
+        return cleaned_data
 
 # Create inline formset for import expenses
 ImportExpenseFormSet = inlineformset_factory(
@@ -380,7 +487,7 @@ class QuickExpenseForm(forms.Form):
 class CustomerForm(ModelForm):
     class Meta:
         model = Customer
-        fields = ['name', 'email', 'phone', 'address', 'credit_limit', 'status']
+        fields = ['name', 'email', 'phone', 'address', 'credit_limit', 'status', 'opt_in_for_emails']
         widgets = {
             'address': forms.Textarea(attrs={'rows': 3}),
         }
@@ -392,10 +499,10 @@ class CustomerForm(ModelForm):
         for f in self.fields.values():
             existing = f.widget.attrs.get('class', '')
             f.widget.attrs.update({'class': (existing + ' ' + base_cls).strip()})
-        
-        if 'opt_in_for_emails' in self.fields:
-            self.fields['opt_in_for_emails'].help_text = 'Customer agrees to receive email invoices'
-            self.fields['opt_in_for_emails'].label = 'Email opt-in for invoices'
+
+        # Set help text and label for opt_in_for_emails
+        self.fields['opt_in_for_emails'].help_text = 'Customer agrees to receive email invoices'
+        self.fields['opt_in_for_emails'].label = 'Email opt-in for invoices'
 
 
 class QuickCustomerForm(forms.ModelForm):

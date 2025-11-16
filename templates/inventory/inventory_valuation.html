@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+{% block title %}Inventory Valuation{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Inventory Valuation & Aging</h3>
+    <div>
+      <a href="{% url 'inventory_valuation_export_csv' %}" class="btn btn-outline-secondary">Export CSV</a>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-4">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="text-muted">Stock Value (Cost)</div>
+          <div class="h4">${{ total_value|floatformat:2 }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="text-muted">Potential Value (Sell)</div>
+          <div class="h4">${{ potential_value|floatformat:2 }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="text-muted">Unrealized Margin</div>
+          <div class="h4">${{ margin_value|floatformat:2 }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header bg-light fw-semibold">Aging Buckets</div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead>
+          <tr>
+            <th>Bucket</th>
+            <th class="text-end">Stock Value</th>
+            <th class="text-end">Items</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for key, bucket in buckets.items %}
+          <tr>
+            <td>{{ bucket.label }}</td>
+            <td class="text-end">${{ bucket.value|floatformat:2 }}</td>
+            <td class="text-end">{{ bucket.items|length }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-md-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-light fw-semibold">By Category</div>
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th class="text-end">Stock Value</th>
+                <th class="text-end">Potential</th>
+                <th class="text-end">Items</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in by_category %}
+              <tr>
+                <td>{{ r.name }}</td>
+                <td class="text-end">${{ r.value|floatformat:2 }}</td>
+                <td class="text-end">${{ r.potential|floatformat:2 }}</td>
+                <td class="text-end">{{ r.count }}</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="4" class="text-center text-muted py-3">No data</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card shadow-sm">
+        <div class="card-header bg-light fw-semibold">By Supplier</div>
+        <div class="table-responsive">
+          <table class="table table-sm mb-0">
+            <thead>
+              <tr>
+                <th>Supplier</th>
+                <th class="text-end">Stock Value</th>
+                <th class="text-end">Potential</th>
+                <th class="text-end">Items</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in by_supplier %}
+              <tr>
+                <td>{{ r.name }}</td>
+                <td class="text-end">${{ r.value|floatformat:2 }}</td>
+                <td class="text-end">${{ r.potential|floatformat:2 }}</td>
+                <td class="text-end">{{ r.count }}</td>
+              </tr>
+              {% empty %}
+              <tr><td colspan="4" class="text-center text-muted py-3">No data</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

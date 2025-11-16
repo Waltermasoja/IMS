@@ -58,7 +58,7 @@ import json
 import calendar
 from django.urls import reverse
 from django.db import transaction
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
 from django.views.decorators.http import require_http_methods
 import decimal
@@ -147,12 +147,16 @@ def per_product_view(request, pk):
 
 @login_required 
 def add_product(request):
+    # Get return_to and order_id from query params
+    return_to = request.GET.get('return_to') or request.POST.get('return_to')
+    order_id = request.GET.get('order_id') or request.POST.get('order_id')
+
     if request.method == 'POST':
-        form = AddInventoryForm(request.POST)
+        form = AddInventoryForm(request.POST, request.FILES)
         if form.is_valid():
             new_inventory = form.save(commit=False)
             new_inventory.save()
-            
+
             # Create stock movement record
             StockMovement.objects.create(
                 inventory_item=new_inventory,
@@ -160,15 +164,27 @@ def add_product(request):
                 quantity=new_inventory.quantity_in_Stock,
                 reason='Initial Stock'
             )
-            
+
             messages.success(request, f'Product "{new_inventory.name}" added successfully!')
-            return redirect('inventory')
+
+            # Handle redirection based on return_to parameter
+            if return_to == 'import_order' and order_id:
+                return redirect('import_order_detail', pk=order_id)
+            else:
+                return redirect('inventory')
+        else:
+            # Add form errors to messages for debugging
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f'{field}: {error}')
     else:
         form = AddInventoryForm()
-    
+
     return render(request, 'inventory/inventory_add.html', {
         'form': form,
-        'title': 'Add New Product'
+        'title': 'Add New Product',
+        'return_to': return_to,
+        'order_id': order_id,
     })
 @login_required
 def delete_inventory(request,pk):
@@ -234,17 +250,29 @@ def make_sale(request, pk):
                 return JsonResponse({'success': False, 'error': f'Not enough stock. Available: {inventory.quantity_in_Stock}'})
 
             if payment_method == 'CREDIT':
+                print('[CREDIT] Start credit sale processing')
                 # Validate customer and due date
                 if not customer_id or not due_date_str:
+                    print('[CREDIT][ERROR] Missing customer_id or due_date')
                     return JsonResponse({'success': False, 'error': 'customer_id and due_date are required for CREDIT sales'})
-                from .models import Customer, ARInvoice
-                customer = get_object_or_404(Customer, pk=customer_id)
+                
+                from .models import Customer
+                from accounting.models import ARInvoice
+                
+                try:
+                    customer = Customer.objects.get(pk=customer_id)
+                    print(f"[CREDIT] Customer: {customer.id} - {customer.name}")
+                except Customer.DoesNotExist:
+                    print(f"[CREDIT][ERROR] Customer {customer_id} not found")
+                    return JsonResponse({'success': False, 'error': 'Customer not found'})
 
                 # Authorize within limit
                 if customer.current_balance + total_amount > customer.credit_limit:
-                    return JsonResponse({'success': False, 'error': 'Credit limit exceeded'})
+                    print(f"[CREDIT][ERROR] Credit limit exceeded: balance={customer.current_balance}, limit={customer.credit_limit}, sale={total_amount}")
+                    return JsonResponse({'success': False, 'error': f'Credit limit exceeded. Available: ${customer.credit_limit - customer.current_balance}'})
 
                 # Reduce stock and record movement
+                print(f"[CREDIT] Reducing stock: before={inventory.quantity_in_Stock}, qty={quantity_sold}")
                 inventory.quantity_in_Stock -= quantity_sold
                 inventory.last_sale_date = timezone.now()
                 inventory.save()
@@ -254,6 +282,7 @@ def make_sale(request, pk):
                     quantity=quantity_sold,
                     reason='Credit sale (on account)'
                 )
+                print(f"[CREDIT] Stock reduced: after={inventory.quantity_in_Stock}")
 
                 # Create sales record (delivered)
                 receipt_number = f"R{timezone.now().strftime('%Y%m%d%H%M%S')}"
@@ -269,27 +298,9 @@ def make_sale(request, pk):
                     payment_method='CREDIT',
                     customer=customer
                 )
+                print(f"[CREDIT] Sales record created: id={sale.id}, receipt={receipt_number}")
 
-                # Post Journal: Dr A/R, Cr Sales AND Dr COGS, Cr Inventory
-                try:
-                    from .models import GLAccount, JournalEntry, JournalLine
-                    ar_acct = GLAccount.objects.get(code='1200')
-                    sales_acct = GLAccount.objects.get(code='4000')
-                    cogs_acct = GLAccount.objects.get(code='5000')
-                    inventory_acct = GLAccount.objects.get(code='1500')
-                    
-                    je = JournalEntry.objects.create(memo='Credit sale')
-                    # Revenue side
-                    JournalLine.objects.create(entry=je, account=ar_acct, debit=total_amount, description='Accounts receivable', customer=customer)
-                    JournalLine.objects.create(entry=je, account=sales_acct, credit=total_amount, description='Sales revenue')
-                    # COGS side
-                    cogs_amount = inventory.purchase_price * quantity_sold
-                    JournalLine.objects.create(entry=je, account=cogs_acct, debit=cogs_amount, description='Cost of goods sold')
-                    JournalLine.objects.create(entry=je, account=inventory_acct, credit=cogs_amount, description='Inventory reduction')
-                except Exception:
-                    pass
-
-                # Create AR invoice
+                # Create AR invoice then post accounting
                 from datetime import datetime as dt
                 due_date = dt.strptime(due_date_str, '%Y-%m-%d').date()
                 inv_no = f"AR{timezone.now().strftime('%Y%m%d%H%M%S')}"
@@ -301,10 +312,22 @@ def make_sale(request, pk):
                     total_amount=total_amount,
                     sale=sale
                 )
+                print(f"[CREDIT] AR Invoice created: {ar.invoice_number}")
+                
                 # Update customer balance
                 customer.current_balance = (customer.current_balance or Decimal('0')) + total_amount
                 customer.save(update_fields=['current_balance'])
+                print(f"[CREDIT] Customer balance updated: {customer.current_balance}")
 
+                # Post Journal: Dr A/R, Cr Sales + COGS/Inventory
+                try:
+                    from accounting.utils import post_credit_sale
+                    post_credit_sale(sale, ar)
+                    print(f"[CREDIT] GL entries posted successfully")
+                except Exception as e:
+                    print(f"[CREDIT][WARN] Failed to post GL entries: {e}")
+
+                print('[CREDIT] Completed successfully')
                 return JsonResponse({
                     'success': True,
                     'message': f'Credit sale recorded. AR Invoice: {ar.invoice_number}',
@@ -314,67 +337,88 @@ def make_sale(request, pk):
                 })
 
             if payment_method == 'LAYBY':
+                print('[LAYBY] Start layby processing')
                 if not customer_id:
+                    print('[LAYBY][ERROR] Missing customer_id')
                     return JsonResponse({'success': False, 'error': 'customer_id is required for LAYBY'})
-                from .models import Customer, LaybyPlan, LaybyItem, LaybyPayment
+                print('[LAYBY] Importing layby models from accounting')
+                from .models import Customer
+                from accounting.models import LaybyPlan, LaybyItem, LaybyPayment
                 customer = get_object_or_404(Customer, pk=customer_id)
+                print(f"[LAYBY] Customer: {customer.id} - {customer.name}")
 
-                # Reserve stock now
-                inventory.quantity_in_Stock -= quantity_sold
-                inventory.save()
-                StockMovement.objects.create(
-                    inventory_item=inventory,
-                    movement_type='OUT',
-                    quantity=quantity_sold,
-                    reason='Layby reserve'
-                )
-
-                plan = LaybyPlan.objects.create(
-                    customer=customer,
-                    deposit_amount=deposit,
-                    total_price=total_amount,
-                )
-                # Record a non-fulfilled layby sale shell (optional): we skip creating a Sales row now to avoid recognizing revenue
-                LaybyItem.objects.create(
-                    plan=plan,
-                    inventory_item=inventory,
-                    quantity=quantity_sold,
-                    unit_price=discounted_price,
-                )
-                if deposit and deposit > 0:
-                    LaybyPayment.objects.create(
-                        plan=plan,
-                        amount=deposit,
-                        recorded_by=request.user,
+                try:
+                    # Reserve stock now
+                    print(f"[LAYBY] Reserve stock: before={inventory.quantity_in_Stock}, qty={quantity_sold}")
+                    inventory.quantity_in_Stock -= quantity_sold
+                    inventory.save()
+                    StockMovement.objects.create(
+                        inventory_item=inventory,
+                        movement_type='OUT',
+                        quantity=quantity_sold,
+                        reason='Layby reserve'
                     )
-                return JsonResponse({
-                    'success': True,
-                    'message': f'Layby plan created: #{plan.id}',
-                    'layby_plan_id': plan.id,
-                    'total_price': str(total_amount),
-                    'deposit': str(deposit),
-                    'remaining_stock': inventory.quantity_in_Stock
-                })
+                    print(f"[LAYBY] Stock reserved: after={inventory.quantity_in_Stock}")
+
+                    plan = LaybyPlan.objects.create(
+                        customer=customer,
+                        deposit_amount=deposit,
+                        total_price=total_amount,
+                    )
+                    print(f"[LAYBY] Plan created: id={plan.id}, total={total_amount}, deposit={deposit}")
+
+                    # Record a non-fulfilled layby sale shell
+                    item = LaybyItem.objects.create(
+                        plan=plan,
+                        inventory_item=inventory,
+                        quantity=quantity_sold,
+                        unit_price=discounted_price,
+                    )
+                    print(f"[LAYBY] Item created: id={item.id}, qty={quantity_sold}, unit={discounted_price}")
+
+                    if deposit and deposit > 0:
+                        print(f"[LAYBY] Creating deposit payment: amount={deposit}")
+                        payment = LaybyPayment.objects.create(
+                            plan=plan,
+                            amount=deposit,
+                            recorded_by=request.user,
+                        )
+                        print(f"[LAYBY] Deposit payment saved: id={payment.id}")
+
+                    # Create a Sales row for visibility in sales table (payment_method LAYBY)
+                    try:
+                        from .models import Sales as SalesModel
+                        receipt_number = f"LB{timezone.now().strftime('%Y%m%d%H%M%S')}"
+                        sale_row = SalesModel.objects.create(
+                            inventory_item=inventory,
+                            quantity_sold=quantity_sold,
+                            sale_price=sale_price,
+                            discount_applied=discount,
+                            total_amount=total_amount,
+                            receipt_number=receipt_number,
+                            sale_date=timezone.now(),
+                            recorded_by=request.user,
+                            payment_method='LAYBY',
+                            customer=customer
+                        )
+                        print(f"[LAYBY] Sales row created for visibility: id={sale_row.id}, receipt={receipt_number}")
+                    except Exception as e:
+                        print(f"[LAYBY][WARN] Failed to create Sales row for layby visibility: {e}")
+
+                    print('[LAYBY] Completed successfully')
+                    return JsonResponse({
+                        'success': True,
+                        'message': f'Layby plan created: #{plan.id}',
+                        'layby_plan_id': plan.id,
+                        'total_price': str(total_amount),
+                        'deposit': str(deposit),
+                        'remaining_stock': inventory.quantity_in_Stock
+                    })
+                except Exception as e:
+                    print(f"[LAYBY][ERROR] Exception during layby processing: {e}")
+                    return JsonResponse({'success': False, 'error': f'Layby failed: {e}'})
 
             # Default: CASH sale
-            # Post Journal: Dr Cash, Cr Sales AND Dr COGS, Cr Inventory
-            try:
-                from .models import GLAccount, JournalEntry, JournalLine
-                cash = GLAccount.objects.get(code='1000')
-                sales_acct = GLAccount.objects.get(code='4000')
-                cogs_acct = GLAccount.objects.get(code='5000')
-                inventory_acct = GLAccount.objects.get(code='1500')
-                
-                je = JournalEntry.objects.create(memo='Cash sale')
-                # Revenue side
-                JournalLine.objects.create(entry=je, account=cash, debit=total_amount, description='Cash received')
-                JournalLine.objects.create(entry=je, account=sales_acct, credit=total_amount, description='Sales revenue')
-                # COGS side
-                cogs_amount = inventory.purchase_price * quantity_sold
-                JournalLine.objects.create(entry=je, account=cogs_acct, debit=cogs_amount, description='Cost of goods sold')
-                JournalLine.objects.create(entry=je, account=inventory_acct, credit=cogs_amount, description='Inventory reduction')
-            except Exception:
-                pass
             # Generate receipt number
             receipt_number = f"R{timezone.now().strftime('%Y%m%d%H%M%S')}"
 
@@ -412,17 +456,13 @@ def make_sale(request, pk):
                 reason=f'Sale (Receipt: {receipt_number})'
             )
 
-            # Cashbook receipt for CASH sales
+            # Accounting postings for cash sale (GL + Cashbook)
             try:
-                CashbookEntry.objects.create(
-                    date=timezone.now().date(),
-                    reference=receipt_number,
-                    description=f"Cash sale - {inventory.name}",
-                    receipt_amount=total_amount,
-                    payment_amount=0,
-                    category='SALES',
-                    recorded_by=request.user,
-                )
+                from accounting.utils import post_cash_sale
+                # Reload sale to include receipt number
+                sale.receipt_number = receipt_number
+                sale.save(update_fields=['receipt_number'])
+                post_cash_sale(sale)
             except Exception:
                 pass
 
@@ -510,6 +550,7 @@ def ar_list(request):
 
 @login_required
 def layby_list(request):
+    from accounting.models import LaybyPlan
     plans = LaybyPlan.objects.select_related('customer').order_by('-created_date')
     total_remaining = sum([(p.remaining or 0) for p in plans])
     active_count = plans.filter(status='ACTIVE').count()
@@ -611,7 +652,8 @@ def layby_payment_create(request):
 @login_required
 @require_POST
 def layby_fulfill(request, pk):
-    from .models import LaybyPlan, GLAccount, JournalEntry, JournalLine
+    from accounting.models import LaybyPlan
+    from .models import GLAccount, JournalEntry, JournalLine
     plan = get_object_or_404(LaybyPlan, pk=pk)
     if plan.status != 'ACTIVE':
         messages.error(request, 'Plan not active')
@@ -639,13 +681,29 @@ def layby_fulfill(request, pk):
         pass
     plan.status = 'FULFILLED'
     plan.save(update_fields=['status'])
+    # Mark related layby sales as completed cash sales for reporting visibility
+    try:
+        from .models import Sales as SalesModel
+        updated = 0
+        for item in plan.items.select_related('inventory_item'):
+            qs = SalesModel.objects.filter(
+                inventory_item=item.inventory_item,
+                customer=plan.customer,
+                payment_method='LAYBY'
+            )
+            updated += qs.update(payment_method='CASH')
+        if updated:
+            print(f"[LAYBY] Fulfill plan#{plan.id}: updated {updated} sales rows to CASH")
+    except Exception as e:
+        print(f"[LAYBY][WARN] Could not update sales rows on fulfill: {e}")
     messages.success(request, 'Layby fulfilled')
     return redirect('dashboard')
 
 @login_required
 @require_POST
 def layby_cancel(request, pk):
-    from .models import LaybyPlan, GLAccount, JournalEntry, JournalLine
+    from accounting.models import LaybyPlan
+    from .models import GLAccount, JournalEntry, JournalLine
     plan = get_object_or_404(LaybyPlan, pk=pk)
     fee = Decimal(request.POST.get('cancellation_fee', '0') or '0')
     # Restock inventory for each item
@@ -813,6 +871,57 @@ def return_summary(request):
 
 
 @login_required
+@require_POST
+def sales_return(request, sale_id):
+    sale = get_object_or_404(Sales, pk=sale_id)
+    quantity_str = request.POST.get('quantity_returned')
+    reason = request.POST.get('reason', '').strip()
+
+    try:
+        quantity = int(quantity_str or 0)
+    except (TypeError, ValueError):
+        messages.error(request, 'Invalid return quantity')
+        return redirect('sales_summary')
+
+    if quantity <= 0:
+        messages.error(request, 'Return quantity must be greater than 0')
+        return redirect('sales_summary')
+
+    if quantity > sale.remaining_quantity:
+        messages.error(request, f'Return quantity exceeds remaining quantity ({sale.remaining_quantity})')
+        return redirect('sales_summary')
+
+    try:
+        with transaction.atomic():
+            Return.objects.create(
+                inventory_item=sale.inventory_item,
+                quantity_returned=quantity,
+                reason=reason or 'Customer return',
+                receipt_number=sale.receipt_number,
+                sale=sale,
+            )
+
+            sale.quantity_returned += quantity
+            sale.save(update_fields=['quantity_returned'])
+
+            inventory_item = sale.inventory_item
+            inventory_item.quantity_in_Stock += quantity
+            inventory_item.save(update_fields=['quantity_in_Stock'])
+
+            StockMovement.objects.create(
+                inventory_item=inventory_item,
+                movement_type='IN',
+                quantity=quantity,
+                reason=f'Return: {reason or "Customer return"} (Receipt: {sale.receipt_number or "N/A"})'
+            )
+
+            messages.success(request, f'Returned {quantity} of {inventory_item.name} successfully')
+    except Exception as e:
+        messages.error(request, f'Error processing return: {e}')
+
+    return redirect('sales_summary')
+
+@login_required
 def obsolate_summary(request):
     damages = Damaged.objects.all() 
     total_damages = damages.aggregate(total_quantity_damaged=Sum('quantity_damaged'))
@@ -906,9 +1015,16 @@ def login_view(request):
     return render(request, 'inventory_system/login.html')
 
 def search(request):
-    query = request.GET.get('q')
-    results = Inventory.objects.filter(name__icontains=query)
-    return render(request, 'inventory/search_results.html', {'results': results})
+    query = request.GET.get('q', '')
+    if query:
+        results = Inventory.objects.filter(name__icontains=query)
+    else:
+        results = Inventory.objects.none()
+    return render(request, 'inventory/search_results.html', {
+        'results': results,
+        'query': query,
+        'count': results.count()
+    })
 
 @login_required
 def logout_view(request):
@@ -1068,13 +1184,150 @@ def inventory_category(request):
     return render(request, 'inventory/inventory_category.html', context)
 
 
-def add_inventory_category(request):
-    if request.method == 'POST':
-        form = Inventory_categoryForm(request.POST)
-        if form.is_valid():
-            form.save()
-            return redirect('inventory_category')
-    return render(request, 'inventory/add_inventory_category.html')
+# ==================== STOCK CONTROL REPORTS ====================
+@login_required
+def low_stock_report(request):
+    """Low stock and reorder recommendations report.
+    Calculates recent sales velocity and suggests reorder quantity.
+    """
+    from django.utils import timezone as tz
+    from datetime import timedelta
+    days = int(request.GET.get('days', 30))
+    cutoff = tz.now() - timedelta(days=days)
+
+    items = Inventory.objects.select_related('category').all()
+
+    report_rows = []
+    for item in items:
+        recent_qty = (Sales.objects
+                      .filter(inventory_item=item, sale_date__gte=cutoff)
+                      .aggregate(total=Sum('quantity_sold'))['total'] or 0)
+        returns_qty = (Sales.objects
+                       .filter(inventory_item=item, sale_date__gte=cutoff)
+                       .aggregate(total=Sum('quantity_returned'))['total'] or 0)
+        net_sold = max(0, (recent_qty or 0) - (returns_qty or 0))
+        velocity = float(net_sold) / float(days) if days > 0 else 0.0
+        days_of_stock = (float(item.quantity_in_Stock) / velocity) if velocity > 0 else None
+        # Simple recommendation: demand during lead time + safety (reorder_point) - current stock
+        recommended = max(int(round(velocity * (item.lead_time_days or 0))) + (item.reorder_point or 0) - (item.quantity_in_Stock or 0), 0)
+        is_low = (item.quantity_in_Stock or 0) <= (item.reorder_point or 0)
+        report_rows.append({
+            'item': item,
+            'stock': item.quantity_in_Stock,
+            'reorder_point': item.reorder_point,
+            'lead_time_days': item.lead_time_days,
+            'velocity_per_day': round(velocity, 3),
+            'days_of_stock': round(days_of_stock, 1) if days_of_stock is not None else None,
+            'recommended_reorder': recommended,
+            'is_low': is_low,
+        })
+
+    # Sort with low stock first
+    report_rows.sort(key=lambda r: (not r['is_low'], -(r['recommended_reorder']), -(r['velocity_per_day'])))
+
+    return render(request, 'inventory/low_stock_report.html', {
+        'rows': report_rows,
+        'days': days,
+    })
+
+
+@login_required
+def inventory_valuation_report(request):
+    """Inventory valuation by category and supplier with aging buckets."""
+    from django.utils import timezone as tz
+    from datetime import timedelta
+    now = tz.now()
+
+    items = Inventory.objects.select_related('category').all()
+
+    def age_days(it):
+        ref = it.last_sale_date or it.created_date
+        return (now - ref).days if ref else 0
+
+    buckets = {
+        '0_30': {'label': '0-30', 'items': [], 'value': 0},
+        '31_90': {'label': '31-90', 'items': [], 'value': 0},
+        '91_180': {'label': '91-180', 'items': [], 'value': 0},
+        '180_plus': {'label': '181+', 'items': [], 'value': 0},
+    }
+
+    by_category = {}
+    by_supplier = {}
+
+    total_value = 0
+    potential_value = 0
+
+    for it in items:
+        stock = it.quantity_in_Stock or 0
+        value = float((it.purchase_price or 0) * stock)
+        potential = float((it.selling_price or 0) * stock)
+        total_value += value
+        potential_value += potential
+
+        # Buckets
+        d = age_days(it)
+        key = '0_30' if d <= 30 else '31_90' if d <= 90 else '91_180' if d <= 180 else '180_plus'
+        buckets[key]['items'].append(it)
+        buckets[key]['value'] += value
+
+        # Category
+        cat = it.category.name if it.category else 'Uncategorized'
+        if cat not in by_category:
+            by_category[cat] = {'value': 0, 'potential': 0, 'count': 0}
+        by_category[cat]['value'] += value
+        by_category[cat]['potential'] += potential
+        by_category[cat]['count'] += 1
+
+        # Supplier (string field)
+        sup = it.bought_from or 'Unknown'
+        if sup not in by_supplier:
+            by_supplier[sup] = {'value': 0, 'potential': 0, 'count': 0}
+        by_supplier[sup]['value'] += value
+        by_supplier[sup]['potential'] += potential
+        by_supplier[sup]['count'] += 1
+
+    margin_value = potential_value - total_value
+
+    # Prepare sorted views
+    cat_rows = sorted(({'name': k, **v} for k, v in by_category.items()), key=lambda r: -r['value'])
+    sup_rows = sorted(({'name': k, **v} for k, v in by_supplier.items()), key=lambda r: -r['value'])
+
+    return render(request, 'inventory/inventory_valuation.html', {
+        'total_value': total_value,
+        'potential_value': potential_value,
+        'margin_value': margin_value,
+        'buckets': buckets,
+        'by_category': cat_rows,
+        'by_supplier': sup_rows,
+    })
+
+
+@login_required
+def inventory_valuation_export_csv(request):
+    """Export detailed inventory valuation to CSV."""
+    import csv
+    from django.http import HttpResponse
+    items = Inventory.objects.select_related('category').all().order_by('name')
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="inventory_valuation.csv"'
+    writer = csv.writer(response)
+    writer.writerow(['Product', 'Category', 'Supplier', 'Stock', 'Cost', 'Sell Price', 'Stock Value', 'Potential Value', 'Last Sale'])
+    for it in items:
+        stock = it.quantity_in_Stock or 0
+        value = (it.purchase_price or 0) * stock
+        potential = (it.selling_price or 0) * stock
+        writer.writerow([
+            it.name,
+            it.category.name if it.category else '',
+            it.bought_from or '',
+            stock,
+            f"{it.purchase_price}",
+            f"{it.selling_price}",
+            f"{value}",
+            f"{potential}",
+            it.last_sale_date.strftime('%Y-%m-%d') if it.last_sale_date else ''
+        ])
+    return response
 
 def delete_inventory_category(request, pk):
     category = get_object_or_404(Inventory_category, pk=pk)
@@ -1132,39 +1385,91 @@ def add_category_ajax(request):
 def inventory_update(request, pk):
     inventory = get_object_or_404(Inventory, pk=pk)
     categories = Inventory_category.objects.all()
-    
+
     if request.method == 'POST':
         try:
             # Get form data
             data = request.POST.dict()
             data['on_sale'] = request.POST.get('on_sale') == 'on'
-            
+
             # Get category instance
             category_id = data.pop('category', None)  # Remove category from data dict
             if category_id:
                 category = get_object_or_404(Inventory_category, pk=category_id)
                 inventory.category = category
+
+            # Convert numeric fields - handle empty strings properly
+            # Purchase price (allows null, default 0)
+            purchase_price_val = data.get('purchase_price', '').strip() if data.get('purchase_price') else ''
+            if purchase_price_val:
+                data['purchase_price'] = Decimal(purchase_price_val)
+            else:
+                data['purchase_price'] = Decimal('0')
             
-            # Convert numeric fields
-            data['purchase_price'] = Decimal(data['purchase_price'])
-            data['selling_price'] = Decimal(data['selling_price'])
-            data['quantity_in_Stock'] = int(data['quantity_in_Stock'])
-            data['size'] = int(data.get('size', 0))
+            # Selling price (allows null, default 0)
+            selling_price_val = data.get('selling_price', '').strip() if data.get('selling_price') else ''
+            if selling_price_val:
+                data['selling_price'] = Decimal(selling_price_val)
+            else:
+                data['selling_price'] = Decimal('0')
             
-            # Validate prices
-            if data['selling_price'] < data['purchase_price']:
+            # Quantity in stock
+            quantity_val = data.get('quantity_in_Stock', '').strip() if data.get('quantity_in_Stock') else ''
+            if quantity_val:
+                data['quantity_in_Stock'] = int(quantity_val)
+            else:
+                data['quantity_in_Stock'] = 0
+            
+            # Size is a CharField, not IntegerField - keep as string or convert to empty string
+            if 'size' in data:
+                size_val = data.get('size', '') or ''
+                if size_val and isinstance(size_val, str):
+                    size_val = size_val.strip()
+                    data['size'] = size_val if size_val else None
+                elif not size_val:
+                    data['size'] = None  # Allow null for size
+            
+            # Optional new fields
+            if 'reorder_point' in data:
+                reorder_val = data.get('reorder_point', '') or ''
+                if reorder_val and str(reorder_val).strip():
+                    data['reorder_point'] = int(reorder_val)
+                else:
+                    data['reorder_point'] = 0
+            if 'lead_time_days' in data:
+                lead_time_val = data.get('lead_time_days', '') or ''
+                if lead_time_val and str(lead_time_val).strip():
+                    data['lead_time_days'] = int(lead_time_val)
+                else:
+                    data['lead_time_days'] = 0
+            
+            # Handle weight if present (optional DecimalField)
+            if 'weight' in data:
+                weight_val = data.get('weight', '') or ''
+                if weight_val and str(weight_val).strip():
+                    data['weight'] = Decimal(str(weight_val).strip())
+                else:
+                    data['weight'] = None  # Allow null for weight
+
+            # Validate prices only if both are non-zero
+            if data['selling_price'] > 0 and data['purchase_price'] > 0 and data['selling_price'] < data['purchase_price']:
                 messages.error(request, "Selling price cannot be less than purchase price")
                 return redirect('inventory_update', pk=pk)
-            
+
             # Update inventory
             for key, value in data.items():
                 if key not in ['csrfmiddlewaretoken']:
                     setattr(inventory, key, value)
-            
+
+            # Handle image upload
+            if 'image' in request.FILES:
+                inventory.image = request.FILES['image']
+                # Thumbnail will be auto-generated by the model signal
+
             inventory.save()
             messages.success(request, f'Successfully updated {inventory.name}')
             return redirect('inventory')
-            
+
         except (ValueError, decimal.InvalidOperation) as e:
             messages.error(request, str(e))
             return redirect('inventory_update', pk=pk)
@@ -1238,26 +1543,90 @@ def import_order_create(request):
 @login_required
 def import_order_detail(request, pk):
     import_order = get_object_or_404(ImportOrder.objects.select_related('supplier'), pk=pk)
-    items_formset = ImportOrderItemFormSet(instance=import_order)
+    
+    # Only show extra empty form if there are no existing items
+    # This prevents showing 2 forms (1 existing + 1 extra) when there's already an item
+    from inventory.forms import ImportOrderItemForm
+    from django.forms import inlineformset_factory
+    
+    existing_items_count = import_order.items.count()
+    # min_num=1 ensures at least 1 form is shown, so we don't need extra=1
+    DynamicItemFormSet = inlineformset_factory(
+        ImportOrder,
+        ImportOrderItem,
+        form=ImportOrderItemForm,
+        extra=0,  # min_num already ensures we have at least 1 form
+        min_num=1,
+        validate_min=True,
+        can_delete=True
+    )
+    items_formset = DynamicItemFormSet(instance=import_order)
     expenses_formset = ImportExpenseFormSet(instance=import_order)
 
     if request.method == 'POST':
         if 'save_items' in request.POST:
-            items_formset = ImportOrderItemFormSet(request.POST, instance=import_order)
+            # Use the same dynamic formset for POST requests
+            items_formset = DynamicItemFormSet(request.POST, instance=import_order)
             if items_formset.is_valid():
                 items_formset.save()
-                messages.success(request, 'Order items saved')
+                messages.success(request, 'Order items saved successfully')
                 return redirect('import_order_detail', pk=pk)
             else:
-                messages.error(request, 'Please fix errors in the items form')
+                # Collect detailed error messages
+                error_messages = []
+                for i, form in enumerate(items_formset):
+                    if form.errors:
+                        for field, errors in form.errors.items():
+                            if field != '__all__':
+                                field_label = field
+                                if field in form.fields:
+                                    field_label = form.fields[field].label if hasattr(form.fields[field], 'label') else field
+                                for error in errors:
+                                    error_messages.append(f"Item {i+1}: {field_label} - {error}")
+                
+                # Add formset-level errors
+                if items_formset.non_form_errors():
+                    for error in items_formset.non_form_errors():
+                        error_messages.append(str(error))
+                
+                if error_messages:
+                    error_text = 'Please fix the following errors:<br>• ' + '<br>• '.join(error_messages[:5])
+                    if len(error_messages) > 5:
+                        error_text += f'<br>... and {len(error_messages) - 5} more error(s)'
+                    messages.error(request, error_text)
+                else:
+                    messages.error(request, 'Please fix errors in the items form')
         elif 'save_expenses' in request.POST:
             expenses_formset = ImportExpenseFormSet(request.POST, instance=import_order)
             if expenses_formset.is_valid():
                 expenses_formset.save()
-                messages.success(request, 'Order expenses saved')
+                messages.success(request, 'Order expenses saved successfully')
                 return redirect('import_order_detail', pk=pk)
             else:
-                messages.error(request, 'Please fix errors in the expenses form')
+                # Collect detailed error messages
+                error_messages = []
+                for i, form in enumerate(expenses_formset):
+                    if form.errors:
+                        for field, errors in form.errors.items():
+                            if field != '__all__':
+                                field_label = field
+                                if field in form.fields:
+                                    field_label = form.fields[field].label if hasattr(form.fields[field], 'label') else field
+                                for error in errors:
+                                    error_messages.append(f"Expense {i+1}: {field_label} - {error}")
+                
+                # Add formset-level errors
+                if expenses_formset.non_form_errors():
+                    for error in expenses_formset.non_form_errors():
+                        error_messages.append(str(error))
+                
+                if error_messages:
+                    error_text = 'Please fix the following errors:<br>• ' + '<br>• '.join(error_messages[:5])
+                    if len(error_messages) > 5:
+                        error_text += f'<br>... and {len(error_messages) - 5} more error(s)'
+                    messages.error(request, error_text)
+                else:
+                    messages.error(request, 'Please fix errors in the expenses form')
 
     invoices = SupplierInvoice.objects.filter(import_order=import_order)
 
@@ -1337,11 +1706,11 @@ def download_csv_template(request):
 def import_order_receive_goods(request, pk):
     """Receive all goods from import order and update stock"""
     import_order = get_object_or_404(ImportOrder, pk=pk)
-    
+
     try:
         items_received = import_order.receive_all_goods()
         messages.success(request, f'Successfully received {items_received} items. Stock has been updated.')
-        
+
         # Show new product codes
         new_products = import_order.created_products.all()
         if new_products.exists():
@@ -1349,11 +1718,47 @@ def import_order_receive_goods(request, pk):
             if new_products.count() > 5:
                 product_codes += f' and {new_products.count() - 5} more'
             messages.info(request, f'New products created: {product_codes}')
-    
+
     except Exception as e:
         messages.error(request, f'Error receiving goods: {str(e)}')
-    
+
     return redirect('import_order_detail', pk=pk)
+
+
+@login_required
+@require_POST
+def import_order_cancel(request, pk):
+    """Cancel an import order (soft delete)"""
+    import_order = get_object_or_404(ImportOrder, pk=pk)
+
+    # Safety checks
+    if import_order.status in ['RECEIVED', 'COMPLETED']:
+        messages.error(request, 'Cannot cancel an order that has already been received. Goods have been added to stock.')
+        return redirect('import_order_detail', pk=pk)
+
+    if import_order.status == 'CANCELLED':
+        messages.warning(request, 'This order is already cancelled.')
+        return redirect('import_order_detail', pk=pk)
+
+    # Check if there are paid supplier invoices
+    paid_invoices = import_order.invoices.filter(amount_paid__gt=0)
+    if paid_invoices.exists():
+        messages.error(request, 'Cannot cancel order with paid invoices. Please contact accounting to reverse payments first.')
+        return redirect('import_order_detail', pk=pk)
+
+    try:
+        # Mark as cancelled
+        import_order.status = 'CANCELLED'
+        import_order.save()
+
+        messages.success(request, f'Import Order {import_order.order_number} has been cancelled. All data is preserved for records.')
+        messages.info(request, 'Items and expenses are locked. Unpaid invoices remain for accounting purposes.')
+
+        return redirect('import_order_detail', pk=pk)
+
+    except Exception as e:
+        messages.error(request, f'Error cancelling order: {str(e)}')
+        return redirect('import_order_detail', pk=pk)
 
 
 @login_required
@@ -1390,17 +1795,18 @@ def add_invoice_payment(request, pk):
 
 
 @login_required
-def pos_interface(request):
-    """Point of Sale interface for sales personnel"""
+def simple_pos(request):
     # Check if user has profile, create if not exists
     if not hasattr(request.user, 'profile'):
         from .models import UserProfile
         UserProfile.objects.create(
             user=request.user,
-            role='admin' if request.user.is_staff else 'sales'
+            role='admin' if request.user.is_staff else 'sales',
+            can_make_sales=True,  # Ensure users can access POS by default
+            can_manage_inventory=request.user.is_staff,  # Admins should have inventory access
         )
     
-    # Check POS access permission
+    # Check POS access permission (model property handles admin access automatically)
     if not request.user.profile.can_access_pos:
         messages.error(request, 'You do not have permission to access the Point of Sale system.')
         return redirect('dashboard')
@@ -1573,6 +1979,9 @@ def product_search_ajax(request):
 
     results = []
     for product in products:
+        # Get thumbnail URL if image exists
+        thumbnail_url = product.thumbnail.url if product.thumbnail else None
+
         results.append({
             'id': product.id,
             'product_code': product.product_code,
@@ -1581,7 +1990,8 @@ def product_search_ajax(request):
             'selling_price': str(product.selling_price),
             'quantity_in_stock': product.quantity_in_Stock,
             'category': product.category.name if product.category else 'Uncategorized',
-            'display_name': f"{product.product_code} - {product.name}"
+            'display_name': f"{product.product_code} - {product.name}",
+            'thumbnail_url': thumbnail_url
         })
 
     return JsonResponse({'products': results})
@@ -1677,7 +2087,7 @@ def product_details_ajax(request, pk):
     """Get detailed product information for sales modal"""
     try:
         product = Inventory.objects.select_related('category').get(pk=pk)
-        
+
         data = {
             'id': product.id,
             'product_code': product.product_code,
@@ -1690,10 +2100,360 @@ def product_details_ajax(request, pk):
             'size': product.size,
             'on_sale': product.on_sale
         }
-        
+
         return JsonResponse({'success': True, 'product': data})
-        
+
     except Inventory.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Product not found'})
+
+
+# ==================== ADVANCED STOCK REPORTS ====================
+
+@login_required
+def stock_movement_report(request):
+    """Comprehensive stock movement report with filters for date, product, type, and user."""
+    form = DateRangeForm(request.GET or None)
+    movements = StockMovement.objects.select_related('inventory_item').all().order_by('-stock_date')
+
+    # Apply filters
+    if form.is_valid():
+        start_date = form.cleaned_data.get('start_date')
+        end_date = form.cleaned_data.get('end_date')
+        if start_date:
+            movements = movements.filter(stock_date__date__gte=start_date)
+        if end_date:
+            movements = movements.filter(stock_date__date__lte=end_date)
+
+    # Product filter
+    product_id = request.GET.get('product')
+    if product_id:
+        movements = movements.filter(inventory_item_id=product_id)
+
+    # Movement type filter
+    movement_type = request.GET.get('movement_type')
+    if movement_type:
+        movements = movements.filter(movement_type=movement_type)
+
+    # Calculate running balance for each product
+    movements_with_balance = []
+    for movement in movements[:500]:  # Limit to 500 for performance
+        movements_with_balance.append(movement)
+
+    # Get summary statistics
+    total_in = movements.filter(movement_type='IN').aggregate(total=Sum('quantity'))['total'] or 0
+    total_out = movements.filter(movement_type='OUT').aggregate(total=Sum('quantity'))['total'] or 0
+
+    # Calculate specific movement types
+    total_sales = movements.filter(movement_type='OUT', reason__icontains='sale').aggregate(total=Sum('quantity'))['total'] or 0
+    total_returns = movements.filter(movement_type='IN', reason__icontains='return').aggregate(total=Sum('quantity'))['total'] or 0
+    total_damages = movements.filter(movement_type='OUT').filter(
+        Q(reason__icontains='damage') | Q(reason__icontains='obsolete')
+    ).aggregate(total=Sum('quantity'))['total'] or 0
+
+    # Get distinct products for filter dropdown
+    products = Inventory.objects.all().order_by('name')
+
+    context = {
+        'form': form,
+        'movements': movements_with_balance,
+        'total_in': total_in,
+        'total_out': total_out,
+        'net_movement': total_in - total_out,
+        'total_sales': total_sales,
+        'total_returns': total_returns,
+        'total_damages': total_damages,
+        'products': products,
+        'selected_product': product_id or '',
+        'selected_type': movement_type or '',
+    }
+    return render(request, 'inventory/stock_movement_report.html', context)
+
+
+@login_required
+def stock_movement_export_csv(request):
+    """Export stock movements to CSV with same filters as report."""
+    form = DateRangeForm(request.GET or None)
+    movements = StockMovement.objects.select_related('inventory_item').all().order_by('-stock_date')
+
+    # Apply same filters as main report
+    if form.is_valid():
+        start_date = form.cleaned_data.get('start_date')
+        end_date = form.cleaned_data.get('end_date')
+        if start_date:
+            movements = movements.filter(stock_date__date__gte=start_date)
+        if end_date:
+            movements = movements.filter(stock_date__date__lte=end_date)
+
+    product_id = request.GET.get('product')
+    if product_id:
+        movements = movements.filter(inventory_item_id=product_id)
+
+    movement_type = request.GET.get('movement_type')
+    if movement_type:
+        movements = movements.filter(movement_type=movement_type)
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="stock_movements.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(['Date', 'Product Code', 'Product Name', 'Type', 'Quantity', 'Reason', 'Current Stock'])
+
+    for m in movements:
+        writer.writerow([
+            m.stock_date.strftime('%Y-%m-%d %H:%M'),
+            m.inventory_item.product_code,
+            m.inventory_item.name,
+            m.get_movement_type_display(),
+            m.quantity,
+            m.reason or '',
+            m.inventory_item.quantity_in_Stock
+        ])
+
+    return response
+
+
+@login_required
+def dead_stock_report(request):
+    """Report on slow-moving and dead stock items with no sales in X days."""
+    days_threshold = int(request.GET.get('days', 90))
+    category_id = request.GET.get('category')
+    min_value = Decimal(request.GET.get('min_value', '0') or '0')
+
+    cutoff_date = timezone.now() - timedelta(days=days_threshold)
+
+    # Get all items with their last sale date
+    items = Inventory.objects.select_related('category').all()
+
+    # Filter by category if specified
+    if category_id:
+        items = items.filter(category_id=category_id)
+
+    dead_stock_items = []
+    for item in items:
+        # Calculate days since last sale
+        last_sale = item.last_sale_date
+        if last_sale:
+            days_since_sale = (timezone.now() - last_sale).days
+        else:
+            days_since_sale = (timezone.now() - item.created_date).days if item.created_date else 999
+
+        # Only include items with no recent sales
+        if days_since_sale >= days_threshold:
+            stock_value = (item.purchase_price or Decimal('0')) * (item.quantity_in_Stock or 0)
+
+            # Apply minimum value filter
+            if stock_value >= min_value:
+                dead_stock_items.append({
+                    'item': item,
+                    'days_since_sale': days_since_sale,
+                    'stock': item.quantity_in_Stock,
+                    'stock_value': stock_value,
+                    'potential_loss': stock_value,
+                    'last_sale_date': last_sale or item.created_date,
+                })
+
+    # Sort by value (highest first)
+    dead_stock_items.sort(key=lambda x: -x['stock_value'])
+
+    # Calculate totals
+    total_items = len(dead_stock_items)
+    total_value = sum(item['stock_value'] for item in dead_stock_items)
+    total_units = sum(item['stock'] for item in dead_stock_items)
+
+    # Get categories for filter
+    categories = Inventory_category.objects.all().order_by('name')
+
+    context = {
+        'items': dead_stock_items,
+        'days_threshold': days_threshold,
+        'total_items': total_items,
+        'total_value': total_value,
+        'total_units': total_units,
+        'categories': categories,
+        'selected_category': category_id or '',
+        'min_value': min_value,
+    }
+    return render(request, 'inventory/dead_stock_report.html', context)
+
+
+@login_required
+def inventory_turnover_report(request):
+    """Calculate inventory turnover ratio for products and categories."""
+    form = DateRangeForm(request.GET or None)
+
+    # Default to last 90 days
+    end_date = timezone.now()
+    start_date = end_date - timedelta(days=90)
+
+    if form.is_valid():
+        if form.cleaned_data.get('start_date'):
+            start_date = timezone.make_aware(datetime.combine(form.cleaned_data['start_date'], datetime.min.time()))
+        if form.cleaned_data.get('end_date'):
+            end_date = timezone.make_aware(datetime.combine(form.cleaned_data['end_date'], datetime.max.time()))
+
+    # Category filter
+    category_id = request.GET.get('category')
+
+    items = Inventory.objects.select_related('category').all()
+    if category_id:
+        items = items.filter(category_id=category_id)
+
+    turnover_data = []
+    for item in items:
+        # Get COGS for period (purchase_price * quantity_sold)
+        sales_qs = Sales.objects.filter(
+            inventory_item=item,
+            sale_date__range=(start_date, end_date)
+        )
+
+        total_qty_sold = sales_qs.aggregate(total=Sum('quantity_sold'))['total'] or 0
+        cogs = (item.purchase_price or Decimal('0')) * total_qty_sold
+
+        # Average inventory = (beginning + ending) / 2
+        # Simplified: use current stock as proxy
+        avg_inventory_value = (item.purchase_price or Decimal('0')) * (item.quantity_in_Stock or 0)
+
+        # Turnover ratio = COGS / Average Inventory
+        if avg_inventory_value > 0:
+            turnover_ratio = float(cogs) / float(avg_inventory_value)
+        else:
+            turnover_ratio = 0.0 if cogs == 0 else float('inf')
+
+        # Classification
+        if turnover_ratio >= 4:
+            classification = 'Excellent'
+        elif turnover_ratio >= 2:
+            classification = 'Good'
+        elif turnover_ratio >= 1:
+            classification = 'Fair'
+        else:
+            classification = 'Poor'
+
+        if total_qty_sold > 0 or avg_inventory_value > 0:  # Only show items with activity
+            turnover_data.append({
+                'item': item,
+                'cogs': cogs,
+                'avg_inventory_value': avg_inventory_value,
+                'turnover_ratio': round(turnover_ratio, 2) if turnover_ratio != float('inf') else 'N/A',
+                'classification': classification,
+                'qty_sold': total_qty_sold,
+            })
+
+    # Sort by turnover ratio (descending)
+    turnover_data.sort(key=lambda x: x['turnover_ratio'] if isinstance(x['turnover_ratio'], (int, float)) else 0, reverse=True)
+
+    # Calculate category averages
+    category_summary = {}
+    for data in turnover_data:
+        cat_name = data['item'].category.name if data['item'].category else 'Uncategorized'
+        if cat_name not in category_summary:
+            category_summary[cat_name] = {'count': 0, 'total_ratio': 0}
+        if isinstance(data['turnover_ratio'], (int, float)):
+            category_summary[cat_name]['count'] += 1
+            category_summary[cat_name]['total_ratio'] += data['turnover_ratio']
+
+    for cat in category_summary:
+        if category_summary[cat]['count'] > 0:
+            category_summary[cat]['avg_ratio'] = round(
+                category_summary[cat]['total_ratio'] / category_summary[cat]['count'], 2
+            )
+
+    categories = Inventory_category.objects.all().order_by('name')
+
+    context = {
+        'form': form,
+        'turnover_data': turnover_data,
+        'category_summary': category_summary,
+        'categories': categories,
+        'selected_category': category_id or '',
+        'start_date': start_date,
+        'end_date': end_date,
+    }
+    return render(request, 'inventory/inventory_turnover_report.html', context)
+
+
+@login_required
+def stock_forecast_report(request):
+    """Predict stockout dates based on sales velocity."""
+    forecast_days = int(request.GET.get('days', 60))
+
+    # Calculate velocity over last 30 days
+    velocity_window = 30
+    cutoff = timezone.now() - timedelta(days=velocity_window)
+
+    items = Inventory.objects.select_related('category').all()
+
+    forecast_data = []
+    for item in items:
+        # Calculate daily velocity
+        recent_sales = Sales.objects.filter(
+            inventory_item=item,
+            sale_date__gte=cutoff
+        ).aggregate(
+            total_qty=Sum('quantity_sold'),
+            total_returns=Sum('quantity_returned')
+        )
+
+        qty_sold = (recent_sales['total_qty'] or 0) - (recent_sales['total_returns'] or 0)
+        daily_velocity = float(qty_sold) / float(velocity_window) if velocity_window > 0 else 0.0
+
+        current_stock = item.quantity_in_Stock or 0
+
+        # Calculate days until stockout
+        if daily_velocity > 0:
+            days_until_stockout = int(current_stock / daily_velocity)
+        else:
+            days_until_stockout = 999  # No recent sales
+
+        # Calculate recommended order date (consider lead time)
+        reorder_lead_time = item.lead_time_days or 0
+        recommended_order_days = max(0, days_until_stockout - reorder_lead_time)
+
+        # Projected stockout date
+        if days_until_stockout < 999:
+            stockout_date = timezone.now() + timedelta(days=days_until_stockout)
+            recommended_order_date = timezone.now() + timedelta(days=recommended_order_days)
+        else:
+            stockout_date = None
+            recommended_order_date = None
+
+        # Urgency level
+        if days_until_stockout <= 7:
+            urgency = 'critical'
+        elif days_until_stockout <= 14:
+            urgency = 'high'
+        elif days_until_stockout <= 30:
+            urgency = 'medium'
+        else:
+            urgency = 'low'
+
+        # Only include items that will run out within forecast period
+        if days_until_stockout <= forecast_days:
+            forecast_data.append({
+                'item': item,
+                'current_stock': current_stock,
+                'daily_velocity': round(daily_velocity, 2),
+                'days_until_stockout': days_until_stockout,
+                'stockout_date': stockout_date,
+                'recommended_order_date': recommended_order_date,
+                'urgency': urgency,
+                'lead_time_days': reorder_lead_time,
+            })
+
+    # Sort by urgency (soonest first)
+    forecast_data.sort(key=lambda x: x['days_until_stockout'])
+
+    # Summary stats
+    critical_count = sum(1 for f in forecast_data if f['urgency'] == 'critical')
+    high_count = sum(1 for f in forecast_data if f['urgency'] == 'high')
+
+    context = {
+        'forecast_data': forecast_data,
+        'forecast_days': forecast_days,
+        'critical_count': critical_count,
+        'high_count': high_count,
+        'total_items': len(forecast_data),
+    }
+    return render(request, 'inventory/stock_forecast_report.html', context)
 
 

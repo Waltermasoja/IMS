@@ -86,16 +86,16 @@
 
                 <!-- Currency -->
                 <div>
-                    <label for="{{ form.currency.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
-                        <i class="fas fa-coins text-yellow-500 mr-2"></i>Currency
+                    <label for="{{ form.currency_preference.id_for_label }}" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-coins text-yellow-500 mr-2"></i>Currency Preference
                     </label>
-                    <select name="currency" id="{{ form.currency.id_for_label }}" 
+                    <select name="currency_preference" id="{{ form.currency_preference.id_for_label }}"
                             class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
-                        {% for choice in form.currency.field.choices %}
-                            <option value="{{ choice.0 }}" {% if form.currency.value == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
+                        {% for choice in form.currency_preference.field.choices %}
+                            <option value="{{ choice.0 }}" {% if form.currency_preference.value == choice.0 %}selected{% endif %}>{{ choice.1 }}</option>
                         {% endfor %}
                     </select>
-                    {% for error in form.currency.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
+                    {% for error in form.currency_preference.errors %}<p class="text-xs text-red-600 mt-1">{{ error }}</p>{% endfor %}
                 </div>
 
                 <!-- Payment Terms -->

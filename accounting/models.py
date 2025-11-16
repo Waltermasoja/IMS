@@ -234,14 +234,18 @@ class LaybyPayment(models.Model):
     created_date = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
+        print(f"[LAYBY][MODEL] Saving LaybyPayment: plan={getattr(self.plan,'id',None)}, amount={self.amount}, reference={self.reference}")
         super().save(*args, **kwargs)
+        print(f"[LAYBY][MODEL] Saved payment id={self.id}")
         # Update aggregate paid amount on plan
         total_paid = self.plan.payments.aggregate(total=Sum('amount'))['total'] or 0
+        print(f"[LAYBY][MODEL] Recomputed plan paid total: {total_paid}")
         self.plan.amount_paid = total_paid
         # Auto-fulfill if fully paid
         if self.plan.amount_paid >= self.plan.total_price and self.plan.status == 'ACTIVE':
             self.plan.status = 'FULFILLED'
         self.plan.save()
+        print(f"[LAYBY][MODEL] Plan status={self.plan.status}, amount_paid={self.plan.amount_paid}, total_price={self.plan.total_price}")
         # Post journal: deposit -> Dr Cash, Cr Unearned Revenue
         try:
             cash = GLAccount.objects.get(code='1000')
@@ -249,8 +253,9 @@ class LaybyPayment(models.Model):
             je = JournalEntry.objects.create(memo=f"Layby deposit plan#{self.plan_id}")
             JournalLine.objects.create(entry=je, account=cash, debit=self.amount, description='Layby deposit')
             JournalLine.objects.create(entry=je, account=unearned, credit=self.amount, description='Unearned revenue')
+            print(f"[LAYBY][MODEL] Journal posted for deposit: JE#{je.id}")
         except GLAccount.DoesNotExist:
-            pass
+            print("[LAYBY][MODEL][WARN] GL accounts for cash/unearned not found")
         # Create cashbook receipt entry for layby deposit
         try:
             CashbookEntry.objects.create(
@@ -262,8 +267,9 @@ class LaybyPayment(models.Model):
                 category='LAYBY',
                 recorded_by=self.recorded_by,
             )
+            print("[LAYBY][MODEL] Cashbook receipt created")
         except Exception:
-            pass
+            print("[LAYBY][MODEL][WARN] Failed to create cashbook receipt")
 
     def __str__(self):
         return f"Layby payment {self.amount} for plan #{self.plan_id}"
@@ -303,3 +309,54 @@ class BankReconciliation(models.Model):
 
     def __str__(self):
         return f"Bank Reconciliation {self.month.strftime('%Y-%m')}"
+
+# ==================== OPERATING EXPENSES ====================
+
+class Expense(models.Model):
+    CATEGORY_CHOICES = [
+        ('RENT', 'Rent'),
+        ('UTILITIES', 'Utilities'),
+        ('WAGES', 'Wages'),
+        ('FREIGHT', 'Freight'),
+        ('MARKETING', 'Marketing'),
+        ('OTHER', 'Other'),
+    ]
+    PAYMENT_METHODS = [
+        ('CASH', 'Cash'),
+        ('BANK', 'Bank Transfer'),
+        ('CARD', 'Card'),
+        ('MOBILE', 'Mobile Money'),
+        ('OTHER', 'Other'),
+    ]
+
+    date = models.DateField(default=timezone.now)
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    description = models.CharField(max_length=255, blank=True)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    gl_account = models.ForeignKey(GLAccount, on_delete=models.PROTECT, limit_choices_to={'type': 'EXP'})
+    payment_method = models.CharField(max_length=10, choices=PAYMENT_METHODS, default='CASH')
+    reference = models.CharField(max_length=100, blank=True)
+    recorded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True)
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Auto-post expense: Dr Expense GL, Cr Cash (1000) and write to cashbook
+        try:
+            cash = GLAccount.objects.get(code='1000')
+            je = JournalEntry.objects.create(memo=f"Expense: {self.category}", reference=self.reference, created_by=self.recorded_by)
+            # Dr Expense, Cr Cash
+            JournalLine.objects.create(entry=je, account=self.gl_account, debit=self.amount, description=self.description)
+            JournalLine.objects.create(entry=je, account=cash, credit=self.amount, description='Cash/Bank')
+            # Cashbook payment
+            CashbookEntry.objects.create(
+                date=self.date,
+                reference=self.reference or f"EXP-{self.id}",
+                description=self.description or self.category,
+                category='EXPENSE',
+                receipt_amount=0,
+                payment_amount=self.amount,
+                recorded_by=self.recorded_by,
+            )
+        except GLAccount.DoesNotExist:
+            pass

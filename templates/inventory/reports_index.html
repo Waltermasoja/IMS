@@ -1,0 +1,217 @@
+{% extends 'base.html' %}
+{% block title %}Business Reports - IMS Pro{% endblock %}
+{% block content %}
+<div class="space-y-6 animate-fade-in">
+  <!-- Page Header -->
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-900">Business Reports</h1>
+      <p class="text-gray-500 mt-1">Comprehensive analytics and insights for your business</p>
+    </div>
+  </div>
+
+  <!-- Sales Reports -->
+  <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div class="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4">
+      <div class="flex items-center space-x-3 text-white">
+        <i class="fas fa-chart-line text-2xl"></i>
+        <h2 class="text-xl font-semibold">Sales Reports</h2>
+      </div>
+    </div>
+    <div class="divide-y divide-gray-200">
+      <a href="{% url 'sales_report_simple' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">Simple Sales Report</h3>
+            <p class="text-sm text-gray-500 mt-1">Basic sales overview with summary statistics</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-blue-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+      <a href="{% url 'sales_report_detailed' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">Detailed Sales Report</h3>
+            <p class="text-sm text-gray-500 mt-1">Comprehensive sales breakdown by user and product</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-blue-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Inventory Management Reports -->
+  <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div class="bg-gradient-to-r from-green-500 to-green-600 px-6 py-4">
+      <div class="flex items-center space-x-3 text-white">
+        <i class="fas fa-boxes text-2xl"></i>
+        <h2 class="text-xl font-semibold">Inventory Management Reports</h2>
+      </div>
+    </div>
+    <div class="divide-y divide-gray-200">
+      <a href="{% url 'low_stock_report' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-green-600 transition-colors">Low Stock & Reorder Report</h3>
+            <p class="text-sm text-gray-500 mt-1">Items below reorder point with recommendations</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-green-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+      <a href="{% url 'inventory_valuation_report' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-green-600 transition-colors">Inventory Valuation & Aging</h3>
+            <p class="text-sm text-gray-500 mt-1">Total inventory value by category and age brackets</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-green-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+      <a href="{% url 'stock_movement_report' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-green-600 transition-colors">Stock Movement Report</h3>
+            <p class="text-sm text-gray-500 mt-1">Detailed log of all IN/OUT inventory movements</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-green-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+      <a href="{% url 'dead_stock_report' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-green-600 transition-colors">Dead Stock / Slow-Moving Inventory</h3>
+            <p class="text-sm text-gray-500 mt-1">Items with no sales in specified period - clearance candidates</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-green-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+      <a href="{% url 'inventory_turnover_report' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-green-600 transition-colors">Inventory Turnover Report</h3>
+            <p class="text-sm text-gray-500 mt-1">Measure inventory efficiency with turnover ratios</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-green-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+      <a href="{% url 'stock_forecast_report' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-green-600 transition-colors">Stock Forecast & Reorder Planner</h3>
+            <p class="text-sm text-gray-500 mt-1">Predict stockout dates and recommended order timing</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-green-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Accounts Receivable Reports -->
+  <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div class="bg-gradient-to-r from-yellow-500 to-yellow-600 px-6 py-4">
+      <div class="flex items-center space-x-3 text-white">
+        <i class="fas fa-credit-card text-2xl"></i>
+        <h2 class="text-xl font-semibold">Accounts Receivable Reports</h2>
+      </div>
+    </div>
+    <div class="divide-y divide-gray-200">
+      <a href="{% url 'accounting:ar_aging_report' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-yellow-600 transition-colors">AR Aging Report</h3>
+            <p class="text-sm text-gray-500 mt-1">Outstanding invoices by age (0-30, 31-60, 61-90, 90+ days)</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-yellow-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+      <a href="{% url 'accounting:customer_credit_utilization_report' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-yellow-600 transition-colors">Customer Credit Utilization</h3>
+            <p class="text-sm text-gray-500 mt-1">Monitor credit limits and identify over-limit customers</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-yellow-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+      <a href="{% url 'accounting:credit_sales_summary_report' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-yellow-600 transition-colors">Credit Sales Summary</h3>
+            <p class="text-sm text-gray-500 mt-1">Credit sales performance and collection metrics</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-yellow-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Financial Reports -->
+  <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div class="bg-gradient-to-r from-purple-500 to-purple-600 px-6 py-4">
+      <div class="flex items-center space-x-3 text-white">
+        <i class="fas fa-dollar-sign text-2xl"></i>
+        <h2 class="text-xl font-semibold">Financial Reports</h2>
+      </div>
+    </div>
+    <div class="divide-y divide-gray-200">
+      <a href="{% url 'accounting:cashflow_report' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-purple-600 transition-colors">Cash Flow Report</h3>
+            <p class="text-sm text-gray-500 mt-1">Monthly cash receipts and payments analysis</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-purple-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+      <a href="{% url 'accounting:layby_list' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-purple-600 transition-colors">Layby Plans Report</h3>
+            <p class="text-sm text-gray-500 mt-1">Active layby plans and payment status</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-purple-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+      <a href="{% url 'accounting:expense_list' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-purple-600 transition-colors">Expense Report</h3>
+            <p class="text-sm text-gray-500 mt-1">Operating expenses by category and period</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-purple-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <!-- Info Card -->
+  <div class="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6">
+    <div class="flex items-start space-x-3">
+      <div class="flex-shrink-0">
+        <i class="fas fa-info-circle text-2xl text-blue-600"></i>
+      </div>
+      <div class="flex-1">
+        <h4 class="text-lg font-semibold text-gray-900 mb-3">Report Features</h4>
+        <ul class="space-y-2 text-sm text-gray-700">
+          <li class="flex items-start">
+            <i class="fas fa-check text-green-500 mt-0.5 mr-2"></i>
+            <span>All reports support date range filtering for custom analysis</span>
+          </li>
+          <li class="flex items-start">
+            <i class="fas fa-check text-green-500 mt-0.5 mr-2"></i>
+            <span>Many reports offer CSV export for further analysis in Excel</span>
+          </li>
+          <li class="flex items-start">
+            <i class="fas fa-check text-green-500 mt-0.5 mr-2"></i>
+            <span>Use filters to drill down into specific products, customers, or categories</span>
+          </li>
+          <li class="flex items-start">
+            <i class="fas fa-check text-green-500 mt-0.5 mr-2"></i>
+            <span>Reports are updated in real-time based on system data</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

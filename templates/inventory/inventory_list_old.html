@@ -66,10 +66,7 @@
                                         onclick="setupSaleModal('{{ inventory.id }}', '{{ inventory.name }}', '{{ inventory.selling_price }}')">
                                         <i class="fas fa-dollar-sign"></i>
                                     </button>
-                                    <a href="{% url 'returnInventory' inventory.id %}"
-                                        class="btn btn-sm btn-outline-warning" title="Return">
-                                        <i class="fas fa-undo"></i>
-                                    </a>
+                                    
                                     <a href="{% url 'damagedInventory' inventory.id %}"
                                         class="btn btn-sm btn-outline-danger" title="Report Damage">
                                         <i class="fas fa-exclamation-triangle"></i>
