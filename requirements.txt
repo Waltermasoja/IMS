@@ -10,10 +10,10 @@ django-tinymce==4.1.0
 django-pandas==0.6.7
 whitenoise==6.9.0
 
-# Database Support
+# Database Support (comment out if not needed)
 dj-database-url==2.2.0
-mysqlclient==2.2.6
-psycopg2==2.9.10
+# mysqlclient==2.2.6  # Uncomment if using MySQL - requires mysql-dev packages
+# psycopg2==2.9.10  # Uncomment if using PostgreSQL - requires postgresql-dev packages
 
 # Production Server
 gunicorn==23.0.0
