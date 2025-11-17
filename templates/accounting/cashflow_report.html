@@ -34,12 +34,7 @@
             </div>
             <p class="text-green-100 text-sm font-medium">Total Cash IN</p>
             <h3 class="text-3xl font-bold mt-1">
-                ${% widthratio rows|length|mul:"0" 1 1 as total_in %}
-                {% for row in rows %}
-                    {% widthratio total_in 1 1 as temp %}
-                    {% widthratio temp|add:row.receipts 1 1 as total_in %}
-                {% endfor %}
-                {{ total_in|floatformat:2 }}
+                ${{ total_in|floatformat:2 }}
             </h3>
         </div>
 
@@ -52,12 +47,7 @@
             </div>
             <p class="text-red-100 text-sm font-medium">Total Cash OUT</p>
             <h3 class="text-3xl font-bold mt-1">
-                ${% widthratio rows|length|mul:"0" 1 1 as total_out %}
-                {% for row in rows %}
-                    {% widthratio total_out 1 1 as temp %}
-                    {% widthratio temp|add:row.payments 1 1 as total_out %}
-                {% endfor %}
-                {{ total_out|floatformat:2 }}
+                ${{ total_out|floatformat:2 }}
             </h3>
         </div>
 
@@ -70,9 +60,7 @@
             </div>
             <p class="text-blue-100 text-sm font-medium">Net Cash Flow</p>
             <h3 class="text-3xl font-bold mt-1">
-                {% widthratio total_in|add:"-0"|floatformat:2 1 1 as ti %}
-                {% widthratio total_out|add:"-0"|floatformat:2 1 1 as to %}
-                ${{ ti|add:"-"|add:to|floatformat:2 }}
+                ${{ total_net|floatformat:2 }}
             </h3>
         </div>
     </div>
@@ -133,27 +121,12 @@
                     <tr>
                         <td class="px-6 py-4 text-sm font-bold text-gray-900">TOTAL</td>
                         <td class="px-6 py-4 text-right text-sm font-bold text-green-600">
-                            ${% widthratio rows|length|mul:"0" 1 1 as total_in %}
-                            {% for row in rows %}
-                                {% widthratio total_in 1 1 as temp %}
-                                {% widthratio temp|add:row.receipts 1 1 as total_in %}
-                            {% endfor %}
-                            {{ total_in|floatformat:2 }}
+                            ${{ total_in|floatformat:2 }}
                         </td>
                         <td class="px-6 py-4 text-right text-sm font-bold text-red-600">
-                            ${% widthratio rows|length|mul:"0" 1 1 as total_out %}
-                            {% for row in rows %}
-                                {% widthratio total_out 1 1 as temp %}
-                                {% widthratio temp|add:row.payments 1 1 as total_out %}
-                            {% endfor %}
-                            {{ total_out|floatformat:2 }}
+                            ${{ total_out|floatformat:2 }}
                         </td>
                         <td class="px-6 py-4 text-right text-sm font-bold text-blue-600">
-                            {% widthratio rows|length|mul:"0" 1 1 as total_net %}
-                            {% for row in rows %}
-                                {% widthratio total_net 1 1 as temp %}
-                                {% widthratio temp|add:row.net 1 1 as total_net %}
-                            {% endfor %}
                             ${{ total_net|floatformat:2 }}
                         </td>
                         <td class="px-6 py-4"></td>

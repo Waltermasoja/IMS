@@ -226,17 +226,30 @@ def cashflow_report(request):
         .order_by('month'))
 
     rows = []
+    total_in = 0
+    total_out = 0
+    total_net = 0
+
     for m in monthly:
         r = float(m['receipts'] or 0)
         p = float(m['payments'] or 0)
+        n = r - p
         rows.append({
             'month': m['month'],
             'receipts': r,
             'payments': p,
-            'net': r - p,
+            'net': n,
         })
+        total_in += r
+        total_out += p
+        total_net += n
 
-    return render(request, 'accounting/cashflow_report.html', {'rows': rows})
+    return render(request, 'accounting/cashflow_report.html', {
+        'rows': rows,
+        'total_in': total_in,
+        'total_out': total_out,
+        'total_net': total_net,
+    })
 
 # ==================== BANK RECONCILIATION ====================
 
