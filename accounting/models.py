@@ -20,6 +20,26 @@ class GLAccount(models.Model):
     type = models.CharField(max_length=10, choices=TYPE_CHOICES)
     is_active = models.BooleanField(default=True)
 
+    @property
+    def balance(self):
+        """
+        Calculate account balance from journal entries.
+        For ASSET and EXPENSE accounts: Debit increases, Credit decreases (Debit - Credit)
+        For LIABILITY, EQUITY, and INCOME accounts: Credit increases, Debit decreases (Credit - Debit)
+        """
+        from accounting.models import JournalLine
+
+        lines = JournalLine.objects.filter(account=self)
+        total_debits = lines.aggregate(total=Sum('debit'))['total'] or Decimal('0.00')
+        total_credits = lines.aggregate(total=Sum('credit'))['total'] or Decimal('0.00')
+
+        # Normal debit balance accounts (Assets, Expenses)
+        if self.type in ['ASSET', 'EXP']:
+            return total_debits - total_credits
+        # Normal credit balance accounts (Liabilities, Equity, Income)
+        else:
+            return total_credits - total_debits
+
     def __str__(self):
         return f"{self.code} - {self.name}"
 
