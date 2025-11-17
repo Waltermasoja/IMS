@@ -694,12 +694,16 @@ class ImportOrderItem(models.Model):
     quantity = models.IntegerField()
     unit_cost = models.DecimalField(max_digits=10, decimal_places=2)
     allocated_expenses = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    
+
+    # Price tracking (for comparison before/after allocation)
+    old_selling_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                           help_text="Original selling price before allocation")
+
     # Received tracking
     quantity_received = models.IntegerField(default=0, help_text="Quantity actually received")
     is_received = models.BooleanField(default=False)
     received_date = models.DateField(null=True, blank=True)
-    
+
     # Optional: specific markup for this item
     markup_percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     

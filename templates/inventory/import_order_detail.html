@@ -322,28 +322,54 @@
                             ${{ item.landed_cost_per_unit|floatformat:2 }}
                         </td>
                         <td class="px-6 py-4 text-right text-sm font-medium text-gray-900">
-                            ${{ item.inventory_item.selling_price|floatformat:2 }}
+                            {% if item.old_selling_price %}
+                                ${{ item.old_selling_price|floatformat:2 }}
+                            {% else %}
+                                ${{ item.inventory_item.selling_price|floatformat:2 }}
+                            {% endif %}
                         </td>
                         <td class="px-6 py-4 text-right text-sm font-bold text-purple-600">
                             ${{ item.suggested_selling_price|floatformat:2 }}
                         </td>
                         <td class="px-6 py-4 text-center">
-                            {% if item.inventory_item.selling_price < item.landed_cost_per_unit %}
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
-                                    <i class="fas fa-exclamation-triangle mr-1"></i>LOSS!
-                                </span>
-                            {% elif item.inventory_item.selling_price < item.suggested_selling_price %}
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
-                                    <i class="fas fa-arrow-up mr-1"></i>Low
-                                </span>
-                            {% elif item.inventory_item.selling_price > item.suggested_selling_price %}
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
-                                    <i class="fas fa-arrow-down mr-1"></i>High
-                                </span>
+                            {% if item.old_selling_price %}
+                                {% comment %}Use old price for comparison if available{% endcomment %}
+                                {% if item.old_selling_price < item.landed_cost_per_unit %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                                        <i class="fas fa-exclamation-triangle mr-1"></i>LOSS!
+                                    </span>
+                                {% elif item.old_selling_price < item.suggested_selling_price %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+                                        <i class="fas fa-arrow-up mr-1"></i>Low
+                                    </span>
+                                {% elif item.old_selling_price > item.suggested_selling_price %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                                        <i class="fas fa-arrow-down mr-1"></i>High
+                                    </span>
+                                {% else %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                                        <i class="fas fa-check mr-1"></i>Match
+                                    </span>
+                                {% endif %}
                             {% else %}
-                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
-                                    <i class="fas fa-check mr-1"></i>Match
-                                </span>
+                                {% comment %}Fallback to current price if old price not available{% endcomment %}
+                                {% if item.inventory_item.selling_price < item.landed_cost_per_unit %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800">
+                                        <i class="fas fa-exclamation-triangle mr-1"></i>LOSS!
+                                    </span>
+                                {% elif item.inventory_item.selling_price < item.suggested_selling_price %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800">
+                                        <i class="fas fa-arrow-up mr-1"></i>Low
+                                    </span>
+                                {% elif item.inventory_item.selling_price > item.suggested_selling_price %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                                        <i class="fas fa-arrow-down mr-1"></i>High
+                                    </span>
+                                {% else %}
+                                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                                        <i class="fas fa-check mr-1"></i>Match
+                                    </span>
+                                {% endif %}
                             {% endif %}
                         </td>
                     </tr>
@@ -360,9 +386,12 @@
                 <div class="flex-1">
                     <h5 class="text-sm font-semibold text-gray-900 mb-1">Smart Pricing</h5>
                     <p class="text-xs text-gray-700">
-                        • <strong>New products:</strong> Selling price will be set to suggested price automatically<br>
-                        • <strong>Existing products:</strong> Current price is preserved (update manually if needed)<br>
-                        • <strong class="text-red-600">LOSS warning:</strong> Current price is below landed cost!
+                        • <strong>Current Price:</strong> Shows the price before allocation (for comparison)<br>
+                        • <strong>Suggested Price:</strong> Calculated from landed cost + markup %<br>
+                        • <strong class="text-green-600">Match:</strong> Current price equals suggested price<br>
+                        • <strong class="text-yellow-600">Low:</strong> Current price is below suggested (still profitable)<br>
+                        • <strong class="text-blue-600">High:</strong> Current price is above suggested (higher margin)<br>
+                        • <strong class="text-red-600">LOSS:</strong> Current price is below landed cost (selling at a loss!)
                     </p>
                 </div>
             </div>

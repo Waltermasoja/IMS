@@ -107,33 +107,39 @@ def allocate_expenses_by_value(import_order):
     Most fair for mixed-value shipments
     """
     from .models import ImportOrderItem
-    
+
     items = import_order.items.all()
     if not items:
         return False
-    
+
     total_goods_value = sum(item.quantity * item.unit_cost for item in items)
     total_expenses = import_order.total_expenses
-    
+
     if total_goods_value == 0:
         return False
-    
+
     for item in items:
         item_value = item.quantity * item.unit_cost
         proportion = item_value / total_goods_value
         item.allocated_expenses = total_expenses * proportion
+
+        # Save old selling price before updating (for price comparison)
+        if item.inventory_item:
+            item.old_selling_price = item.inventory_item.selling_price
+
         item.save()
-        
+
         # Update inventory with landed cost
         item.inventory_item.purchase_price = item.landed_cost_per_unit
         item.inventory_item.selling_price = item.suggested_selling_price
         item.inventory_item.save()
-    
-    # Mark allocation as completed
+
+    # Update goods cost and mark allocation as completed
+    import_order.goods_cost = total_goods_value
     import_order.allocation_completed = True
     import_order.allocation_date = timezone.now()
     import_order.save()
-    
+
     return True
 
 def allocate_expenses_by_quantity(import_order):
@@ -144,29 +150,36 @@ def allocate_expenses_by_quantity(import_order):
     items = import_order.items.all()
     if not items:
         return False
-    
+
     total_quantity = sum(item.quantity for item in items)
     total_expenses = import_order.total_expenses
-    
+
     if total_quantity == 0:
         return False
-    
+
     expense_per_unit = total_expenses / total_quantity
-    
+
     for item in items:
         item.allocated_expenses = expense_per_unit * item.quantity
+
+        # Save old selling price before updating (for price comparison)
+        if item.inventory_item:
+            item.old_selling_price = item.inventory_item.selling_price
+
         item.save()
-        
+
         # Update inventory with landed cost
         item.inventory_item.purchase_price = item.landed_cost_per_unit
         item.inventory_item.selling_price = item.suggested_selling_price
         item.inventory_item.save()
-    
-    # Mark allocation as completed
+
+    # Update goods cost and mark allocation as completed
+    total_goods_value = sum(item.quantity * item.unit_cost for item in items)
+    import_order.goods_cost = total_goods_value
     import_order.allocation_completed = True
     import_order.allocation_date = timezone.now()
     import_order.save()
-    
+
     return True
 
 def allocate_expenses_by_weight(import_order):
@@ -177,30 +190,37 @@ def allocate_expenses_by_weight(import_order):
     items = import_order.items.all()
     if not items:
         return False
-    
+
     total_weight = sum(item.quantity * item.inventory_item.weight for item in items)
     total_expenses = import_order.total_expenses
-    
+
     if total_weight == 0:
         # Fallback to quantity if no weights set
         return allocate_expenses_by_quantity(import_order)
-    
+
     for item in items:
         item_weight = item.quantity * item.inventory_item.weight
         proportion = item_weight / total_weight
         item.allocated_expenses = total_expenses * proportion
+
+        # Save old selling price before updating (for price comparison)
+        if item.inventory_item:
+            item.old_selling_price = item.inventory_item.selling_price
+
         item.save()
-        
+
         # Update inventory with landed cost
         item.inventory_item.purchase_price = item.landed_cost_per_unit
         item.inventory_item.selling_price = item.suggested_selling_price
         item.inventory_item.save()
-    
-    # Mark allocation as completed
+
+    # Update goods cost and mark allocation as completed
+    total_goods_value = sum(item.quantity * item.unit_cost for item in items)
+    import_order.goods_cost = total_goods_value
     import_order.allocation_completed = True
     import_order.allocation_date = timezone.now()
     import_order.save()
-    
+
     return True
 
 def allocate_expenses_smart(import_order):
@@ -256,18 +276,23 @@ def allocate_expenses_smart(import_order):
     
     # Save all items and update inventory
     for item in items:
+        # Save old selling price before updating (for price comparison)
+        if item.inventory_item:
+            item.old_selling_price = item.inventory_item.selling_price
+
         item.save()
-        
+
         # Update inventory with landed cost
         item.inventory_item.purchase_price = item.landed_cost_per_unit
         item.inventory_item.selling_price = item.suggested_selling_price
         item.inventory_item.save()
-    
-    # Mark allocation as completed
+
+    # Update goods cost and mark allocation as completed
+    import_order.goods_cost = total_value
     import_order.allocation_completed = True
     import_order.allocation_date = timezone.now()
     import_order.save()
-    
+
     return True
 
 def allocate_expenses_custom(import_order, percentages_dict):
