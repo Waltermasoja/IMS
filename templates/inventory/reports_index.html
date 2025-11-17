@@ -154,11 +154,47 @@
       </div>
     </div>
     <div class="divide-y divide-gray-200">
+      <a href="{% url 'accounting:balance_sheet' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-purple-600 transition-colors">Balance Sheet</h3>
+            <p class="text-sm text-gray-500 mt-1">Financial position - Assets, Liabilities, and Owner's Equity</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-purple-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+      <a href="{% url 'accounting:profit_loss_report' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-purple-600 transition-colors">Profit & Loss Statement</h3>
+            <p class="text-sm text-gray-500 mt-1">Income and expenses - calculate net profit for any period</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-purple-600 transition-colors mt-1"></i>
+        </div>
+      </a>
       <a href="{% url 'accounting:cashflow_report' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
         <div class="flex items-start justify-between">
           <div class="flex-1">
             <h3 class="text-base font-semibold text-gray-900 group-hover:text-purple-600 transition-colors">Cash Flow Report</h3>
             <p class="text-sm text-gray-500 mt-1">Monthly cash receipts and payments analysis</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-purple-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+      <a href="{% url 'accounting:daily_cash_summary' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-purple-600 transition-colors">Daily Cash Summary</h3>
+            <p class="text-sm text-gray-500 mt-1">Daily cash transactions, sales, and drawer reconciliation</p>
+          </div>
+          <i class="fas fa-arrow-right text-gray-400 group-hover:text-purple-600 transition-colors mt-1"></i>
+        </div>
+      </a>
+      <a href="{% url 'accounting:accounts_payable_list' %}" class="block px-6 py-4 hover:bg-gray-50 transition-colors group">
+        <div class="flex items-start justify-between">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-gray-900 group-hover:text-purple-600 transition-colors">Accounts Payable</h3>
+            <p class="text-sm text-gray-500 mt-1">Outstanding supplier invoices and payment obligations</p>
           </div>
           <i class="fas fa-arrow-right text-gray-400 group-hover:text-purple-600 transition-colors mt-1"></i>
         </div>

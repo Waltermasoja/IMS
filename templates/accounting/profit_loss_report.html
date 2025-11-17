@@ -247,19 +247,19 @@
                         <div>
                             <div class="flex justify-between text-xs mb-1">
                                 <span>COGS as % of Revenue</span>
-                                <span class="font-semibold">{{ cogs|floatformat:0|add:0|mul:100|div:total_revenue|floatformat:0 }}%</span>
+                                <span class="font-semibold">{{ cogs_ratio }}%</span>
                             </div>
                             <div class="w-full bg-gray-200 rounded-full h-2">
-                                <div class="bg-blue-500 h-2 rounded-full" style="width: {{ cogs|floatformat:0|add:0|mul:100|div:total_revenue|floatformat:0 }}%"></div>
+                                <div class="bg-blue-500 h-2 rounded-full" style="width: {{ cogs_ratio }}%"></div>
                             </div>
                         </div>
                         <div>
                             <div class="flex justify-between text-xs mb-1">
                                 <span>Expenses as % of Revenue</span>
-                                <span class="font-semibold">{{ total_expenses|floatformat:0|add:0|mul:100|div:total_revenue|floatformat:0 }}%</span>
+                                <span class="font-semibold">{{ expense_ratio }}%</span>
                             </div>
                             <div class="w-full bg-gray-200 rounded-full h-2">
-                                <div class="bg-orange-500 h-2 rounded-full" style="width: {{ total_expenses|floatformat:0|add:0|mul:100|div:total_revenue|floatformat:0 }}%"></div>
+                                <div class="bg-orange-500 h-2 rounded-full" style="width: {{ expense_ratio }}%"></div>
                             </div>
                         </div>
                     </div>

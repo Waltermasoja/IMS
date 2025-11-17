@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.db.models import Sum, Q
 from django.db.models.functions import TruncMonth
 from decimal import Decimal
+import calendar
 
 from .models import (
     CashbookEntry, BankReconciliation, GLAccount, JournalEntry, JournalLine,
@@ -408,8 +409,10 @@ def accounting_dashboard(request):
         ar_outstanding = Decimal(str((outstanding_ar['total'] or 0) - (outstanding_ar['paid'] or 0)))
 
     # === ACCOUNTS PAYABLE ===
-    ap_outstanding = SupplierInvoice.objects.filter(paid=False).aggregate(
-        total=Sum(F('invoice_amount') - F('amount_paid'))
+    ap_outstanding = SupplierInvoice.objects.filter(
+        status__in=['PENDING', 'PARTIAL', 'OVERDUE']
+    ).aggregate(
+        total=Sum(F('total_amount') - F('amount_paid'))
     )['total'] or Decimal('0')
 
     # === INVENTORY VALUE ===
@@ -1031,6 +1034,10 @@ def profit_loss_report(request):
             count=Sum('id')
         )
 
+    # Calculate expense ratios for visualization
+    cogs_ratio = round((cogs / total_revenue * 100) if total_revenue > 0 else 0, 1)
+    expense_ratio = round((total_expenses / total_revenue * 100) if total_revenue > 0 else 0, 1)
+
     context = {
         'month': month,
         'year': year,
@@ -1056,6 +1063,10 @@ def profit_loss_report(request):
         'net_profit': net_profit,
         'net_margin': round(net_margin, 1),
 
+        # Ratios for visualization
+        'cogs_ratio': cogs_ratio,
+        'expense_ratio': expense_ratio,
+
         # Comparison
         'prev_revenue': prev_revenue,
         'revenue_change': sales_revenue - prev_revenue,
@@ -1074,6 +1085,7 @@ def balance_sheet(request):
     """Simple Balance Sheet for small shop - Assets, Liabilities, Equity."""
     from inventory.models import Inventory, Customer
     from datetime import datetime
+    from django.db.models import F
 
     # Get date from query params or default to today
     date_str = request.GET.get('as_of_date')
@@ -1127,9 +1139,9 @@ def balance_sheet(request):
     # Calculate from unpaid import order invoices
     from inventory.models import SupplierInvoice
     accounts_payable = SupplierInvoice.objects.filter(
-        paid=False
+        status__in=['PENDING', 'PARTIAL', 'OVERDUE']
     ).aggregate(
-        total=Sum(F('invoice_amount') - F('amount_paid'))
+        total=Sum(F('total_amount') - F('amount_paid'))
     )['total'] or Decimal('0')
 
     total_liabilities = unearned_revenue + accounts_payable
@@ -1149,6 +1161,10 @@ def balance_sheet(request):
     except GLAccount.DoesNotExist:
         period_profit = Decimal('0')
 
+    # Calculate financial ratios
+    debt_ratio = round((total_liabilities / total_assets * 100) if total_assets > 0 else 0, 1)
+    equity_ratio = round((owners_equity / total_assets * 100) if total_assets > 0 else 0, 1)
+
     context = {
         'as_of_date': as_of_date,
         'cash_balance': cash_balance,
@@ -1161,6 +1177,8 @@ def balance_sheet(request):
         'owners_equity': owners_equity,
         'period_profit': period_profit,
         'retained_earnings': owners_equity - period_profit,  # Historical equity
+        'debt_ratio': debt_ratio,
+        'equity_ratio': equity_ratio,
     }
 
     return render(request, 'accounting/balance_sheet.html', context)
@@ -1173,7 +1191,7 @@ def accounts_payable_list(request):
 
     # Get all unpaid or partially paid invoices
     unpaid_invoices = SupplierInvoice.objects.filter(
-        paid=False
+        status__in=['PENDING', 'PARTIAL', 'OVERDUE']
     ).select_related('import_order__supplier').order_by('due_date')
 
     # Calculate totals
@@ -1184,7 +1202,7 @@ def accounts_payable_list(request):
     supplier_summary = {}
 
     for invoice in unpaid_invoices:
-        amount_due = invoice.invoice_amount - invoice.amount_paid
+        amount_due = invoice.total_amount - invoice.amount_paid
 
         # Add to supplier summary
         supplier_name = invoice.import_order.supplier.name if invoice.import_order and invoice.import_order.supplier else 'Unknown'
