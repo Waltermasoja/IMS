@@ -29,9 +29,11 @@ yarn-error.log*
 # Uncomment the line below if you want to build CSS during deployment
 # static/css/output.css
 
-# IDE
+# IDE & Editor
 .vscode/
 .idea/
+.claude/
+.python-version
 *.swp
 *.swo
 *~
