@@ -30,17 +30,18 @@ DEBUG = True
 
 CSRF_TRUSTED_ORIGINS = [
     'https://ims-production-45b3.up.railway.app',
+    'https://ims-d8su.onrender.com',
     'http://127.0.0.1:8000',
     'http://localhost:8000',
 ]
 
-# If you also need to update ALLOWED_HOSTS
 ALLOWED_HOSTS = [
     '127.0.0.1',
     'localhost',
     'ims-production-45b3.up.railway.app',
-    '.railway.app'  # Allows all railway.app subdomains
-
+    '.railway.app',
+    'ims-d8su.onrender.com',
+    '.onrender.com',
 ]
 
 
