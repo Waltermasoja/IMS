@@ -1,0 +1,28 @@
+{
+  "name": "ims",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build:tailwind": "npx tailwindcss -i ./static/css/input.css -o ./static/css/output.css",
+    "build:tailwind:prod": "npx tailwindcss -i ./static/css/input.css -o ./static/css/output.css --minify",
+    "watch:tailwind": "npx tailwindcss -i ./static/css/input.css -o ./static/css/output.css --watch",
+    "postinstall": "npm run build:tailwind:prod",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Waltermasoja/IMS.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Waltermasoja/IMS/issues"
+  },
+  "homepage": "https://github.com/Waltermasoja/IMS#readme",
+  "devDependencies": {
+    "tailwindcss": "^3.4.1"
+  }
+}

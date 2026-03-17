@@ -1,0 +1,12 @@
+# Render Blueprint - IMS deployment config
+# See: https://render.com/docs/blueprint-spec
+#
+# Python 3.12 via .python-version (avoids Pillow build failure on Python 3.14)
+# Required env vars in Dashboard: SECRET_KEY, DATABASE_URL, DEBUG, ALLOWED_HOSTS
+
+services:
+  - type: web
+    name: ims
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: bash start.sh

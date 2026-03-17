@@ -2,12 +2,88 @@ from django import forms
 from django.forms import ModelForm, inlineformset_factory
 from .models import (
     Inventory, Return, Damaged, Sales, Inventory_category,
-    Supplier, ImportOrder, SupplierInvoice, InvoicePayment, 
-    ImportExpense, ImportOrderItem, Customer
+    Supplier, ImportOrder, SupplierInvoice, InvoicePayment,
+    ImportExpense, ImportOrderItem, Customer, SiteSettings,
+    AttributeType, AttributeValue, ProductVariant
 )
 
 from .utils import get_exchange_rate, get_common_expenses_for_country
 from decimal import Decimal
+
+
+# ==================== SITE SETTINGS FORM ====================
+
+class SiteSettingsForm(ModelForm):
+    """Form for editing site-wide settings with tabbed sections"""
+
+    class Meta:
+        model = SiteSettings
+        exclude = ['created_date', 'last_updated', 'updated_by']
+        widgets = {
+            'company_address': forms.Textarea(attrs={'rows': 3}),
+            'company_logo': forms.FileInput(attrs={'accept': 'image/*'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Apply consistent styling to all fields
+        for field_name, field in self.fields.items():
+            # Base classes for all inputs
+            base_class = 'form-control'
+
+            # Handle different widget types
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs.update({'class': 'form-check-input'})
+            elif isinstance(field.widget, forms.Select):
+                field.widget.attrs.update({'class': f'{base_class} form-select'})
+            elif isinstance(field.widget, forms.FileInput):
+                field.widget.attrs.update({'class': 'form-control'})
+            elif isinstance(field.widget, forms.Textarea):
+                field.widget.attrs.update({'class': base_class, 'rows': 3})
+            else:
+                field.widget.attrs.update({'class': base_class})
+
+        # Group fields by section for template organization
+        self.company_fields = [
+            'company_name', 'company_address', 'company_phone',
+            'company_email', 'company_website', 'tax_registration_number', 'company_logo'
+        ]
+        self.financial_fields = [
+            'default_currency', 'currency_symbol_position', 'decimal_places',
+            'tax_rate', 'financial_year_start'
+        ]
+        self.credit_fields = [
+            'default_credit_limit', 'default_payment_terms_days', 'credit_grace_period_days',
+            'enable_interest_charges', 'interest_rate_monthly'
+        ]
+        self.layby_fields = [
+            'layby_minimum_deposit_percent', 'layby_max_duration_days',
+            'layby_cancellation_fee_percent'
+        ]
+        self.inventory_fields = [
+            'low_stock_threshold', 'default_markup_percent',
+            'allow_negative_stock', 'track_stock_movements'
+        ]
+        self.pos_fields = [
+            'receipt_prefix', 'invoice_prefix', 'import_order_prefix', 'layby_prefix',
+            'max_discount_percent', 'require_customer_for_sales', 'print_receipt_automatically'
+        ]
+        self.display_fields = [
+            'date_format', 'time_format', 'items_per_page'
+        ]
+
+    def get_fields_by_section(self):
+        """Return fields organized by section for template rendering"""
+        return {
+            'company': [(name, self[name]) for name in self.company_fields if name in self.fields],
+            'financial': [(name, self[name]) for name in self.financial_fields if name in self.fields],
+            'credit': [(name, self[name]) for name in self.credit_fields if name in self.fields],
+            'layby': [(name, self[name]) for name in self.layby_fields if name in self.fields],
+            'inventory': [(name, self[name]) for name in self.inventory_fields if name in self.fields],
+            'pos': [(name, self[name]) for name in self.pos_fields if name in self.fields],
+            'display': [(name, self[name]) for name in self.display_fields if name in self.fields],
+        }
 
 class AddInventoryForm(ModelForm):
     category = forms.ModelChoiceField(
@@ -330,11 +406,21 @@ ImportExpenseFormSet = inlineformset_factory(
 )
 
 class SupplierInvoiceForm(ModelForm):
+    currency = forms.ChoiceField(
+        choices=ImportOrder._meta.get_field('currency').choices,
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+    status = forms.ChoiceField(
+        choices=SupplierInvoice.INVOICE_STATUS,
+        initial='PENDING',
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+
     class Meta:
         model = SupplierInvoice
         fields = [
             'invoice_number', 'currency', 'total_amount', 
-            'invoice_date', 'due_date', 'notes'
+            'invoice_date', 'due_date', 'status', 'notes'
         ]
         widgets = {
             'invoice_date': forms.DateInput(attrs={'type': 'date'}),
@@ -504,17 +590,212 @@ class CustomerForm(ModelForm):
         self.fields['opt_in_for_emails'].help_text = 'Customer agrees to receive email invoices'
         self.fields['opt_in_for_emails'].label = 'Email opt-in for invoices'
 
+        # Set default credit limit from site settings for new customers
+        if not self.instance.pk:  # Only for new customers
+            try:
+                settings = SiteSettings.get_settings()
+                self.fields['credit_limit'].initial = settings.default_credit_limit
+            except Exception:
+                pass
+
 
 class QuickCustomerForm(forms.ModelForm):
     """Quick form for adding customer during POS sale"""
     class Meta:
         model = Customer
         fields = ['name', 'phone', 'email']
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for f in self.fields.values():
             f.widget.attrs.update({'class': 'form-control'})
-        
+
         self.fields['email'].required = False
         self.fields['phone'].required = False
+
+
+# ==================== PRODUCT VARIANT FORMS ====================
+
+class ProductWithVariantsForm(ModelForm):
+    """
+    Step 1: Basic product information for products with variants.
+    Similar to AddInventoryForm but with variant-specific fields.
+    """
+    category = forms.ModelChoiceField(
+        queryset=Inventory_category.objects.all(),
+        empty_label="Select a category",
+        required=False,
+        widget=forms.Select(attrs={'class': 'form-control'})
+    )
+
+    # Which attribute types will this product use for variants?
+    variant_attribute_types = forms.ModelMultipleChoiceField(
+        queryset=AttributeType.objects.filter(is_active=True),
+        widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
+        required=True,
+        help_text="Select which attributes this product will have variants for"
+    )
+
+    class Meta:
+        model = Inventory
+        fields = [
+            'category',
+            'name',
+            'product_code',
+            'description',
+            'purchase_price',
+            'selling_price',
+            'weight',
+            'image',
+            'on_sale',
+            'reorder_point',
+        ]
+        widgets = {
+            'image': forms.FileInput(attrs={
+                'class': 'form-control',
+                'accept': 'image/jpeg,image/jpg,image/png,image/webp'
+            }),
+            'description': forms.Textarea(attrs={'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Apply form-control class
+        for field_name, field in self.fields.items():
+            if field_name != 'variant_attribute_types':
+                if not isinstance(field.widget, forms.CheckboxInput):
+                    field.widget.attrs.update({'class': 'form-control'})
+
+        # Help text
+        self.fields['product_code'].help_text = 'Leave blank to auto-generate'
+        self.fields['purchase_price'].help_text = 'Default cost (can be overridden per variant)'
+        self.fields['selling_price'].help_text = 'Default price (can be overridden per variant)'
+        self.fields['reorder_point'].help_text = 'Default reorder point for variants'
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.has_variants = True
+        instance.quantity_in_Stock = 0  # Stock is tracked at variant level
+        if commit:
+            instance.save()
+            # Set the variant attribute types
+            instance.variant_attributes.set(self.cleaned_data['variant_attribute_types'])
+        return instance
+
+
+class VariantAttributeSelectionForm(forms.Form):
+    """
+    Step 2: Select which attribute values to create variants for.
+    Dynamically generates checkbox fields based on selected attribute types.
+    At least one attribute must have selections, but not all are required.
+    """
+
+    def __init__(self, *args, attribute_types=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if attribute_types:
+            for attr_type in attribute_types:
+                # Create a checkbox field for each attribute value
+                values = AttributeValue.objects.filter(
+                    attribute_type=attr_type,
+                    is_active=True
+                ).order_by('display_order')
+
+                self.fields[f'attr_{attr_type.id}'] = forms.ModelMultipleChoiceField(
+                    queryset=values,
+                    widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
+                    required=False,  # Individual fields are optional
+                    label=attr_type.display_name,
+                    help_text=f"Select {attr_type.display_name.lower()} options (optional)"
+                )
+
+    def clean(self):
+        """Ensure at least one attribute has selections."""
+        cleaned_data = super().clean()
+
+        # Check if at least one attribute field has selections
+        has_any_selection = False
+        for field_name, value in cleaned_data.items():
+            if field_name.startswith('attr_') and value:
+                has_any_selection = True
+                break
+
+        if not has_any_selection:
+            raise forms.ValidationError(
+                "Please select at least one option from any attribute type."
+            )
+
+        return cleaned_data
+
+    def get_selected_values(self):
+        """Returns dict of attribute_type_id -> list of selected AttributeValue objects"""
+        result = {}
+        for field_name, value in self.cleaned_data.items():
+            if field_name.startswith('attr_') and value:  # Only include non-empty selections
+                attr_type_id = int(field_name.replace('attr_', ''))
+                result[attr_type_id] = list(value)
+        return result
+
+
+class ProductVariantForm(ModelForm):
+    """Form for individual variant details (used in the grid)"""
+
+    class Meta:
+        model = ProductVariant
+        fields = ['sku', 'purchase_price', 'selling_price', 'quantity_in_stock', 'reorder_point', 'is_active']
+        widgets = {
+            'sku': forms.TextInput(attrs={'class': 'form-control form-control-sm'}),
+            'purchase_price': forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'step': '0.01'}),
+            'selling_price': forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'step': '0.01'}),
+            'quantity_in_stock': forms.NumberInput(attrs={'class': 'form-control form-control-sm'}),
+            'reorder_point': forms.NumberInput(attrs={'class': 'form-control form-control-sm'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['sku'].required = False  # Auto-generated
+        self.fields['purchase_price'].required = False  # Uses product default
+        self.fields['selling_price'].required = False  # Uses product default
+
+
+class BulkVariantForm(forms.Form):
+    """Form for bulk editing variant properties"""
+
+    set_purchase_price = forms.DecimalField(
+        max_digits=10, decimal_places=2, required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': 'Set all costs'})
+    )
+    set_selling_price = forms.DecimalField(
+        max_digits=10, decimal_places=2, required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': 'Set all prices'})
+    )
+    set_quantity = forms.IntegerField(
+        required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Set all stock'})
+    )
+    set_reorder_point = forms.IntegerField(
+        required=False,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Set all reorder points'})
+    )
+
+
+class AddAttributeValueForm(forms.ModelForm):
+    """Form for adding a custom attribute value (e.g., a new size or color)"""
+
+    class Meta:
+        model = AttributeValue
+        fields = ['attribute_type', 'value', 'display_value', 'color_code']
+        widgets = {
+            'attribute_type': forms.Select(attrs={'class': 'form-control'}),
+            'value': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., 4XL or Burgundy'}),
+            'display_value': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Display name (optional)'}),
+            'color_code': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '#FF0000'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['display_value'].required = False
+        self.fields['color_code'].required = False
+        self.fields['color_code'].help_text = 'Hex color code for color swatches (only for Color attribute)'

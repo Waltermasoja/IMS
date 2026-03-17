@@ -18,6 +18,12 @@ from .forms import (
     InvoicePaymentForm,
     ExpenseAllocationForm,
     CustomerForm,
+    SiteSettingsForm,
+    ProductWithVariantsForm,
+    VariantAttributeSelectionForm,
+    ProductVariantForm,
+    BulkVariantForm,
+    AddAttributeValueForm,
 )
 from django.contrib import messages
 import plotly
@@ -52,6 +58,10 @@ from .models import (
     ImportExpense,
     ImportOrderItem,
     Customer,
+    SiteSettings,
+    AttributeType,
+    AttributeValue,
+    ProductVariant,
 )
 from .utils import run_allocation
 import json
@@ -133,13 +143,19 @@ def per_product_view(request, pk):
     total_quantity_sold = sum(sale.quantity_sold for sale in sales_data)
     total_returns = sum(sale.quantity_returned for sale in sales_data)
     net_quantity = total_quantity_sold - total_returns
-    
+
+    # Calculate profit margin
+    profit_margin = None
+    if inventory.purchase_price and inventory.purchase_price > 0:
+        profit_margin = ((inventory.selling_price - inventory.purchase_price) / inventory.purchase_price) * 100
+
     context = {
         'inventory': inventory,
         'total_sales': total_sales,
         'total_quantity_sold': total_quantity_sold,
         'total_returns': total_returns,
         'net_quantity': net_quantity,
+        'profit_margin': profit_margin,
     }
     print(inventory.last_sale_date)
 
@@ -203,9 +219,10 @@ def make_sale(request, pk):
     Supports payment_method: CASH (default), CREDIT, LAYBY.
     For CREDIT: requires customer_id and due_date; creates ARInvoice.
     For LAYBY: requires customer_id and deposit(optional); creates LaybyPlan and reserves stock.
+    Supports variant_id for products with variants.
     """
     inventory = get_object_or_404(Inventory, pk=pk)
-    
+
     try:
         with transaction.atomic():
             quantity_sold = int(request.POST.get('quantity_sold'))
@@ -215,6 +232,26 @@ def make_sale(request, pk):
             customer_id = request.POST.get('customer_id')
             due_date_str = request.POST.get('due_date')
             deposit = Decimal(request.POST.get('deposit', '0') or '0')
+            variant_id = request.POST.get('variant_id')
+
+            # Handle variant sales
+            variant = None
+            if variant_id:
+                try:
+                    variant = ProductVariant.objects.get(pk=variant_id, product=inventory)
+                except ProductVariant.DoesNotExist:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Variant not found'
+                    })
+
+            # Determine stock source (variant or parent product)
+            if variant:
+                available_stock = variant.quantity_in_stock
+                stock_source = 'variant'
+            else:
+                available_stock = inventory.quantity_in_Stock
+                stock_source = 'product'
 
             # Validation
             if quantity_sold <= 0:
@@ -222,11 +259,11 @@ def make_sale(request, pk):
                     'success': False,
                     'error': 'Quantity must be greater than 0'
                 })
-            
-            if quantity_sold > inventory.quantity_in_Stock:
+
+            if quantity_sold > available_stock:
                 return JsonResponse({
                     'success': False,
-                    'error': f'Not enough stock. Available: {inventory.quantity_in_Stock}'
+                    'error': f'Not enough stock. Available: {available_stock}'
                 })
             
             if sale_price <= 0:
@@ -245,9 +282,27 @@ def make_sale(request, pk):
             discounted_price = sale_price * (1 - discount / 100)
             total_amount = discounted_price * quantity_sold
 
-            # Validate stock for all methods
-            if quantity_sold > inventory.quantity_in_Stock:
-                return JsonResponse({'success': False, 'error': f'Not enough stock. Available: {inventory.quantity_in_Stock}'})
+            # Helper function to reduce stock (handles both variant and product)
+            def reduce_stock(qty, reason):
+                if variant:
+                    variant.quantity_in_stock -= qty
+                    variant.save(update_fields=['quantity_in_stock'])
+                    # Also create stock movement for the parent product (for reporting)
+                    StockMovement.objects.create(
+                        inventory_item=inventory,
+                        movement_type='OUT',
+                        quantity=qty,
+                        reason=f'{reason} (Variant: {variant.sku})'
+                    )
+                else:
+                    inventory.quantity_in_Stock -= qty
+                    inventory.save(update_fields=['quantity_in_Stock'])
+                    StockMovement.objects.create(
+                        inventory_item=inventory,
+                        movement_type='OUT',
+                        quantity=qty,
+                        reason=reason
+                    )
 
             if payment_method == 'CREDIT':
                 print('[CREDIT] Start credit sale processing')
@@ -272,22 +327,19 @@ def make_sale(request, pk):
                     return JsonResponse({'success': False, 'error': f'Credit limit exceeded. Available: ${customer.credit_limit - customer.current_balance}'})
 
                 # Reduce stock and record movement
-                print(f"[CREDIT] Reducing stock: before={inventory.quantity_in_Stock}, qty={quantity_sold}")
-                inventory.quantity_in_Stock -= quantity_sold
+                print(f"[CREDIT] Reducing stock: qty={quantity_sold}")
+                reduce_stock(quantity_sold, 'Credit sale (on account)')
                 inventory.last_sale_date = timezone.now()
-                inventory.save()
-                StockMovement.objects.create(
-                    inventory_item=inventory,
-                    movement_type='OUT',
-                    quantity=quantity_sold,
-                    reason='Credit sale (on account)'
-                )
-                print(f"[CREDIT] Stock reduced: after={inventory.quantity_in_Stock}")
+                inventory.save(update_fields=['last_sale_date'])
+                print(f"[CREDIT] Stock reduced")
 
                 # Create sales record (delivered)
-                receipt_number = f"R{timezone.now().strftime('%Y%m%d%H%M%S')}"
+                from .utils import get_setting
+                receipt_prefix = get_setting('receipt_prefix', 'RCP')
+                receipt_number = f"{receipt_prefix}{timezone.now().strftime('%Y%m%d%H%M%S')}"
                 sale = Sales.objects.create(
                     inventory_item=inventory,
+                    product_variant=variant,  # Link to variant if applicable
                     quantity_sold=quantity_sold,
                     sale_price=sale_price,
                     discount_applied=discount,
@@ -298,7 +350,7 @@ def make_sale(request, pk):
                     payment_method='CREDIT',
                     customer=customer
                 )
-                print(f"[CREDIT] Sales record created: id={sale.id}, receipt={receipt_number}")
+                print(f"[CREDIT] Sales record created: id={sale.id}, receipt={receipt_number}, variant={variant.sku if variant else 'N/A'}")
 
                 # Create AR invoice then post accounting
                 from datetime import datetime as dt
@@ -349,16 +401,9 @@ def make_sale(request, pk):
 
                 try:
                     # Reserve stock now
-                    print(f"[LAYBY] Reserve stock: before={inventory.quantity_in_Stock}, qty={quantity_sold}")
-                    inventory.quantity_in_Stock -= quantity_sold
-                    inventory.save()
-                    StockMovement.objects.create(
-                        inventory_item=inventory,
-                        movement_type='OUT',
-                        quantity=quantity_sold,
-                        reason='Layby reserve'
-                    )
-                    print(f"[LAYBY] Stock reserved: after={inventory.quantity_in_Stock}")
+                    print(f"[LAYBY] Reserve stock: qty={quantity_sold}")
+                    reduce_stock(quantity_sold, 'Layby reserve')
+                    print(f"[LAYBY] Stock reserved")
 
                     plan = LaybyPlan.objects.create(
                         customer=customer,
@@ -388,9 +433,11 @@ def make_sale(request, pk):
                     # Create a Sales row for visibility in sales table (payment_method LAYBY)
                     try:
                         from .models import Sales as SalesModel
-                        receipt_number = f"LB{timezone.now().strftime('%Y%m%d%H%M%S')}"
+                        layby_prefix = get_setting('layby_prefix', 'LB')
+                        receipt_number = f"{layby_prefix}{timezone.now().strftime('%Y%m%d%H%M%S')}"
                         sale_row = SalesModel.objects.create(
                             inventory_item=inventory,
+                            product_variant=variant,  # Link to variant if applicable
                             quantity_sold=quantity_sold,
                             sale_price=sale_price,
                             discount_applied=discount,
@@ -401,7 +448,7 @@ def make_sale(request, pk):
                             payment_method='LAYBY',
                             customer=customer
                         )
-                        print(f"[LAYBY] Sales row created for visibility: id={sale_row.id}, receipt={receipt_number}")
+                        print(f"[LAYBY] Sales row created: id={sale_row.id}, receipt={receipt_number}, variant={variant.sku if variant else 'N/A'}")
                     except Exception as e:
                         print(f"[LAYBY][WARN] Failed to create Sales row for layby visibility: {e}")
 
@@ -420,7 +467,8 @@ def make_sale(request, pk):
 
             # Default: CASH sale
             # Generate receipt number
-            receipt_number = f"R{timezone.now().strftime('%Y%m%d%H%M%S')}"
+            receipt_prefix = get_setting('receipt_prefix', 'RCP')
+            receipt_number = f"{receipt_prefix}{timezone.now().strftime('%Y%m%d%H%M%S')}"
 
             # Create sales record
             customer_obj = None
@@ -432,6 +480,7 @@ def make_sale(request, pk):
                     customer_obj = None
             sale = Sales.objects.create(
                 inventory_item=inventory,
+                product_variant=variant,  # Link to variant if applicable
                 quantity_sold=quantity_sold,
                 sale_price=sale_price,
                 discount_applied=discount,
@@ -443,35 +492,27 @@ def make_sale(request, pk):
                 customer=customer_obj
             )
 
-            # Update inventory stock
-            inventory.quantity_in_Stock -= quantity_sold
+            # Update stock using helper function
+            reduce_stock(quantity_sold, f'Sale (Receipt: {receipt_number})')
             inventory.last_sale_date = timezone.now()
-            inventory.save()
-
-            # Create stock movement record
-            StockMovement.objects.create(
-                inventory_item=inventory,
-                movement_type='OUT',
-                quantity=quantity_sold,
-                reason=f'Sale (Receipt: {receipt_number})'
-            )
+            inventory.save(update_fields=['last_sale_date'])
 
             # Accounting postings for cash sale (GL + Cashbook)
             try:
                 from accounting.utils import post_cash_sale
-                # Reload sale to include receipt number
-                sale.receipt_number = receipt_number
-                sale.save(update_fields=['receipt_number'])
                 post_cash_sale(sale)
             except Exception:
                 pass
+
+            # Get remaining stock (from variant or product)
+            remaining_stock = variant.quantity_in_stock if variant else inventory.quantity_in_Stock
 
             return JsonResponse({
                 'success': True,
                 'message': f'Sale completed successfully! Receipt: {receipt_number}',
                 'receipt_number': receipt_number,
                 'total_amount': str(total_amount),
-                'remaining_stock': inventory.quantity_in_Stock
+                'remaining_stock': remaining_stock
             })
 
     except (ValueError, TypeError, decimal.InvalidOperation) as e:
@@ -893,7 +934,7 @@ def sales_return(request, sale_id):
 
     try:
         with transaction.atomic():
-            Return.objects.create(
+            return_obj = Return.objects.create(
                 inventory_item=sale.inventory_item,
                 quantity_returned=quantity,
                 reason=reason or 'Customer return',
@@ -914,6 +955,13 @@ def sales_return(request, sale_id):
                 quantity=quantity,
                 reason=f'Return: {reason or "Customer return"} (Receipt: {sale.receipt_number or "N/A"})'
             )
+
+            # Post GL reversal entries
+            try:
+                from accounting.utils import post_sales_return
+                post_sales_return(return_obj, user=request.user)
+            except Exception as e:
+                print(f"[RETURN] Warning: GL posting failed for return {return_obj.id}: {e}")
 
             messages.success(request, f'Returned {quantity} of {inventory_item.name} successfully')
     except Exception as e:
@@ -939,7 +987,7 @@ def damagedInventory(request, pk):
     
     if request.method == 'POST':
         form = DamagedInventoryForm(request.POST)
-        
+
         if form.is_valid():
             quantity_damaged = form.cleaned_data['quantity_damaged']
             damage_description = form.cleaned_data['damage_description']
@@ -955,6 +1003,27 @@ def damagedInventory(request, pk):
             # Update the inventory
             obsolete_inventory.quantity_in_Stock -= quantity_damaged
             obsolete_inventory.save()
+
+            # Post GL entry: Dr COGS/Loss, Cr Inventory
+            try:
+                from accounting.utils import post_inventory_adjustment
+                post_inventory_adjustment(
+                    obsolete_inventory,
+                    quantity_damaged,
+                    damage_description or 'Damaged goods',
+                    adjustment_type='DAMAGE',
+                    user=request.user
+                )
+            except Exception as e:
+                print(f"[DAMAGE] Warning: GL posting failed: {e}")
+
+            # Create stock movement record
+            StockMovement.objects.create(
+                inventory_item=obsolete_inventory,
+                movement_type='OUT',
+                quantity=quantity_damaged,
+                reason=f'Damaged: {damage_description or "Damaged goods"}'
+            )
 
             messages.success(request, f"{quantity_damaged} item(s) of {obsolete_inventory.name} successfully marked as damaged.")
             return redirect('/inventory/')
@@ -1068,10 +1137,12 @@ def dashboard(request):
     start_date = end_date - timedelta(days=180)
     
     # Calculate metrics
+    from .utils import get_setting
+    low_stock_threshold = get_setting('low_stock_threshold', 10)
     metrics = {
         'total_products': Inventory.objects.count(),
         'total_sales': float(Sales.objects.aggregate(total=Sum('total_amount'))['total'] or 0),
-        'low_stock': Inventory.objects.filter(quantity_in_Stock__lte=10).count(),
+        'low_stock': Inventory.objects.filter(quantity_in_Stock__lte=low_stock_threshold).count(),
         'out_of_stock': Inventory.objects.filter(quantity_in_Stock=0).count(),
     }
     
@@ -1351,6 +1422,7 @@ def add_category_ajax(request):
         try:
             name = request.POST.get('name')
             description = request.POST.get('description')
+            default_markup = request.POST.get('default_markup')
             
             if not name:
                 return JsonResponse({
@@ -1360,7 +1432,8 @@ def add_category_ajax(request):
                 
             category = Inventory_category.objects.create(
                 name=name,
-                description=description
+                description=description,
+                default_markup=default_markup
             )
             
             return JsonResponse({
@@ -1965,6 +2038,7 @@ def product_search_ajax(request):
         return JsonResponse({'products': []})
 
     # Broaden search: product_code, name, label, category name, and size
+    # Also search in variant SKUs
     products = (
         Inventory.objects.filter(
             Q(product_code__icontains=query)
@@ -1972,8 +2046,11 @@ def product_search_ajax(request):
             | Q(label__icontains=query)
             | Q(size__icontains=query)
             | Q(category__name__icontains=query)
+            | Q(variants__sku__icontains=query)  # Search variant SKUs
         )
         .select_related('category')
+        .prefetch_related('variants__attribute_values__attribute_type')
+        .distinct()
         .order_by('product_code')[:10]
     )
 
@@ -1982,17 +2059,44 @@ def product_search_ajax(request):
         # Get thumbnail URL if image exists
         thumbnail_url = product.thumbnail.url if product.thumbnail else None
 
-        results.append({
+        product_data = {
             'id': product.id,
             'product_code': product.product_code,
             'name': product.name,
             'label': product.label,
             'selling_price': str(product.selling_price),
-            'quantity_in_stock': product.quantity_in_Stock,
+            'quantity_in_stock': product.quantity_in_Stock if not product.has_variants else product.total_stock,
+            'total_stock': product.total_stock if product.has_variants else product.quantity_in_Stock,
             'category': product.category.name if product.category else 'Uncategorized',
             'display_name': f"{product.product_code} - {product.name}",
-            'thumbnail_url': thumbnail_url
-        })
+            'thumbnail_url': thumbnail_url,
+            'has_variants': product.has_variants,
+        }
+
+        # Include variant data if product has variants
+        if product.has_variants:
+            variants_data = []
+            for variant in product.variants.filter(is_active=True):
+                attrs = []
+                for attr_val in variant.attribute_values.all():
+                    attrs.append({
+                        'type': attr_val.attribute_type.display_name,
+                        'value': attr_val.display_value or attr_val.value,
+                        'color_code': attr_val.color_code,
+                    })
+                variants_data.append({
+                    'id': variant.id,
+                    'sku': variant.sku,
+                    'attributes': attrs,
+                    'attribute_string': variant.attribute_string,
+                    'selling_price': str(variant.effective_selling_price),
+                    'quantity_in_stock': variant.quantity_in_stock,
+                    'is_low_stock': variant.is_low_stock,
+                })
+            product_data['variants'] = variants_data
+            product_data['variant_count'] = len(variants_data)
+
+        results.append(product_data)
 
     return JsonResponse({'products': results})
 
@@ -2456,4 +2560,942 @@ def stock_forecast_report(request):
     }
     return render(request, 'inventory/stock_forecast_report.html', context)
 
+
+# ==================== SITE SETTINGS ====================
+
+@login_required
+def site_settings(request):
+    """View and edit site-wide settings. Admin only."""
+    # Check if user has admin privileges
+    if not (request.user.is_superuser or
+            (hasattr(request.user, 'profile') and request.user.profile.is_admin)):
+        messages.error(request, "You don't have permission to access settings.")
+        return redirect('dashboard')
+
+    # Get or create settings (singleton)
+    settings = SiteSettings.get_settings()
+
+    if request.method == 'POST':
+        form = SiteSettingsForm(request.POST, request.FILES, instance=settings)
+        if form.is_valid():
+            settings = form.save(commit=False)
+            settings.updated_by = request.user
+            settings.save()
+            messages.success(request, "Settings saved successfully!")
+            return redirect('site_settings')
+        else:
+            messages.error(request, "Please correct the errors below.")
+    else:
+        form = SiteSettingsForm(instance=settings)
+
+    # Get sections for template tabs
+    sections = form.get_fields_by_section()
+
+    # Get setup status for System Setup tab
+    from accounting.models import GLAccount
+    setup_status = {
+        'gl_accounts_count': GLAccount.objects.count(),
+        'attributes_count': AttributeType.objects.count(),
+        'last_setup_log': request.session.pop('setup_log', None),
+    }
+
+    context = {
+        'form': form,
+        'sections': sections,
+        'settings': settings,
+        'active_tab': request.GET.get('tab', 'company'),
+        'setup_status': setup_status,
+    }
+    return render(request, 'inventory/site_settings.html', context)
+
+
+@login_required
+def settings_reset_defaults(request):
+    """Reset settings to default values. Admin only."""
+    if not (request.user.is_superuser or
+            (hasattr(request.user, 'profile') and request.user.profile.is_admin)):
+        messages.error(request, "You don't have permission to reset settings.")
+        return redirect('dashboard')
+
+    if request.method == 'POST':
+        # Delete existing settings and create fresh defaults
+        SiteSettings.objects.filter(pk=1).delete()
+        SiteSettings.get_settings()  # Creates new with defaults
+        messages.success(request, "Settings have been reset to defaults.")
+        return redirect('site_settings')
+
+    return redirect('site_settings')
+
+
+# ==================== SYSTEM SETUP VIEWS ====================
+
+@login_required
+def setup_init_gl_accounts(request):
+    """Initialize GL accounts via web interface. Admin only."""
+    if not (request.user.is_superuser or
+            (hasattr(request.user, 'profile') and request.user.profile.is_admin)):
+        messages.error(request, "You don't have permission to run setup tasks.")
+        return redirect('site_settings')
+
+    if request.method == 'POST':
+        from accounting.models import GLAccount
+
+        accounts = [
+            # Assets
+            {'code': '1000', 'name': 'Cash', 'type': 'ASSET'},
+            {'code': '1200', 'name': 'Accounts Receivable', 'type': 'ASSET'},
+            {'code': '1300', 'name': 'Inventory', 'type': 'ASSET'},
+            {'code': '1400', 'name': 'Prepaid Expenses', 'type': 'ASSET'},
+            {'code': '1500', 'name': 'Fixed Assets', 'type': 'ASSET'},
+
+            # Liabilities
+            {'code': '2000', 'name': 'Accounts Payable', 'type': 'LIAB'},
+            {'code': '2100', 'name': 'Short-term Debt', 'type': 'LIAB'},
+            {'code': '2300', 'name': 'Unearned Revenue', 'type': 'LIAB'},
+
+            # Equity
+            {'code': '3000', 'name': "Owner's Equity", 'type': 'EQUITY'},
+            {'code': '3100', 'name': 'Retained Earnings', 'type': 'EQUITY'},
+            {'code': '3900', 'name': 'Opening Balance Equity', 'type': 'EQUITY'},
+
+            # Income
+            {'code': '4000', 'name': 'Sales Revenue', 'type': 'INCOME'},
+            {'code': '4100', 'name': 'Sales Discounts', 'type': 'CONTRA_REV'},
+            {'code': '4800', 'name': 'Other Income', 'type': 'INCOME'},
+
+            # Expenses
+            {'code': '5000', 'name': 'Cost of Goods Sold (COGS)', 'type': 'EXP'},
+            {'code': '6000', 'name': 'Rent Expense', 'type': 'EXP'},
+            {'code': '6100', 'name': 'Utilities Expense', 'type': 'EXP'},
+            {'code': '6200', 'name': 'Wages Expense', 'type': 'EXP'},
+            {'code': '6300', 'name': 'Freight Expense', 'type': 'EXP'},
+            {'code': '6400', 'name': 'Marketing Expense', 'type': 'EXP'},
+            {'code': '6900', 'name': 'Other Expenses', 'type': 'EXP'},
+        ]
+
+        created_count = 0
+        updated_count = 0
+        log_lines = []
+
+        for acc_data in accounts:
+            account, created = GLAccount.objects.get_or_create(
+                code=acc_data['code'],
+                defaults={
+                    'name': acc_data['name'],
+                    'type': acc_data['type'],
+                    'is_active': True
+                }
+            )
+
+            if created:
+                log_lines.append(f"[+] Created: {acc_data['code']} - {acc_data['name']}")
+                created_count += 1
+            else:
+                # Update name/type if different
+                if account.name != acc_data['name'] or account.type != acc_data['type']:
+                    account.name = acc_data['name']
+                    account.type = acc_data['type']
+                    account.save()
+                    log_lines.append(f"[~] Updated: {acc_data['code']} - {acc_data['name']}")
+                    updated_count += 1
+                else:
+                    log_lines.append(f"[*] Exists:  {acc_data['code']} - {acc_data['name']}")
+
+        log_lines.append(f"\nSummary: {created_count} created, {updated_count} updated")
+        request.session['setup_log'] = '\n'.join(log_lines)
+
+        messages.success(request, f"GL Accounts: {created_count} created, {updated_count} updated")
+        from django.urls import reverse
+        return redirect(reverse('site_settings') + '?tab=setup')
+
+    from django.urls import reverse
+    return redirect(reverse('site_settings') + '?tab=setup')
+
+
+@login_required
+def setup_seed_attributes(request):
+    """Seed product attributes via web interface. Admin only."""
+    if not (request.user.is_superuser or
+            (hasattr(request.user, 'profile') and request.user.profile.is_admin)):
+        messages.error(request, "You don't have permission to run setup tasks.")
+        return redirect('site_settings')
+
+    if request.method == 'POST':
+        log_lines = []
+        created_types = 0
+        created_values = 0
+
+        # Size attribute type
+        size_type, created = AttributeType.objects.get_or_create(
+            name='Size',
+            defaults={'display_name': 'Size', 'display_order': 1, 'is_active': True}
+        )
+        if created:
+            log_lines.append("[+] Created attribute type: Size")
+            created_types += 1
+
+        # Clothing sizes
+        clothing_sizes = [
+            ('XS', 'XS', 1), ('S', 'S', 2), ('M', 'M', 3), ('L', 'L', 4),
+            ('XL', 'XL', 5), ('XXL', 'XXL', 6), ('XXXL', '3XL', 7),
+        ]
+        for value, display, order in clothing_sizes:
+            obj, created = AttributeValue.objects.get_or_create(
+                attribute_type=size_type, value=value,
+                defaults={'display_value': display, 'display_order': order, 'is_active': True}
+            )
+            if created:
+                created_values += 1
+
+        # Shoe sizes
+        for size in range(36, 47):
+            obj, created = AttributeValue.objects.get_or_create(
+                attribute_type=size_type, value=str(size),
+                defaults={'display_value': str(size), 'display_order': size, 'is_active': True}
+            )
+            if created:
+                created_values += 1
+
+        # Color attribute type
+        color_type, created = AttributeType.objects.get_or_create(
+            name='Color',
+            defaults={'display_name': 'Color', 'display_order': 2, 'is_active': True}
+        )
+        if created:
+            log_lines.append("[+] Created attribute type: Color")
+            created_types += 1
+
+        colors = [
+            ('Black', '#000000'), ('White', '#FFFFFF'), ('Grey', '#808080'),
+            ('Navy', '#000080'), ('Red', '#FF0000'), ('Blue', '#0000FF'),
+            ('Green', '#008000'), ('Yellow', '#FFFF00'), ('Pink', '#FFC0CB'),
+            ('Purple', '#800080'), ('Brown', '#8B4513'), ('Beige', '#F5F5DC'),
+        ]
+        for i, (color, code) in enumerate(colors, 1):
+            obj, created = AttributeValue.objects.get_or_create(
+                attribute_type=color_type, value=color,
+                defaults={'display_value': color, 'color_code': code, 'display_order': i, 'is_active': True}
+            )
+            if created:
+                created_values += 1
+
+        # Material attribute type
+        material_type, created = AttributeType.objects.get_or_create(
+            name='Material',
+            defaults={'display_name': 'Material', 'display_order': 3, 'is_active': True}
+        )
+        if created:
+            log_lines.append("[+] Created attribute type: Material")
+            created_types += 1
+
+        materials = ['Cotton', 'Polyester', 'Wool', 'Silk', 'Linen', 'Denim', 'Leather']
+        for i, mat in enumerate(materials, 1):
+            obj, created = AttributeValue.objects.get_or_create(
+                attribute_type=material_type, value=mat,
+                defaults={'display_value': mat, 'display_order': i, 'is_active': True}
+            )
+            if created:
+                created_values += 1
+
+        log_lines.append(f"\nSummary: {created_types} types, {created_values} values created")
+        log_lines.append(f"Total: {AttributeType.objects.count()} types, {AttributeValue.objects.count()} values")
+        request.session['setup_log'] = '\n'.join(log_lines)
+
+        messages.success(request, f"Product Attributes: {created_types} types, {created_values} values created")
+        from django.urls import reverse
+        return redirect(reverse('site_settings') + '?tab=setup')
+
+    from django.urls import reverse
+    return redirect(reverse('site_settings') + '?tab=setup')
+
+
+@login_required
+def setup_backfill_inventory(request):
+    """Backfill inventory opening balance to GL. Admin only."""
+    if not (request.user.is_superuser or
+            (hasattr(request.user, 'profile') and request.user.profile.is_admin)):
+        messages.error(request, "You don't have permission to run setup tasks.")
+        return redirect('site_settings')
+
+    if request.method == 'POST':
+        from accounting.models import GLAccount, JournalEntry, JournalLine
+        from django.db import transaction
+        from django.db.models import Sum, F
+
+        log_lines = []
+
+        # Calculate current inventory value
+        inventory_value = Inventory.objects.aggregate(
+            total=Sum(F('quantity_in_Stock') * F('purchase_price'))
+        )['total'] or Decimal('0')
+
+        log_lines.append(f"Physical inventory value: ${inventory_value:,.2f}")
+
+        if inventory_value <= 0:
+            log_lines.append("No inventory value found. Nothing to backfill.")
+            request.session['setup_log'] = '\n'.join(log_lines)
+            messages.warning(request, "No inventory value found. Nothing to backfill.")
+            from django.urls import reverse
+            return redirect(reverse('site_settings') + '?tab=setup')
+
+        try:
+            inventory_account = GLAccount.objects.get(code='1300')
+            current_gl_balance = inventory_account.balance
+            log_lines.append(f"Current GL 1300 balance: ${current_gl_balance:,.2f}")
+        except GLAccount.DoesNotExist:
+            messages.error(request, "GL Account 1300 (Inventory) not found. Initialize GL accounts first.")
+            from django.urls import reverse
+            return redirect(reverse('site_settings') + '?tab=setup')
+
+        adjustment = inventory_value - current_gl_balance
+        log_lines.append(f"Adjustment needed: ${adjustment:,.2f}")
+
+        if adjustment <= 0:
+            log_lines.append("No adjustment needed - GL balance matches or exceeds inventory.")
+            request.session['setup_log'] = '\n'.join(log_lines)
+            messages.info(request, "No adjustment needed. GL balance already matches inventory.")
+            from django.urls import reverse
+            return redirect(reverse('site_settings') + '?tab=setup')
+
+        # Get or create Opening Balance Equity account
+        equity_account, created = GLAccount.objects.get_or_create(
+            code='3900',
+            defaults={'name': 'Opening Balance Equity', 'type': 'EQUITY', 'is_active': True}
+        )
+        if created:
+            log_lines.append("[+] Created account 3900 - Opening Balance Equity")
+
+        with transaction.atomic():
+            je = JournalEntry.objects.create(
+                memo='Opening balance - inventory on hand',
+                reference='OPENING-INV',
+                created_by=request.user
+            )
+            JournalLine.objects.create(
+                entry=je, account=inventory_account,
+                debit=adjustment, description='Opening inventory balance'
+            )
+            JournalLine.objects.create(
+                entry=je, account=equity_account,
+                credit=adjustment, description='Opening inventory balance'
+            )
+
+        log_lines.append(f"\n[+] Created journal entry #{je.id}")
+        log_lines.append(f"Dr Inventory 1300: ${adjustment:,.2f}")
+        log_lines.append(f"Cr Opening Balance Equity 3900: ${adjustment:,.2f}")
+        request.session['setup_log'] = '\n'.join(log_lines)
+
+        messages.success(request, f"Inventory opening balance posted: ${adjustment:,.2f}")
+        from django.urls import reverse
+        return redirect(reverse('site_settings') + '?tab=setup')
+
+    from django.urls import reverse
+    return redirect(reverse('site_settings') + '?tab=setup')
+
+
+@login_required
+def setup_run_all(request):
+    """Run all setup tasks in sequence. Admin only."""
+    if not (request.user.is_superuser or
+            (hasattr(request.user, 'profile') and request.user.profile.is_admin)):
+        messages.error(request, "You don't have permission to run setup tasks.")
+        return redirect('site_settings')
+
+    if request.method == 'POST':
+        from accounting.models import GLAccount, JournalEntry, JournalLine
+        from django.db import transaction
+        from django.db.models import Sum, F
+
+        log_lines = ["=== Running All Setup Tasks ===\n"]
+        total_created = 0
+
+        # 1. GL Accounts
+        log_lines.append("--- GL Accounts ---")
+        accounts = [
+            {'code': '1000', 'name': 'Cash', 'type': 'ASSET'},
+            {'code': '1200', 'name': 'Accounts Receivable', 'type': 'ASSET'},
+            {'code': '1300', 'name': 'Inventory', 'type': 'ASSET'},
+            {'code': '1400', 'name': 'Prepaid Expenses', 'type': 'ASSET'},
+            {'code': '1500', 'name': 'Fixed Assets', 'type': 'ASSET'},
+            {'code': '2000', 'name': 'Accounts Payable', 'type': 'LIAB'},
+            {'code': '2100', 'name': 'Short-term Debt', 'type': 'LIAB'},
+            {'code': '2300', 'name': 'Unearned Revenue', 'type': 'LIAB'},
+            {'code': '3000', 'name': "Owner's Equity", 'type': 'EQUITY'},
+            {'code': '3100', 'name': 'Retained Earnings', 'type': 'EQUITY'},
+            {'code': '3900', 'name': 'Opening Balance Equity', 'type': 'EQUITY'},
+            {'code': '4000', 'name': 'Sales Revenue', 'type': 'INCOME'},
+            {'code': '4100', 'name': 'Sales Discounts', 'type': 'CONTRA_REV'},
+            {'code': '4800', 'name': 'Other Income', 'type': 'INCOME'},
+            {'code': '5000', 'name': 'Cost of Goods Sold (COGS)', 'type': 'EXP'},
+            {'code': '6000', 'name': 'Rent Expense', 'type': 'EXP'},
+            {'code': '6100', 'name': 'Utilities Expense', 'type': 'EXP'},
+            {'code': '6200', 'name': 'Wages Expense', 'type': 'EXP'},
+            {'code': '6300', 'name': 'Freight Expense', 'type': 'EXP'},
+            {'code': '6400', 'name': 'Marketing Expense', 'type': 'EXP'},
+            {'code': '6900', 'name': 'Other Expenses', 'type': 'EXP'},
+        ]
+        gl_created = 0
+        for acc_data in accounts:
+            account, created = GLAccount.objects.get_or_create(
+                code=acc_data['code'],
+                defaults={'name': acc_data['name'], 'type': acc_data['type'], 'is_active': True}
+            )
+            if created:
+                gl_created += 1
+        log_lines.append(f"GL Accounts: {gl_created} created, {GLAccount.objects.count()} total")
+        total_created += gl_created
+
+        # 2. Product Attributes
+        log_lines.append("\n--- Product Attributes ---")
+        attr_created = 0
+
+        size_type, created = AttributeType.objects.get_or_create(
+            name='Size', defaults={'display_name': 'Size', 'display_order': 1, 'is_active': True}
+        )
+        if created:
+            attr_created += 1
+
+        color_type, created = AttributeType.objects.get_or_create(
+            name='Color', defaults={'display_name': 'Color', 'display_order': 2, 'is_active': True}
+        )
+        if created:
+            attr_created += 1
+
+        material_type, created = AttributeType.objects.get_or_create(
+            name='Material', defaults={'display_name': 'Material', 'display_order': 3, 'is_active': True}
+        )
+        if created:
+            attr_created += 1
+
+        # Add basic values
+        values_created = 0
+        for val in ['XS', 'S', 'M', 'L', 'XL', 'XXL']:
+            _, created = AttributeValue.objects.get_or_create(
+                attribute_type=size_type, value=val,
+                defaults={'display_value': val, 'display_order': 1, 'is_active': True}
+            )
+            if created:
+                values_created += 1
+
+        for val, code in [('Black', '#000'), ('White', '#FFF'), ('Grey', '#888'), ('Navy', '#008'), ('Red', '#F00')]:
+            _, created = AttributeValue.objects.get_or_create(
+                attribute_type=color_type, value=val,
+                defaults={'display_value': val, 'color_code': code, 'display_order': 1, 'is_active': True}
+            )
+            if created:
+                values_created += 1
+
+        log_lines.append(f"Attributes: {attr_created} types, {values_created} values created")
+        total_created += attr_created + values_created
+
+        log_lines.append(f"\n=== Setup Complete: {total_created} items created ===")
+        request.session['setup_log'] = '\n'.join(log_lines)
+
+        messages.success(request, f"All setup tasks completed! {total_created} items created.")
+        from django.urls import reverse
+        return redirect(reverse('site_settings') + '?tab=setup')
+
+    from django.urls import reverse
+    return redirect(reverse('site_settings') + '?tab=setup')
+
+
+# ==================== PRODUCT VARIANT VIEWS ====================
+
+@login_required
+def add_product_with_variants(request):
+    """
+    Step 1: Create a new product that will have variants.
+    Collects basic product info and selects which attribute types to use.
+    """
+    if request.method == 'POST':
+        form = ProductWithVariantsForm(request.POST, request.FILES)
+        if form.is_valid():
+            # Save product but don't create variants yet
+            product = form.save()
+
+            # Store selected attribute types in session for next step
+            attr_type_ids = [at.id for at in form.cleaned_data['variant_attribute_types']]
+            request.session['variant_product_id'] = product.id
+            request.session['variant_attr_types'] = attr_type_ids
+
+            messages.success(request, f'Product "{product.name}" created. Now select variant options.')
+            return redirect('select_variant_attributes', pk=product.id)
+    else:
+        form = ProductWithVariantsForm()
+
+    context = {
+        'form': form,
+        'title': 'Add Product with Variants',
+        'step': 1,
+        'total_steps': 3,
+    }
+    return render(request, 'inventory/add_product_with_variants.html', context)
+
+
+@login_required
+def select_variant_attributes(request, pk):
+    """
+    Step 2: Select which attribute values to create variants for.
+    E.g., Select sizes S, M, L and colors Black, White
+    """
+    product = get_object_or_404(Inventory, pk=pk)
+
+    if not product.has_variants:
+        messages.error(request, "This product doesn't have variants enabled.")
+        return redirect('per_product', pk=pk)
+
+    # Get the attribute types for this product
+    attribute_types = product.variant_attributes.filter(is_active=True)
+
+    if request.method == 'POST':
+        form = VariantAttributeSelectionForm(request.POST, attribute_types=attribute_types)
+        if form.is_valid():
+            # Store selected values in session
+            selected_values = form.get_selected_values()
+            request.session['variant_selected_values'] = {
+                str(k): [v.id for v in vals] for k, vals in selected_values.items()
+            }
+
+            return redirect('configure_variants', pk=product.id)
+    else:
+        form = VariantAttributeSelectionForm(attribute_types=attribute_types)
+
+    context = {
+        'form': form,
+        'product': product,
+        'attribute_types': attribute_types,
+        'title': f'Select Variant Options for {product.name}',
+        'step': 2,
+        'total_steps': 3,
+    }
+    return render(request, 'inventory/select_variant_attributes.html', context)
+
+
+@login_required
+def configure_variants(request, pk):
+    """
+    Step 3: Configure individual variant details (SKU, price, stock).
+    Auto-generates all combinations of selected attributes.
+    """
+    from itertools import product as itertools_product
+
+    product_obj = get_object_or_404(Inventory, pk=pk)
+
+    if not product_obj.has_variants:
+        messages.error(request, "This product doesn't have variants enabled.")
+        return redirect('per_product', pk=pk)
+
+    # Get selected values from session
+    selected_values_raw = request.session.get('variant_selected_values', {})
+
+    # Convert to AttributeValue objects
+    attribute_types = product_obj.variant_attributes.filter(is_active=True).order_by('display_order')
+    selected_values = {}
+    for attr_type in attribute_types:
+        val_ids = selected_values_raw.get(str(attr_type.id), [])
+        if val_ids:
+            selected_values[attr_type] = list(AttributeValue.objects.filter(id__in=val_ids))
+
+    # Generate all combinations
+    if selected_values:
+        attr_types_list = list(selected_values.keys())
+        values_lists = [selected_values[at] for at in attr_types_list]
+        combinations = list(itertools_product(*values_lists))
+    else:
+        combinations = []
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'bulk_update':
+            # Handle bulk updates
+            bulk_form = BulkVariantForm(request.POST)
+            if bulk_form.is_valid():
+                # Apply bulk values to all variants
+                pass  # Will be processed in main save
+
+        if action == 'save_variants':
+            # Save all variants
+            created_count = 0
+            with transaction.atomic():
+                for i, combo in enumerate(combinations):
+                    # Get form data for this variant
+                    prefix = f'variant_{i}'
+                    is_active = request.POST.get(f'{prefix}_is_active') == 'on'
+                    sku = request.POST.get(f'{prefix}_sku', '').strip()
+                    purchase_price = request.POST.get(f'{prefix}_purchase_price', '').strip()
+                    selling_price = request.POST.get(f'{prefix}_selling_price', '').strip()
+                    quantity = request.POST.get(f'{prefix}_quantity', '0').strip()
+                    reorder_point = request.POST.get(f'{prefix}_reorder_point', '0').strip()
+
+                    if not is_active:
+                        continue  # Skip unchecked variants
+
+                    # Generate SKU if not provided
+                    if not sku:
+                        base_code = product_obj.product_code or 'PROD'
+                        abbrevs = [attr.value[:3].upper() for attr in combo]
+                        sku = f"{base_code}-{'-'.join(abbrevs)}"
+
+                    # Ensure unique SKU
+                    if ProductVariant.objects.filter(sku=sku).exists():
+                        # Append number to make unique
+                        counter = 1
+                        base_sku = sku
+                        while ProductVariant.objects.filter(sku=sku).exists():
+                            sku = f"{base_sku}-{counter}"
+                            counter += 1
+
+                    # Create variant
+                    variant = ProductVariant.objects.create(
+                        product=product_obj,
+                        sku=sku,
+                        purchase_price=decimal.Decimal(purchase_price) if purchase_price else None,
+                        selling_price=decimal.Decimal(selling_price) if selling_price else None,
+                        quantity_in_stock=int(quantity) if quantity else 0,
+                        reorder_point=int(reorder_point) if reorder_point else 0,
+                        is_active=True,
+                    )
+
+                    # Add attribute values
+                    variant.attribute_values.set(combo)
+                    created_count += 1
+
+                    # Create stock movement if stock was added
+                    if variant.quantity_in_stock > 0:
+                        StockMovement.objects.create(
+                            inventory_item=product_obj,
+                            movement_type='IN',
+                            quantity=variant.quantity_in_stock,
+                            reason=f'Initial stock for variant {variant.sku}'
+                        )
+
+            # Clear session
+            if 'variant_selected_values' in request.session:
+                del request.session['variant_selected_values']
+            if 'variant_product_id' in request.session:
+                del request.session['variant_product_id']
+            if 'variant_attr_types' in request.session:
+                del request.session['variant_attr_types']
+
+            messages.success(request, f'Created {created_count} variants for "{product_obj.name}"')
+            return redirect('per_product', pk=product_obj.id)
+
+    # Prepare variant data for template
+    variant_data = []
+    for i, combo in enumerate(combinations):
+        attrs_display = " / ".join([attr.label for attr in combo])
+        base_code = product_obj.product_code or 'PROD'
+        abbrevs = [attr.value[:3].upper() for attr in combo]
+        suggested_sku = f"{base_code}-{'-'.join(abbrevs)}"
+
+        variant_data.append({
+            'index': i,
+            'attributes': combo,
+            'attrs_display': attrs_display,
+            'suggested_sku': suggested_sku,
+            'default_purchase_price': product_obj.purchase_price,
+            'default_selling_price': product_obj.selling_price,
+            'default_reorder_point': product_obj.reorder_point,
+        })
+
+    bulk_form = BulkVariantForm()
+
+    context = {
+        'product': product_obj,
+        'variant_data': variant_data,
+        'bulk_form': bulk_form,
+        'title': f'Configure Variants for {product_obj.name}',
+        'step': 3,
+        'total_steps': 3,
+    }
+    return render(request, 'inventory/configure_variants.html', context)
+
+
+@login_required
+def product_variants_list(request, pk):
+    """View and manage existing variants for a product."""
+    product = get_object_or_404(Inventory, pk=pk)
+
+    if not product.has_variants:
+        messages.error(request, "This product doesn't have variants enabled.")
+        return redirect('per_product', pk=pk)
+
+    variants = product.variants.all().prefetch_related('attribute_values')
+
+    context = {
+        'product': product,
+        'variants': variants,
+    }
+    return render(request, 'inventory/product_variants_list.html', context)
+
+
+@login_required
+def edit_variant(request, pk):
+    """Edit a single variant's details."""
+    variant = get_object_or_404(ProductVariant, pk=pk)
+
+    if request.method == 'POST':
+        form = ProductVariantForm(request.POST, instance=variant)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Variant "{variant.sku}" updated successfully.')
+            return redirect('product_variants_list', pk=variant.product.id)
+    else:
+        form = ProductVariantForm(instance=variant)
+
+    context = {
+        'form': form,
+        'variant': variant,
+        'product': variant.product,
+    }
+    return render(request, 'inventory/edit_variant.html', context)
+
+
+@login_required
+@require_POST
+def delete_variant(request, pk):
+    """Delete a variant."""
+    variant = get_object_or_404(ProductVariant, pk=pk)
+    product_id = variant.product.id
+    sku = variant.sku
+
+    variant.delete()
+    messages.success(request, f'Variant "{sku}" deleted.')
+
+    return redirect('product_variants_list', pk=product_id)
+
+
+@login_required
+def add_variant_to_product(request, pk):
+    """Add a new variant to an existing product with variants."""
+    from itertools import product as itertools_product
+
+    product = get_object_or_404(Inventory, pk=pk)
+
+    if not product.has_variants:
+        messages.error(request, "This product doesn't have variants enabled.")
+        return redirect('per_product', pk=pk)
+
+    attribute_types = product.variant_attributes.filter(is_active=True).order_by('display_order')
+
+    if request.method == 'POST':
+        # Collect selected attribute values
+        selected_values = []
+        for attr_type in attribute_types:
+            value_id = request.POST.get(f'attr_{attr_type.id}')
+            if value_id:
+                try:
+                    attr_value = AttributeValue.objects.get(id=value_id)
+                    selected_values.append(attr_value)
+                except AttributeValue.DoesNotExist:
+                    pass
+
+        if len(selected_values) == attribute_types.count():
+            # Check if variant already exists
+            existing = product.get_variant_by_attributes(selected_values)
+            if existing:
+                messages.error(request, f'A variant with these attributes already exists: {existing.sku}')
+            else:
+                # Create variant
+                sku = request.POST.get('sku', '').strip()
+                if not sku:
+                    base_code = product.product_code or 'PROD'
+                    abbrevs = [attr.value[:3].upper() for attr in selected_values]
+                    sku = f"{base_code}-{'-'.join(abbrevs)}"
+
+                # Ensure unique SKU
+                if ProductVariant.objects.filter(sku=sku).exists():
+                    counter = 1
+                    base_sku = sku
+                    while ProductVariant.objects.filter(sku=sku).exists():
+                        sku = f"{base_sku}-{counter}"
+                        counter += 1
+
+                purchase_price = request.POST.get('purchase_price', '').strip()
+                selling_price = request.POST.get('selling_price', '').strip()
+                quantity = request.POST.get('quantity_in_stock', '0').strip()
+                reorder_point = request.POST.get('reorder_point', '0').strip()
+
+                variant = ProductVariant.objects.create(
+                    product=product,
+                    sku=sku,
+                    purchase_price=decimal.Decimal(purchase_price) if purchase_price else None,
+                    selling_price=decimal.Decimal(selling_price) if selling_price else None,
+                    quantity_in_stock=int(quantity) if quantity else 0,
+                    reorder_point=int(reorder_point) if reorder_point else 0,
+                    is_active=True,
+                )
+                variant.attribute_values.set(selected_values)
+
+                if variant.quantity_in_stock > 0:
+                    StockMovement.objects.create(
+                        inventory_item=product,
+                        movement_type='IN',
+                        quantity=variant.quantity_in_stock,
+                        reason=f'Initial stock for variant {variant.sku}'
+                    )
+
+                messages.success(request, f'Variant "{sku}" created successfully.')
+                return redirect('product_variants_list', pk=product.id)
+        else:
+            messages.error(request, 'Please select all attribute values.')
+
+    # Get available values for each attribute type
+    attribute_data = []
+    for attr_type in attribute_types:
+        values = AttributeValue.objects.filter(
+            attribute_type=attr_type,
+            is_active=True
+        ).order_by('display_order')
+        attribute_data.append({
+            'type': attr_type,
+            'values': values,
+        })
+
+    context = {
+        'product': product,
+        'attribute_data': attribute_data,
+    }
+    return render(request, 'inventory/add_variant_to_product.html', context)
+
+
+@login_required
+def manage_attributes(request):
+    """View and manage attribute types and values."""
+    attribute_types = AttributeType.objects.prefetch_related('values').all()
+
+    if request.method == 'POST':
+        form = AddAttributeValueForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Attribute value added successfully.')
+            return redirect('manage_attributes')
+    else:
+        form = AddAttributeValueForm()
+
+    context = {
+        'attribute_types': attribute_types,
+        'form': form,
+    }
+    return render(request, 'inventory/manage_attributes.html', context)
+
+
+@login_required
+@require_POST
+def add_attribute_value_ajax(request):
+    """AJAX endpoint to add a new attribute value."""
+    import json
+
+    # Handle both JSON and form data
+    if request.content_type == 'application/json':
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'error': 'Invalid JSON'})
+    else:
+        data = request.POST
+
+    attr_type_ref = data.get('attribute_type')
+    value = data.get('value', '').strip()
+    display_value = data.get('display_value', '').strip()
+    color_code = data.get('color_code', '').strip()
+
+    if not attr_type_ref or not value:
+        return JsonResponse({'success': False, 'error': 'Missing required fields'})
+
+    try:
+        # Support both ID and name for attribute_type
+        if str(attr_type_ref).isdigit():
+            attr_type = AttributeType.objects.get(id=int(attr_type_ref))
+        else:
+            attr_type = AttributeType.objects.get(name__iexact=attr_type_ref)
+
+        # Check if value already exists
+        if AttributeValue.objects.filter(attribute_type=attr_type, value=value).exists():
+            return JsonResponse({'success': False, 'error': 'This value already exists'})
+
+        # Get max display order
+        max_order = AttributeValue.objects.filter(attribute_type=attr_type).aggregate(
+            max_order=Max('display_order')
+        )['max_order'] or 0
+
+        attr_value = AttributeValue.objects.create(
+            attribute_type=attr_type,
+            value=value,
+            display_value=display_value or value,
+            color_code=color_code if attr_type.name == 'Color' else '',
+            display_order=max_order + 1,
+            is_active=True,
+        )
+
+        return JsonResponse({
+            'success': True,
+            'id': attr_value.id,
+            'value': attr_value.value,
+            'display_value': attr_value.display_value or attr_value.value,
+            'color_code': attr_value.color_code,
+        })
+
+    except AttributeType.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'Invalid attribute type'})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+@login_required
+def get_variant_stock_ajax(request, pk):
+    """AJAX endpoint to get variant stock for POS."""
+    product = get_object_or_404(Inventory, pk=pk)
+
+    if not product.has_variants:
+        return JsonResponse({
+            'has_variants': False,
+            'stock': product.quantity_in_Stock,
+            'price': float(product.selling_price or 0),
+        })
+
+    # Get all variants with their attributes
+    variants = product.variants.filter(is_active=True).prefetch_related('attribute_values')
+
+    # Get attribute types for this product
+    attribute_types = list(product.variant_attributes.filter(is_active=True).order_by('display_order'))
+
+    # Build attribute values available for selection
+    attributes = {}
+    for attr_type in attribute_types:
+        values = AttributeValue.objects.filter(
+            attribute_type=attr_type,
+            is_active=True,
+            variants__product=product,
+            variants__is_active=True
+        ).distinct().order_by('display_order')
+
+        attributes[attr_type.name] = [{
+            'id': v.id,
+            'value': v.value,
+            'display': v.display_value or v.value,
+            'color_code': v.color_code,
+        } for v in values]
+
+    # Build variants data
+    variants_data = []
+    for variant in variants:
+        attr_ids = {str(av.attribute_type_id): av.id for av in variant.attribute_values.all()}
+        variants_data.append({
+            'id': variant.id,
+            'sku': variant.sku,
+            'attribute_ids': attr_ids,
+            'attrs_display': variant.attribute_string,
+            'stock': variant.quantity_in_stock,
+            'price': float(variant.effective_selling_price),
+            'purchase_price': float(variant.effective_purchase_price),
+        })
+
+    return JsonResponse({
+        'has_variants': True,
+        'attribute_types': [{'id': at.id, 'name': at.name, 'display_name': at.display_name} for at in attribute_types],
+        'attributes': attributes,
+        'variants': variants_data,
+    })
 

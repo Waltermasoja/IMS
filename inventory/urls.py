@@ -93,4 +93,26 @@ urlpatterns = [
     path('user-management/<int:user_id>/toggle-active/', user_toggle_active, name='user_toggle_active'),
     path('user-management/<int:user_id>/quick-edit-permission/', user_permissions_quick_edit, name='user_permissions_quick_edit'),
     path('user-management/roles/', role_templates, name='role_templates'),
+
+    # Site Settings (Admin Only)
+    path('settings/', site_settings, name='site_settings'),
+    path('settings/reset/', settings_reset_defaults, name='settings_reset_defaults'),
+
+    # System Setup (Admin Only)
+    path('setup/gl-accounts/', setup_init_gl_accounts, name='setup_init_gl_accounts'),
+    path('setup/attributes/', setup_seed_attributes, name='setup_seed_attributes'),
+    path('setup/inventory-balance/', setup_backfill_inventory, name='setup_backfill_inventory'),
+    path('setup/run-all/', setup_run_all, name='setup_run_all'),
+
+    # Product Variants
+    path('add-product-with-variants/', add_product_with_variants, name='add_product_with_variants'),
+    path('product/<int:pk>/select-variant-attributes/', select_variant_attributes, name='select_variant_attributes'),
+    path('product/<int:pk>/configure-variants/', configure_variants, name='configure_variants'),
+    path('product/<int:pk>/variants/', product_variants_list, name='product_variants_list'),
+    path('product/<int:pk>/variants/add/', add_variant_to_product, name='add_variant_to_product'),
+    path('variant/<int:pk>/edit/', edit_variant, name='edit_variant'),
+    path('variant/<int:pk>/delete/', delete_variant, name='delete_variant'),
+    path('manage-attributes/', manage_attributes, name='manage_attributes'),
+    path('api/add-attribute-value/', add_attribute_value_ajax, name='add_attribute_value_ajax'),
+    path('api/product/<int:pk>/variants/', get_variant_stock_ajax, name='get_variant_stock_ajax'),
 ]

@@ -91,9 +91,19 @@
                                     <td colspan="2" class="py-2 px-4 font-bold text-gray-800">REVENUE</td>
                                 </tr>
                                 <tr>
-                                    <td class="py-2 px-8 text-gray-700">Sales Revenue</td>
+                                    <td class="py-2 px-8 text-gray-700">Gross Sales</td>
+                                    <td class="py-2 px-4 text-right font-semibold">${{ gross_sales|floatformat:2 }}</td>
+                                </tr>
+                                {% if sales_discounts > 0 %}
+                                <tr>
+                                    <td class="py-2 px-8 text-red-600">Less: Sales Discounts</td>
+                                    <td class="py-2 px-4 text-right font-semibold text-red-600">(${{ sales_discounts|floatformat:2 }})</td>
+                                </tr>
+                                <tr class="bg-blue-50/50">
+                                    <td class="py-2 px-8 text-gray-700 font-medium">Net Sales</td>
                                     <td class="py-2 px-4 text-right font-semibold">${{ sales_revenue|floatformat:2 }}</td>
                                 </tr>
+                                {% endif %}
                                 {% if other_income > 0 %}
                                 <tr>
                                     <td class="py-2 px-8 text-gray-700">Other Income</td>

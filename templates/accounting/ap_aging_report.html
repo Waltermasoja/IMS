@@ -1,0 +1,239 @@
+{% extends 'base.html' %}
+{% load inventory_filters %}
+{% block title %}AP Aging Report - IMS Pro{% endblock %}
+{% block content %}
+<div class="space-y-6 animate-fade-in">
+  <!-- Page Header -->
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-900">Accounts Payable Aging Report</h1>
+      <p class="text-gray-500 mt-1">Outstanding supplier invoices by age brackets (as of {{ today|date:"Y-m-d" }})</p>
+    </div>
+    <div class="flex space-x-3">
+      <a href="{% url 'accounting:accounts_payable_list' %}"
+         class="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
+        <i class="fas fa-list"></i>
+        <span class="font-medium">AP List</span>
+      </a>
+      <a href="{% url 'accounting:dashboard' %}"
+         class="flex items-center space-x-2 px-6 py-3 bg-gradient-to-r from-gray-500 to-gray-600 text-white rounded-xl hover:from-gray-600 hover:to-gray-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all">
+        <i class="fas fa-arrow-left"></i>
+        <span class="font-medium">Back to Dashboard</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="bg-white rounded-2xl p-6 shadow-sm">
+    <form method="get" class="flex items-end gap-4">
+      <div class="flex-1">
+        <label class="block text-sm font-medium text-gray-700 mb-2">Filter by Supplier</label>
+        <select name="supplier" class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <option value="">All Suppliers</option>
+          {% for supplier in suppliers %}
+          <option value="{{ supplier.id }}" {% if selected_supplier|stringformat:"s" == supplier.id|stringformat:"s" %}selected{% endif %}>
+            {{ supplier.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+        <i class="fas fa-filter mr-2"></i>Apply Filter
+      </button>
+    </form>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+    {% for bracket in brackets_list %}
+    <div class="bg-gradient-to-br {% if bracket.color == 'success' %}from-green-500 to-green-600{% elif bracket.color == 'info' %}from-blue-500 to-blue-600{% elif bracket.color == 'warning' %}from-yellow-500 to-yellow-600{% elif bracket.color == 'orange' %}from-orange-500 to-orange-600{% else %}from-red-500 to-red-600{% endif %} rounded-2xl p-5 text-white shadow-lg">
+      <div class="flex items-center justify-between mb-2">
+        <h6 class="text-xs font-medium opacity-90">{{ bracket.label }}</h6>
+        <i class="fas fa-clock text-lg opacity-75"></i>
+      </div>
+      <h3 class="text-2xl font-bold mb-1">${{ bracket.amount|floatformat:2 }}</h3>
+      <p class="text-xs opacity-90">{{ bracket.percentage }}% of total</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Total Summary -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div class="bg-blue-50 border border-blue-200 rounded-2xl p-6">
+      <div class="flex items-center space-x-3">
+        <div class="bg-blue-500 text-white rounded-xl p-3">
+          <i class="fas fa-file-invoice-dollar text-2xl"></i>
+        </div>
+        <div>
+          <p class="text-sm text-gray-600 font-medium">Total Outstanding AP</p>
+          <h3 class="text-3xl font-bold text-gray-900">${{ total_outstanding|floatformat:2 }}</h3>
+        </div>
+      </div>
+    </div>
+    <div class="bg-red-50 border border-red-200 rounded-2xl p-6">
+      <div class="flex items-center space-x-3">
+        <div class="bg-red-500 text-white rounded-xl p-3">
+          <i class="fas fa-exclamation-triangle text-2xl"></i>
+        </div>
+        <div>
+          <p class="text-sm text-gray-600 font-medium">Total Overdue</p>
+          <h3 class="text-3xl font-bold text-red-600">${{ total_overdue|floatformat:2 }}</h3>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Supplier Aging Summary -->
+  {% if supplier_aging %}
+  <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200">
+      <h3 class="text-lg font-semibold text-gray-900">Aging by Supplier</h3>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full">
+        <thead>
+          <tr class="bg-gray-50 border-b border-gray-200">
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Supplier</th>
+            <th class="px-4 py-4 text-right text-xs font-semibold text-green-600 uppercase tracking-wider">Current</th>
+            <th class="px-4 py-4 text-right text-xs font-semibold text-blue-600 uppercase tracking-wider">1-30 Days</th>
+            <th class="px-4 py-4 text-right text-xs font-semibold text-yellow-600 uppercase tracking-wider">31-60 Days</th>
+            <th class="px-4 py-4 text-right text-xs font-semibold text-orange-600 uppercase tracking-wider">61-90 Days</th>
+            <th class="px-4 py-4 text-right text-xs font-semibold text-red-600 uppercase tracking-wider">90+ Days</th>
+            <th class="px-6 py-4 text-right text-xs font-semibold text-gray-800 uppercase tracking-wider">Total</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+          {% for supplier in supplier_aging %}
+          <tr class="hover:bg-gray-50 transition-colors">
+            <td class="px-6 py-4 text-sm font-medium text-gray-900">{{ supplier.name }}</td>
+            <td class="px-4 py-4 text-sm text-right {% if supplier.Current > 0 %}text-green-600{% else %}text-gray-400{% endif %}">${{ supplier.Current|floatformat:2 }}</td>
+            <td class="px-4 py-4 text-sm text-right {% if supplier|get_item:'1-30' > 0 %}text-blue-600{% else %}text-gray-400{% endif %}">${{ supplier|get_item:'1-30'|floatformat:2 }}</td>
+            <td class="px-4 py-4 text-sm text-right {% if supplier|get_item:'31-60' > 0 %}text-yellow-600{% else %}text-gray-400{% endif %}">${{ supplier|get_item:'31-60'|floatformat:2 }}</td>
+            <td class="px-4 py-4 text-sm text-right {% if supplier|get_item:'61-90' > 0 %}text-orange-600{% else %}text-gray-400{% endif %}">${{ supplier|get_item:'61-90'|floatformat:2 }}</td>
+            <td class="px-4 py-4 text-sm text-right {% if supplier|get_item:'90+' > 0 %}text-red-600 font-semibold{% else %}text-gray-400{% endif %}">${{ supplier|get_item:'90+'|floatformat:2 }}</td>
+            <td class="px-6 py-4 text-sm text-right font-bold text-gray-900">${{ supplier.total|floatformat:2 }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Invoice Detail Table -->
+  <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200">
+      <h3 class="text-lg font-semibold text-gray-900">Outstanding Invoices Detail</h3>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full">
+        <thead>
+          <tr class="bg-gray-50 border-b border-gray-200">
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Age</th>
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Invoice #</th>
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Supplier</th>
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Invoice Date</th>
+            <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Due Date</th>
+            <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Days Overdue</th>
+            <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Invoice Amount</th>
+            <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Paid</th>
+            <th class="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Outstanding</th>
+            <th class="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-200">
+          {% for data in aging_data %}
+          <tr class="hover:bg-gray-50 transition-colors {% if data.bracket == '90+' %}bg-red-50{% elif data.bracket == '61-90' %}bg-orange-50{% elif data.bracket == '31-60' %}bg-yellow-50{% endif %}">
+            <td class="px-6 py-4 whitespace-nowrap">
+              {% if data.bracket == 'Current' %}
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  Current
+                </span>
+              {% elif data.bracket == '1-30' %}
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  1-30 days
+                </span>
+              {% elif data.bracket == '31-60' %}
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                  31-60 days
+                </span>
+              {% elif data.bracket == '61-90' %}
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                  61-90 days
+                </span>
+              {% else %}
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                  90+ days
+                </span>
+              {% endif %}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">
+              <a href="{% url 'accounting:supplier_invoice_detail' data.invoice.id %}" class="hover:text-blue-800">
+                {{ data.invoice.invoice_number }}
+              </a>
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-900">{{ data.supplier_name }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ data.invoice.invoice_date|date:"Y-m-d" }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{{ data.invoice.due_date|date:"Y-m-d"|default:"N/A" }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right {% if data.is_overdue %}text-red-600 font-semibold{% else %}text-gray-600{% endif %}">
+              {% if data.is_overdue %}{{ data.days_overdue }} days{% else %}-{% endif %}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-900">${{ data.invoice.total_amount|floatformat:2 }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-600">${{ data.invoice.amount_paid|floatformat:2 }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-right font-semibold text-gray-900">${{ data.outstanding|floatformat:2 }}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-center">
+              <a href="{% url 'add_invoice_payment' data.invoice.id %}"
+                 class="inline-flex items-center px-3 py-1 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-xs font-medium">
+                <i class="fas fa-credit-card mr-1"></i>Pay
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="10" class="px-6 py-12 text-center text-gray-500">
+              <i class="fas fa-check-circle text-4xl mb-3 text-green-400"></i>
+              <p class="text-lg font-medium text-gray-700">No outstanding invoices!</p>
+              <p class="text-sm text-gray-500 mt-1">All supplier accounts are current</p>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Payment Priority Guidelines -->
+  <div class="bg-amber-50 border border-amber-200 rounded-2xl p-6">
+    <div class="flex items-start space-x-3">
+      <div class="flex-shrink-0">
+        <i class="fas fa-lightbulb text-2xl text-amber-600"></i>
+      </div>
+      <div class="flex-1">
+        <h4 class="text-lg font-semibold text-gray-900 mb-3">Payment Priority Guidelines</h4>
+        <ul class="space-y-2 text-sm text-gray-700">
+          <li class="flex items-start">
+            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 mr-2">90+</span>
+            <span><strong>CRITICAL:</strong> Pay immediately to avoid supply disruptions and legal action</span>
+          </li>
+          <li class="flex items-start">
+            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800 mr-2">61-90</span>
+            <span><strong>URGENT:</strong> Contact supplier, negotiate payment plan if needed</span>
+          </li>
+          <li class="flex items-start">
+            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 mr-2">31-60</span>
+            <span><strong>HIGH:</strong> Schedule for payment in next payment run</span>
+          </li>
+          <li class="flex items-start">
+            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mr-2">1-30</span>
+            <span><strong>MEDIUM:</strong> Monitor and prepare for upcoming due dates</span>
+          </li>
+          <li class="flex items-start">
+            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 mr-2">Current</span>
+            <span><strong>NORMAL:</strong> Not yet due - pay according to supplier terms</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

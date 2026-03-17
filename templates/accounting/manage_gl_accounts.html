@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Manage Chart of Accounts - IMS Pro{% endblock %}
+
+{% block content %}
+<div class="space-y-6 animate-fade-in">
+    <!-- Page Header -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div class="flex items-center space-x-3">
+            <div>
+                <h1 class="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Chart of Accounts</h1>
+                <p class="text-gray-500 mt-1">Manage your general ledger accounts and view balances</p>
+            </div>
+        </div>
+        <div>
+            <a href="{% url 'site_settings' %}" class="inline-flex items-center space-x-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 shadow-sm">
+                <i class="fas fa-arrow-left"></i>
+                <span class="font-medium">Back to Settings</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Messages -->
+    {% if messages %}
+    <div class="space-y-3">
+        {% for message in messages %}
+        <div class="flex items-center p-4 rounded-2xl shadow-sm {% if message.tags == 'success' %}bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200{% elif message.tags == 'error' %}bg-gradient-to-r from-red-50 to-rose-50 border border-red-200{% else %}bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200{% endif %}">
+            <div class="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center {% if message.tags == 'success' %}bg-emerald-100 text-emerald-600{% elif message.tags == 'error' %}bg-red-100 text-red-600{% else %}bg-blue-100 text-blue-600{% endif %}">
+                <i class="fas {% if message.tags == 'success' %}fa-check{% elif message.tags == 'error' %}fa-exclamation{% else %}fa-info{% endif %}"></i>
+            </div>
+            <span class="ml-3 font-medium {% if message.tags == 'success' %}text-emerald-800{% elif message.tags == 'error' %}text-red-800{% else %}text-blue-800{% endif %}">{{ message }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-gray-600 text-sm font-medium">Total Accounts</span>
+                <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-list text-blue-600"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-bold text-gray-900">{{ total_accounts }}</div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-gray-600 text-sm font-medium">Total Assets</span>
+                <div class="w-10 h-10 bg-emerald-100 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-coins text-emerald-600"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-bold text-gray-900">${{ asset_balance|floatformat:2 }}</div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-gray-600 text-sm font-medium">Total Liabilities</span>
+                <div class="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-file-invoice-dollar text-orange-600"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-bold text-gray-900">${{ liability_balance|floatformat:2 }}</div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-lg p-6 border border-gray-100">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-gray-600 text-sm font-medium">Total Equity</span>
+                <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-balance-scale text-purple-600"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-bold text-gray-900">${{ equity_balance|floatformat:2 }}</div>
+        </div>
+    </div>
+
+    <!-- Accounts by Type -->
+    <div class="grid grid-cols-1 gap-6">
+        {% for account_type, data in accounts_by_type.items %}
+        <div class="bg-white rounded-3xl shadow-xl shadow-gray-200/50 overflow-hidden border border-gray-100">
+            <div class="bg-gradient-to-r
+                {% if account_type == 'ASSET' %}from-emerald-50 to-green-50 border-b border-emerald-200
+                {% elif account_type == 'LIAB' %}from-orange-50 to-amber-50 border-b border-orange-200
+                {% elif account_type == 'EQUITY' %}from-purple-50 to-pink-50 border-b border-purple-200
+                {% elif account_type == 'INCOME' %}from-blue-50 to-indigo-50 border-b border-blue-200
+                {% elif account_type == 'EXP' %}from-red-50 to-rose-50 border-b border-red-200
+                {% else %}from-gray-50 to-slate-50 border-b border-gray-200
+                {% endif %} px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <h5 class="text-lg font-bold flex items-center
+                        {% if account_type == 'ASSET' %}text-emerald-900
+                        {% elif account_type == 'LIAB' %}text-orange-900
+                        {% elif account_type == 'EQUITY' %}text-purple-900
+                        {% elif account_type == 'INCOME' %}text-blue-900
+                        {% elif account_type == 'EXP' %}text-red-900
+                        {% else %}text-gray-900
+                        {% endif %}">
+                        <i class="fas
+                            {% if account_type == 'ASSET' %}fa-coins text-emerald-600
+                            {% elif account_type == 'LIAB' %}fa-file-invoice-dollar text-orange-600
+                            {% elif account_type == 'EQUITY' %}fa-balance-scale text-purple-600
+                            {% elif account_type == 'INCOME' %}fa-chart-line text-blue-600
+                            {% elif account_type == 'EXP' %}fa-money-bill-wave text-red-600
+                            {% else %}fa-folder text-gray-600
+                            {% endif %} mr-2"></i>
+                        {{ data.label }} Accounts
+                    </h5>
+                    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium
+                        {% if account_type == 'ASSET' %}bg-emerald-100 text-emerald-800
+                        {% elif account_type == 'LIAB' %}bg-orange-100 text-orange-800
+                        {% elif account_type == 'EQUITY' %}bg-purple-100 text-purple-800
+                        {% elif account_type == 'INCOME' %}bg-blue-100 text-blue-800
+                        {% elif account_type == 'EXP' %}bg-red-100 text-red-800
+                        {% else %}bg-gray-100 text-gray-800
+                        {% endif %}">
+                        {{ data.count }} account{% if data.count != 1 %}s{% endif %}
+                    </span>
+                </div>
+            </div>
+            <div class="p-6">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b border-gray-200">
+                                <th class="text-left py-3 px-4 text-sm font-semibold text-gray-700">Account Code</th>
+                                <th class="text-left py-3 px-4 text-sm font-semibold text-gray-700">Account Name</th>
+                                <th class="text-right py-3 px-4 text-sm font-semibold text-gray-700">Current Balance</th>
+                                <th class="text-center py-3 px-4 text-sm font-semibold text-gray-700">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for account in data.accounts %}
+                            <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                <td class="py-3 px-4">
+                                    <span class="font-mono text-sm font-medium text-gray-900">{{ account.code }}</span>
+                                </td>
+                                <td class="py-3 px-4">
+                                    <span class="text-sm text-gray-900">{{ account.name }}</span>
+                                </td>
+                                <td class="py-3 px-4 text-right">
+                                    <span class="text-sm font-medium {% if account.balance < 0 %}text-red-600{% else %}text-gray-900{% endif %}">
+                                        ${{ account.balance|floatformat:2 }}
+                                    </span>
+                                </td>
+                                <td class="py-3 px-4 text-center">
+                                    <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">
+                                        <i class="fas fa-check-circle mr-1"></i>Active
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="bg-white rounded-3xl shadow-xl p-12 text-center">
+            <div class="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-info-circle text-gray-400 text-3xl"></i>
+            </div>
+            <p class="text-gray-600 mb-2 font-medium">No accounts have been created yet.</p>
+            <p class="text-gray-500 text-sm mb-6">Run the "Initialize GL Accounts" task from Site Settings to create your chart of accounts.</p>
+            <a href="{% url 'site_settings' %}?tab=setup" class="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-xl hover:from-emerald-700 hover:to-green-700 shadow-lg shadow-emerald-500/30 transition-all font-medium">
+                <i class="fas fa-cog mr-2"></i>Go to Setup
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<style>
+    @keyframes fade-in {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-fade-in {
+        animation: fade-in 0.4s ease-out;
+    }
+</style>
+{% endblock %}

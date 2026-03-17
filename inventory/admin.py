@@ -6,7 +6,8 @@ from .models import (
     Inventory, Inventory_category, Sales, Return, Damaged, StockMovement, missing_inventory,
     Supplier, ImportOrder, SupplierInvoice, InvoicePayment, ImportExpense, ImportOrderItem,
     UserProfile, Customer,
-    SalesInvoice, SalesInvoiceItem
+    SalesInvoice, SalesInvoiceItem,
+    AttributeType, AttributeValue, ProductVariant
 )
 
 # ==================== EXISTING MODELS ====================
@@ -317,6 +318,84 @@ class SalesInvoiceItemAdmin(admin.ModelAdmin):
     list_filter = ['invoice__invoice_date']
     search_fields = ['invoice__invoice_number', 'product_name', 'product_code']
     readonly_fields = ['line_total']
+
+# ==================== PRODUCT VARIANTS ====================
+
+class AttributeValueInline(admin.TabularInline):
+    model = AttributeValue
+    extra = 1
+    fields = ['value', 'display_value', 'color_code', 'display_order', 'is_active']
+    ordering = ['display_order', 'value']
+
+@admin.register(AttributeType)
+class AttributeTypeAdmin(admin.ModelAdmin):
+    list_display = ['name', 'display_name', 'display_order', 'is_active', 'values_count', 'created_date']
+    list_filter = ['is_active', 'created_date']
+    search_fields = ['name', 'display_name']
+    ordering = ['display_order', 'name']
+    inlines = [AttributeValueInline]
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('name', 'display_name', 'display_order', 'is_active')
+        }),
+        ('Metadata', {
+            'fields': ('created_date',),
+            'classes': ('collapse',)
+        })
+    )
+    readonly_fields = ['created_date']
+    
+    def values_count(self, obj):
+        return obj.values.count()
+    values_count.short_description = 'Values'
+
+@admin.register(AttributeValue)
+class AttributeValueAdmin(admin.ModelAdmin):
+    list_display = ['attribute_type', 'value', 'display_value', 'color_code', 'display_order', 'is_active']
+    list_filter = ['attribute_type', 'is_active', 'attribute_type__is_active']
+    search_fields = ['value', 'display_value', 'attribute_type__name']
+    ordering = ['attribute_type', 'display_order', 'value']
+    
+    fieldsets = (
+        ('Value Information', {
+            'fields': ('attribute_type', 'value', 'display_value', 'color_code', 'display_order', 'is_active')
+        }),
+    )
+
+@admin.register(ProductVariant)
+class ProductVariantAdmin(admin.ModelAdmin):
+    list_display = ['sku', 'product', 'attribute_values_display', 'quantity_in_stock', 'selling_price', 'is_active']
+    list_filter = ['is_active', 'product__category', 'created_date']
+    search_fields = ['sku', 'product__name', 'product__product_code']
+    filter_horizontal = ['attribute_values']
+    readonly_fields = ['created_date', 'last_updated']
+    
+    fieldsets = (
+        ('Product & SKU', {
+            'fields': ('product', 'sku', 'is_active')
+        }),
+        ('Pricing', {
+            'fields': ('purchase_price', 'selling_price'),
+            'description': 'Leave blank to use product default prices'
+        }),
+        ('Stock', {
+            'fields': ('quantity_in_stock', 'reorder_point')
+        }),
+        ('Attributes', {
+            'fields': ('attribute_values',)
+        }),
+        ('Metadata', {
+            'fields': ('created_date', 'last_updated'),
+            'classes': ('collapse',)
+        })
+    )
+    
+    def attribute_values_display(self, obj):
+        """Display attribute values in a readable format"""
+        values = obj.attribute_values.select_related('attribute_type').order_by('attribute_type__display_order', 'display_order')
+        return ', '.join([f"{v.attribute_type.display_name}: {v.label}" for v in values])
+    attribute_values_display.short_description = 'Attributes'
 
 # Customize admin site header
 admin.site.site_header = "Inventory Management System"

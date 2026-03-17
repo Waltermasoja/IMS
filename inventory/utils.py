@@ -12,6 +12,34 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+# ==================== SITE SETTINGS HELPER ====================
+
+def get_site_settings():
+    """
+    Get the site settings singleton instance.
+    Uses caching for performance - call this instead of SiteSettings.get_settings()
+    from utility functions to avoid circular imports.
+    """
+    from .models import SiteSettings
+    return SiteSettings.get_settings()
+
+
+def get_setting(setting_name, default=None):
+    """
+    Get a specific setting value by name.
+    Returns the default if setting doesn't exist.
+
+    Usage:
+        low_stock = get_setting('low_stock_threshold', 10)
+        markup = get_setting('default_markup_percent', 40)
+    """
+    try:
+        settings_obj = get_site_settings()
+        return getattr(settings_obj, setting_name, default)
+    except Exception:
+        return default
+
 # ==================== EXCHANGE RATE INTEGRATION ====================
 
 def get_exchange_rate(from_currency, to_currency='USD'):
@@ -122,6 +150,7 @@ def allocate_expenses_by_value(import_order):
         item_value = item.quantity * item.unit_cost
         proportion = item_value / total_goods_value
         item.allocated_expenses = total_expenses * proportion
+
 
         # Save old selling price before updating (for price comparison)
         if item.inventory_item:

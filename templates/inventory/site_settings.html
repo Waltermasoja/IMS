@@ -1,0 +1,924 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Site Settings - IMS Pro{% endblock %}
+
+{% block content %}
+<div x-data="{ activeTab: '{{ active_tab }}', showResetModal: false }" class="space-y-6 animate-fade-in">
+    <!-- Page Header -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+            <div class="flex items-center space-x-3">
+                <div class="p-3 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-lg">
+                    <i class="fas fa-sliders-h text-white text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Site Settings</h1>
+                    <p class="text-gray-600 mt-1">Configure your business settings and preferences</p>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center space-x-3">
+            <button @click="showResetModal = true"
+                    class="flex items-center space-x-2 px-4 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 shadow-sm">
+                <i class="fas fa-undo text-sm"></i>
+                <span class="font-medium">Reset Defaults</span>
+            </button>
+            <a href="{% url 'dashboard' %}"
+               class="inline-flex items-center space-x-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 shadow-sm">
+                <i class="fas fa-arrow-left"></i>
+                <span class="font-medium">Back</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Messages -->
+    {% if messages %}
+    <div class="space-y-3">
+        {% for message in messages %}
+        <div class="flex items-center p-4 rounded-2xl shadow-sm {% if message.tags == 'success' %}bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200{% elif message.tags == 'error' %}bg-gradient-to-r from-red-50 to-rose-50 border border-red-200{% else %}bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200{% endif %}">
+            <div class="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center {% if message.tags == 'success' %}bg-emerald-100 text-emerald-600{% elif message.tags == 'error' %}bg-red-100 text-red-600{% else %}bg-blue-100 text-blue-600{% endif %}">
+                <i class="fas {% if message.tags == 'success' %}fa-check{% elif message.tags == 'error' %}fa-exclamation{% else %}fa-info{% endif %}"></i>
+            </div>
+            <span class="ml-3 font-medium {% if message.tags == 'success' %}text-emerald-800{% elif message.tags == 'error' %}text-red-800{% else %}text-blue-800{% endif %}">{{ message }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Settings Form -->
+    <form method="post" enctype="multipart/form-data" class="space-y-6">
+        {% csrf_token %}
+
+        <div class="bg-white rounded-3xl shadow-xl shadow-gray-200/50 overflow-hidden border border-gray-100">
+            <!-- Tabs Navigation -->
+            <div class="bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200 px-2 pt-2">
+                <nav class="flex space-x-1 overflow-x-auto pb-0 scrollbar-hide">
+                    <button type="button" @click="activeTab = 'company'"
+                            :class="activeTab === 'company' ? 'bg-white text-indigo-600 shadow-md border-b-2 border-indigo-500' : 'text-gray-600 hover:text-gray-700 hover:bg-white/50'"
+                            class="flex items-center space-x-2 px-5 py-3.5 rounded-t-xl font-medium text-sm transition-all duration-200 whitespace-nowrap">
+                        <i class="fas fa-building"></i>
+                        <span>Company</span>
+                    </button>
+                    <button type="button" @click="activeTab = 'financial'"
+                            :class="activeTab === 'financial' ? 'bg-white text-indigo-600 shadow-md border-b-2 border-indigo-500' : 'text-gray-600 hover:text-gray-700 hover:bg-white/50'"
+                            class="flex items-center space-x-2 px-5 py-3.5 rounded-t-xl font-medium text-sm transition-all duration-200 whitespace-nowrap">
+                        <i class="fas fa-coins"></i>
+                        <span>Financial</span>
+                    </button>
+                    <button type="button" @click="activeTab = 'credit'"
+                            :class="activeTab === 'credit' ? 'bg-white text-indigo-600 shadow-md border-b-2 border-indigo-500' : 'text-gray-600 hover:text-gray-700 hover:bg-white/50'"
+                            class="flex items-center space-x-2 px-5 py-3.5 rounded-t-xl font-medium text-sm transition-all duration-200 whitespace-nowrap">
+                        <i class="fas fa-credit-card"></i>
+                        <span>Credit & AR</span>
+                    </button>
+                    <button type="button" @click="activeTab = 'layby'"
+                            :class="activeTab === 'layby' ? 'bg-white text-indigo-600 shadow-md border-b-2 border-indigo-500' : 'text-gray-600 hover:text-gray-700 hover:bg-white/50'"
+                            class="flex items-center space-x-2 px-5 py-3.5 rounded-t-xl font-medium text-sm transition-all duration-200 whitespace-nowrap">
+                        <i class="fas fa-hand-holding-usd"></i>
+                        <span>Layby</span>
+                    </button>
+                    <button type="button" @click="activeTab = 'inventory'"
+                            :class="activeTab === 'inventory' ? 'bg-white text-indigo-600 shadow-md border-b-2 border-indigo-500' : 'text-gray-600 hover:text-gray-700 hover:bg-white/50'"
+                            class="flex items-center space-x-2 px-5 py-3.5 rounded-t-xl font-medium text-sm transition-all duration-200 whitespace-nowrap">
+                        <i class="fas fa-boxes"></i>
+                        <span>Inventory</span>
+                    </button>
+                    <button type="button" @click="activeTab = 'pos'"
+                            :class="activeTab === 'pos' ? 'bg-white text-indigo-600 shadow-md border-b-2 border-indigo-500' : 'text-gray-600 hover:text-gray-700 hover:bg-white/50'"
+                            class="flex items-center space-x-2 px-5 py-3.5 rounded-t-xl font-medium text-sm transition-all duration-200 whitespace-nowrap">
+                        <i class="fas fa-cash-register"></i>
+                        <span>POS & Sales</span>
+                    </button>
+                    <button type="button" @click="activeTab = 'display'"
+                            :class="activeTab === 'display' ? 'bg-white text-indigo-600 shadow-md border-b-2 border-indigo-500' : 'text-gray-600 hover:text-gray-700 hover:bg-white/50'"
+                            class="flex items-center space-x-2 px-5 py-3.5 rounded-t-xl font-medium text-sm transition-all duration-200 whitespace-nowrap">
+                        <i class="fas fa-desktop"></i>
+                        <span>Display</span>
+                    </button>
+                    <button type="button" @click="activeTab = 'setup'"
+                            :class="activeTab === 'setup' ? 'bg-white text-indigo-600 shadow-md border-b-2 border-indigo-500' : 'text-gray-600 hover:text-gray-700 hover:bg-white/50'"
+                            class="flex items-center space-x-2 px-5 py-3.5 rounded-t-xl font-medium text-sm transition-all duration-200 whitespace-nowrap">
+                        <i class="fas fa-cogs"></i>
+                        <span>System Setup</span>
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Tab Contents -->
+            <div class="p-8">
+                <!-- Company Information Tab -->
+                <div x-show="activeTab === 'company'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform translate-y-2" x-transition:enter-end="opacity-100 transform translate-y-0">
+                    <div class="mb-8">
+                        <div class="flex items-center space-x-3 mb-2">
+                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+                                <i class="fas fa-building text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">Company Information</h3>
+                                <p class="text-sm text-gray-600">Basic business details shown on invoices and receipts</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {% for name, field in sections.company %}
+                        <div class="{% if name == 'company_address' %}md:col-span-2{% endif %} group">
+                            <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-gray-800 mb-2 group-focus-within:text-indigo-600 transition-colors">
+                                {{ field.label }}
+                                {% if field.field.required %}<span class="text-red-500 ml-1">*</span>{% endif %}
+                            </label>
+                            <div class="relative">
+                                {{ field }}
+                            </div>
+                            {% if field.help_text %}
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1.5 text-gray-500"></i>
+                                {{ field.help_text }}
+                            </p>
+                            {% endif %}
+                            {% if field.errors %}
+                            <p class="mt-2 text-xs text-red-500 flex items-center">
+                                <i class="fas fa-exclamation-circle mr-1.5"></i>
+                                {{ field.errors.0 }}
+                            </p>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Financial Settings Tab -->
+                <div x-show="activeTab === 'financial'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform translate-y-2" x-transition:enter-end="opacity-100 transform translate-y-0" style="display: none;">
+                    <div class="mb-8">
+                        <div class="flex items-center space-x-3 mb-2">
+                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+                                <i class="fas fa-coins text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">Financial Settings</h3>
+                                <p class="text-sm text-gray-600">Currency, tax, and accounting preferences</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {% for name, field in sections.financial %}
+                        <div class="group">
+                            <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-gray-800 mb-2 group-focus-within:text-indigo-600 transition-colors">
+                                {{ field.label }}
+                                {% if field.field.required %}<span class="text-red-500 ml-1">*</span>{% endif %}
+                            </label>
+                            {{ field }}
+                            {% if field.help_text %}
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1.5 text-gray-500"></i>
+                                {{ field.help_text }}
+                            </p>
+                            {% endif %}
+                            {% if field.errors %}
+                            <p class="mt-2 text-xs text-red-500 flex items-center">
+                                <i class="fas fa-exclamation-circle mr-1.5"></i>
+                                {{ field.errors.0 }}
+                            </p>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Credit & AR Settings Tab -->
+                <div x-show="activeTab === 'credit'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform translate-y-2" x-transition:enter-end="opacity-100 transform translate-y-0" style="display: none;">
+                    <div class="mb-8">
+                        <div class="flex items-center space-x-3 mb-2">
+                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+                                <i class="fas fa-credit-card text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">Credit & Accounts Receivable</h3>
+                                <p class="text-sm text-gray-600">Default settings for customer credit accounts</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {% for name, field in sections.credit %}
+                        <div class="group">
+                            <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-gray-800 mb-2 group-focus-within:text-indigo-600 transition-colors">
+                                {{ field.label }}
+                                {% if field.field.required %}<span class="text-red-500 ml-1">*</span>{% endif %}
+                            </label>
+                            {% if field.field.widget.input_type == 'checkbox' %}
+                            <div class="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl border border-gray-200 hover:border-indigo-300 transition-colors">
+                                {{ field }}
+                                <span class="text-sm text-gray-600">{{ field.help_text }}</span>
+                            </div>
+                            {% else %}
+                            {{ field }}
+                            {% if field.help_text %}
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1.5 text-gray-500"></i>
+                                {{ field.help_text }}
+                            </p>
+                            {% endif %}
+                            {% endif %}
+                            {% if field.errors %}
+                            <p class="mt-2 text-xs text-red-500 flex items-center">
+                                <i class="fas fa-exclamation-circle mr-1.5"></i>
+                                {{ field.errors.0 }}
+                            </p>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <!-- Interest Notice -->
+                    <div class="mt-8 p-5 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-2xl">
+                        <div class="flex items-start space-x-4">
+                            <div class="flex-shrink-0 w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                                <i class="fas fa-lightbulb text-amber-600"></i>
+                            </div>
+                            <div>
+                                <p class="font-semibold text-amber-800">Interest Charges - Coming Soon</p>
+                                <p class="text-sm text-amber-700 mt-1">Interest charging functionality will be available in a future update. Configure these settings now to be ready when the feature launches.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Layby Settings Tab -->
+                <div x-show="activeTab === 'layby'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform translate-y-2" x-transition:enter-end="opacity-100 transform translate-y-0" style="display: none;">
+                    <div class="mb-8">
+                        <div class="flex items-center space-x-3 mb-2">
+                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center">
+                                <i class="fas fa-hand-holding-usd text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">Layby Settings</h3>
+                                <p class="text-sm text-gray-600">Configure layby plan requirements and policies</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {% for name, field in sections.layby %}
+                        <div class="group">
+                            <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-gray-800 mb-2 group-focus-within:text-indigo-600 transition-colors">
+                                {{ field.label }}
+                                {% if field.field.required %}<span class="text-red-500 ml-1">*</span>{% endif %}
+                            </label>
+                            {{ field }}
+                            {% if field.help_text %}
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1.5 text-gray-500"></i>
+                                {{ field.help_text }}
+                            </p>
+                            {% endif %}
+                            {% if field.errors %}
+                            <p class="mt-2 text-xs text-red-500 flex items-center">
+                                <i class="fas fa-exclamation-circle mr-1.5"></i>
+                                {{ field.errors.0 }}
+                            </p>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Inventory Settings Tab -->
+                <div x-show="activeTab === 'inventory'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform translate-y-2" x-transition:enter-end="opacity-100 transform translate-y-0" style="display: none;">
+                    <div class="mb-8">
+                        <div class="flex items-center space-x-3 mb-2">
+                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
+                                <i class="fas fa-boxes text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">Inventory Settings</h3>
+                                <p class="text-sm text-gray-600">Stock control and product defaults</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {% for name, field in sections.inventory %}
+                        <div class="group">
+                            <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-gray-800 mb-2 group-focus-within:text-indigo-600 transition-colors">
+                                {{ field.label }}
+                                {% if field.field.required %}<span class="text-red-500 ml-1">*</span>{% endif %}
+                            </label>
+                            {% if field.field.widget.input_type == 'checkbox' %}
+                            <div class="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl border border-gray-200 hover:border-indigo-300 transition-colors">
+                                {{ field }}
+                                <span class="text-sm text-gray-600">{{ field.help_text }}</span>
+                            </div>
+                            {% else %}
+                            {{ field }}
+                            {% if field.help_text %}
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1.5 text-gray-500"></i>
+                                {{ field.help_text }}
+                            </p>
+                            {% endif %}
+                            {% endif %}
+                            {% if field.errors %}
+                            <p class="mt-2 text-xs text-red-500 flex items-center">
+                                <i class="fas fa-exclamation-circle mr-1.5"></i>
+                                {{ field.errors.0 }}
+                            </p>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- POS & Sales Settings Tab -->
+                <div x-show="activeTab === 'pos'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform translate-y-2" x-transition:enter-end="opacity-100 transform translate-y-0" style="display: none;">
+                    <div class="mb-8">
+                        <div class="flex items-center space-x-3 mb-2">
+                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+                                <i class="fas fa-cash-register text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">POS & Sales Settings</h3>
+                                <p class="text-sm text-gray-600">Point of sale and document numbering</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Document Prefixes Section -->
+                    <div class="mb-8">
+                        <h4 class="text-sm font-semibold text-gray-600 uppercase tracking-wider mb-4">Document Prefixes</h4>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {% for name, field in sections.pos %}
+                            {% if 'prefix' in name %}
+                            <div class="group">
+                                <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-gray-800 mb-2">
+                                    {{ field.label }}
+                                </label>
+                                {{ field }}
+                                {% if field.help_text %}
+                                <p class="mt-1.5 text-xs text-gray-600">{{ field.help_text }}</p>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Other POS Settings -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {% for name, field in sections.pos %}
+                        {% if 'prefix' not in name %}
+                        <div class="group">
+                            <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-gray-800 mb-2 group-focus-within:text-indigo-600 transition-colors">
+                                {{ field.label }}
+                                {% if field.field.required %}<span class="text-red-500 ml-1">*</span>{% endif %}
+                            </label>
+                            {% if field.field.widget.input_type == 'checkbox' %}
+                            <div class="flex items-center space-x-3 p-4 bg-gray-50 rounded-xl border border-gray-200 hover:border-indigo-300 transition-colors">
+                                {{ field }}
+                                <span class="text-sm text-gray-600">{{ field.help_text }}</span>
+                            </div>
+                            {% else %}
+                            {{ field }}
+                            {% if field.help_text %}
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1.5 text-gray-500"></i>
+                                {{ field.help_text }}
+                            </p>
+                            {% endif %}
+                            {% endif %}
+                            {% if field.errors %}
+                            <p class="mt-2 text-xs text-red-500 flex items-center">
+                                <i class="fas fa-exclamation-circle mr-1.5"></i>
+                                {{ field.errors.0 }}
+                            </p>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Display Settings Tab -->
+                <div x-show="activeTab === 'display'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform translate-y-2" x-transition:enter-end="opacity-100 transform translate-y-0" style="display: none;">
+                    <div class="mb-8">
+                        <div class="flex items-center space-x-3 mb-2">
+                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-slate-500 to-gray-600 flex items-center justify-center">
+                                <i class="fas fa-desktop text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">Display Settings</h3>
+                                <p class="text-sm text-gray-600">Format and appearance preferences</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {% for name, field in sections.display %}
+                        <div class="group">
+                            <label for="{{ field.id_for_label }}" class="block text-sm font-semibold text-gray-800 mb-2 group-focus-within:text-indigo-600 transition-colors">
+                                {{ field.label }}
+                                {% if field.field.required %}<span class="text-red-500 ml-1">*</span>{% endif %}
+                            </label>
+                            {{ field }}
+                            {% if field.help_text %}
+                            <p class="mt-2 text-xs text-gray-600 flex items-center">
+                                <i class="fas fa-info-circle mr-1.5 text-gray-500"></i>
+                                {{ field.help_text }}
+                            </p>
+                            {% endif %}
+                            {% if field.errors %}
+                            <p class="mt-2 text-xs text-red-500 flex items-center">
+                                <i class="fas fa-exclamation-circle mr-1.5"></i>
+                                {{ field.errors.0 }}
+                            </p>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- System Setup Tab -->
+                <div x-show="activeTab === 'setup'" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform translate-y-2" x-transition:enter-end="opacity-100 transform translate-y-0" style="display: none;">
+                    <div class="mb-8">
+                        <div class="flex items-center space-x-3 mb-2">
+                            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                                <i class="fas fa-cogs text-white"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-bold text-gray-900">System Setup & Data Management</h3>
+                                <p class="text-sm text-gray-600">Initialize system data, manage chart of accounts, and configure product attributes</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Setup Status Overview -->
+                    <div class="mb-8 p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl">
+                        <div class="flex items-start space-x-4">
+                            <div class="flex-shrink-0 w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                                <i class="fas fa-info-circle text-blue-600"></i>
+                            </div>
+                            <div class="flex-1">
+                                <p class="font-bold text-blue-900 mb-2">About System Setup</p>
+                                <p class="text-sm text-blue-800 mb-3">These setup tasks initialize required system data for your inventory management system. They are designed to be idempotent - safe to run multiple times without duplicating data.</p>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-blue-800">
+                                    <div class="flex items-start space-x-2">
+                                        <i class="fas fa-check-circle text-blue-700 mt-0.5"></i>
+                                        <span><strong>First-time setup:</strong> Run all tasks to initialize your system</span>
+                                    </div>
+                                    <div class="flex items-start space-x-2">
+                                        <i class="fas fa-check-circle text-blue-700 mt-0.5"></i>
+                                        <span><strong>Safe updates:</strong> Re-run tasks to add missing accounts or attributes</span>
+                                    </div>
+                                    <div class="flex items-start space-x-2">
+                                        <i class="fas fa-check-circle text-blue-700 mt-0.5"></i>
+                                        <span><strong>No duplicates:</strong> Existing data will not be overwritten</span>
+                                    </div>
+                                    <div class="flex items-start space-x-2">
+                                        <i class="fas fa-check-circle text-blue-700 mt-0.5"></i>
+                                        <span><strong>Customizable:</strong> View and edit data after initialization</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Setup Tasks Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                        <!-- GL Accounts Setup -->
+                        <div class="bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg transition-shadow">
+                            <div class="flex items-start justify-between mb-4">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+                                        <i class="fas fa-book text-white text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-gray-900">Chart of Accounts</h4>
+                                        <p class="text-sm text-gray-600">General Ledger accounts</p>
+                                    </div>
+                                </div>
+                                {% if setup_status.gl_accounts_count > 0 %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                                    <i class="fas fa-check-circle mr-1.5"></i>
+                                    {{ setup_status.gl_accounts_count }} accounts
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                    <i class="fas fa-exclamation-circle mr-1.5"></i>
+                                    Not initialized
+                                </span>
+                                {% endif %}
+                            </div>
+
+                            <!-- Description -->
+                            <p class="text-sm text-gray-600 mb-4">Initialize the chart of accounts with standard GL accounts for accrual accounting.</p>
+
+                            <!-- What This Does -->
+                            <div class="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                <p class="text-xs font-bold text-gray-800 mb-2 uppercase tracking-wide">What This Does:</p>
+                                <ul class="text-xs text-gray-700 space-y-1.5">
+                                    <li class="flex items-start">
+                                        <i class="fas fa-chevron-right text-emerald-500 text-[10px] mt-1 mr-2"></i>
+                                        <span>Creates <strong>asset accounts</strong>: Cash (1000), Accounts Receivable (1200), Inventory (1300)</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-chevron-right text-emerald-500 text-[10px] mt-1 mr-2"></i>
+                                        <span>Creates <strong>liability accounts</strong>: Accounts Payable (2000), Unearned Revenue (2300)</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-chevron-right text-emerald-500 text-[10px] mt-1 mr-2"></i>
+                                        <span>Creates <strong>income accounts</strong>: Sales Revenue (4000), Other Income (4800)</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-chevron-right text-emerald-500 text-[10px] mt-1 mr-2"></i>
+                                        <span>Creates <strong>expense accounts</strong>: COGS (5000), Operating Expenses (6000-6900)</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="flex items-center space-x-2">
+                                <form method="post" action="{% url 'setup_init_gl_accounts' %}" class="inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="inline-flex items-center px-4 py-2 bg-white border-2 border-emerald-600 text-emerald-700 text-sm font-bold rounded-lg hover:bg-emerald-50 transition-colors shadow-sm">
+                                        <i class="fas fa-play mr-2 text-emerald-700"></i>
+                                        {% if setup_status.gl_accounts_count > 0 %}Verify & Update{% else %}Initialize{% endif %}
+                                    </button>
+                                </form>
+                                <a href="{% url 'accounting:manage_gl_accounts' %}"
+                                   class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+                                    <i class="fas fa-eye mr-2"></i>
+                                    View & Edit
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Product Attributes Setup -->
+                        <div class="bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg transition-shadow">
+                            <div class="flex items-start justify-between mb-4">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+                                        <i class="fas fa-tags text-white text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-gray-900">Product Attributes</h4>
+                                        <p class="text-sm text-gray-600">Size, color, and variant options</p>
+                                    </div>
+                                </div>
+                                {% if setup_status.attributes_count > 0 %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                                    <i class="fas fa-check-circle mr-1.5"></i>
+                                    {{ setup_status.attributes_count }} attributes
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                                    <i class="fas fa-exclamation-circle mr-1.5"></i>
+                                    Not initialized
+                                </span>
+                                {% endif %}
+                            </div>
+
+                            <!-- Description -->
+                            <p class="text-sm text-gray-600 mb-4">Set up default product attributes for creating product variants with different sizes, colors, or styles.</p>
+
+                            <!-- What This Does -->
+                            <div class="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                <p class="text-xs font-bold text-gray-800 mb-2 uppercase tracking-wide">What This Does:</p>
+                                <ul class="text-xs text-gray-700 space-y-1.5">
+                                    <li class="flex items-start">
+                                        <i class="fas fa-chevron-right text-violet-500 text-[10px] mt-1 mr-2"></i>
+                                        <span>Creates <strong>Size attribute</strong> with values: XS, S, M, L, XL, XXL, XXXL</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-chevron-right text-violet-500 text-[10px] mt-1 mr-2"></i>
+                                        <span>Creates <strong>Color attribute</strong> with common colors: Black, White, Red, Blue, etc.</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-chevron-right text-violet-500 text-[10px] mt-1 mr-2"></i>
+                                        <span>Enables <strong>product variants</strong> (e.g., T-Shirt in Red/Medium, Blue/Large)</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-chevron-right text-violet-500 text-[10px] mt-1 mr-2"></i>
+                                        <span>You can <strong>add custom attributes</strong> and values after initialization</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="flex items-center space-x-2">
+                                <form method="post" action="{% url 'setup_seed_attributes' %}" class="inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="inline-flex items-center px-4 py-2 bg-white border-2 border-violet-600 text-violet-700 text-sm font-bold rounded-lg hover:bg-violet-50 transition-colors shadow-sm">
+                                        <i class="fas fa-play mr-2 text-violet-700"></i>
+                                        {% if setup_status.attributes_count > 0 %}Verify & Update{% else %}Initialize{% endif %}
+                                    </button>
+                                </form>
+                                <a href="{% url 'manage_attributes' %}"
+                                   class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+                                    <i class="fas fa-cog mr-2"></i>
+                                    Manage
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Inventory Opening Balance -->
+                        <div class="bg-white border border-gray-200 rounded-2xl p-6 hover:shadow-lg transition-shadow">
+                            <div class="flex items-start justify-between mb-4">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
+                                        <i class="fas fa-boxes text-white text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-gray-900">Inventory GL Balance</h4>
+                                        <p class="text-sm text-gray-600">Sync inventory with GL</p>
+                                    </div>
+                                </div>
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    <i class="fas fa-sync-alt mr-1.5"></i>
+                                    One-time
+                                </span>
+                            </div>
+
+                            <!-- Description -->
+                            <p class="text-sm text-gray-600 mb-4">Create an opening balance journal entry to sync your inventory value with the General Ledger.</p>
+
+                            <!-- What This Does -->
+                            <div class="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                <p class="text-xs font-bold text-gray-800 mb-2 uppercase tracking-wide">What This Does:</p>
+                                <ul class="text-xs text-gray-700 space-y-1.5">
+                                    <li class="flex items-start">
+                                        <i class="fas fa-chevron-right text-orange-500 text-[10px] mt-1 mr-2"></i>
+                                        <span>Calculates total value of <strong>current inventory</strong> (quantity × purchase price)</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-chevron-right text-orange-500 text-[10px] mt-1 mr-2"></i>
+                                        <span>Creates opening balance <strong>journal entry</strong>: Dr Inventory (1300), Cr Equity</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-chevron-right text-orange-500 text-[10px] mt-1 mr-2"></i>
+                                        <span>Syncs your <strong>physical stock</strong> with accounting records</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <i class="fas fa-chevron-right text-orange-500 text-[10px] mt-1 mr-2"></i>
+                                        <span><strong>Run once</strong> when setting up accounting for existing inventory</span>
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="flex items-center space-x-2">
+                                <form method="post" action="{% url 'setup_backfill_inventory' %}" class="inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="inline-flex items-center px-4 py-2 bg-white border-2 border-orange-600 text-orange-700 text-sm font-bold rounded-lg hover:bg-orange-50 transition-colors shadow-sm">
+                                        <i class="fas fa-play mr-2 text-orange-700"></i>
+                                        Run Backfill
+                                    </button>
+                                </form>
+                                <a href="{% url 'admin:accounting_journalentry_changelist' %}" target="_blank"
+                                   class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors">
+                                    <i class="fas fa-list mr-2"></i>
+                                    View Entries
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Run All Setup Tasks -->
+                        <div class="bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-2 border-indigo-200 rounded-2xl p-6 shadow-md">
+                            <div class="flex items-start justify-between mb-4">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg">
+                                        <i class="fas fa-rocket text-white text-lg"></i>
+                                    </div>
+                                    <div>
+                                        <h4 class="font-bold text-gray-900">Quick Setup - Run All</h4>
+                                        <p class="text-sm text-gray-600">Complete system initialization</p>
+                                    </div>
+                                </div>
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                                    <i class="fas fa-bolt mr-1.5"></i>
+                                    Recommended
+                                </span>
+                            </div>
+
+                            <!-- Description -->
+                            <p class="text-sm text-gray-700 mb-4 font-medium">Perfect for new installations! Runs all setup tasks in the correct sequence to get your system ready.</p>
+
+                            <!-- What This Does -->
+                            <div class="mb-4 p-4 bg-white rounded-lg border border-indigo-200 shadow-sm">
+                                <p class="text-xs font-bold text-gray-800 mb-2 uppercase tracking-wide">Execution Order:</p>
+                                <ol class="text-xs text-gray-700 space-y-2">
+                                    <li class="flex items-start">
+                                        <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 text-indigo-800 font-bold mr-2 mt-0.5 flex-shrink-0">1</span>
+                                        <span><strong>Initialize GL Accounts</strong> - Creates chart of accounts for financial tracking</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 text-indigo-800 font-bold mr-2 mt-0.5 flex-shrink-0">2</span>
+                                        <span><strong>Setup Product Attributes</strong> - Creates Size and Color attributes for variants</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 text-indigo-800 font-bold mr-2 mt-0.5 flex-shrink-0">3</span>
+                                        <span><strong>Backfill Inventory Balance</strong> - Syncs existing stock with GL (if applicable)</span>
+                                    </li>
+                                </ol>
+                            </div>
+
+                            <!-- Best For -->
+                            <div class="mb-4 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+                                <p class="text-xs font-bold text-green-900 mb-1.5 flex items-center">
+                                    <i class="fas fa-star text-green-700 mr-2"></i>
+                                    BEST FOR:
+                                </p>
+                                <ul class="text-xs text-green-800 space-y-1 ml-5">
+                                    <li>✓ Fresh database installations</li>
+                                    <li>✓ After running migrations</li>
+                                    <li>✓ Setting up a new business location</li>
+                                </ul>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="flex items-center space-x-2">
+                                <form method="post" action="{% url 'setup_run_all' %}" class="flex-1">
+                                    {% csrf_token %}
+                                    <button type="submit" class="w-full inline-flex items-center justify-center px-6 py-3 bg-white border-2 border-indigo-600 text-indigo-700 text-sm font-bold rounded-lg hover:bg-indigo-50 shadow-md hover:shadow-lg transition-all">
+                                        <i class="fas fa-play-circle mr-2 text-indigo-700"></i>
+                                        Run Complete Setup
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Setup Log (if available) -->
+                    {% if setup_status.last_setup_log %}
+                    <div class="mt-8">
+                        <h4 class="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-4">Recent Setup Activity</h4>
+                        <div class="bg-gray-900 rounded-xl p-4 font-mono text-sm text-green-400 max-h-48 overflow-y-auto">
+                            <pre>{{ setup_status.last_setup_log }}</pre>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="px-8 py-5 bg-gradient-to-r from-gray-50 to-slate-50 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div class="flex items-center space-x-2 text-sm text-gray-600">
+                    <i class="fas fa-clock text-gray-500"></i>
+                    {% if settings.last_updated %}
+                    <span>Last updated: <span class="font-medium text-gray-700">{{ settings.last_updated|date:"M d, Y H:i" }}</span></span>
+                    {% if settings.updated_by %}<span class="text-gray-500">by {{ settings.updated_by.username }}</span>{% endif %}
+                    {% else %}
+                    <span>Not yet configured</span>
+                    {% endif %}
+                </div>
+                <button type="submit"
+                        class="group flex items-center space-x-2 px-8 py-3 bg-blue-700 text-white rounded-xl hover:bg-blue-800 shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 transform hover:-translate-y-0.5 transition-all duration-200 font-medium">
+                    <i class="fas fa-save group-hover:scale-110 transition-transform"></i>
+                    <span>Save Settings</span>
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <!-- Reset Confirmation Modal -->
+    <div x-show="showResetModal" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" x-transition:leave="transition ease-in duration-200" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0" class="fixed inset-0 z-50 flex items-center justify-center p-4" style="display: none;">
+        <div class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm" @click="showResetModal = false"></div>
+        <div x-show="showResetModal" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100" class="relative bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 z-10" @click.away="showResetModal = false">
+            <div class="text-center">
+                <div class="w-20 h-20 bg-gradient-to-br from-red-100 to-rose-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <i class="fas fa-exclamation-triangle text-red-500 text-3xl"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-gray-900 mb-3">Reset to Defaults?</h3>
+                <p class="text-gray-600 mb-8">This will reset all settings to their default values. This action cannot be undone.</p>
+                <div class="flex items-center justify-center space-x-4">
+                    <button @click="showResetModal = false"
+                            class="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
+                        Cancel
+                    </button>
+                    <form method="post" action="{% url 'settings_reset_defaults' %}" class="inline">
+                        {% csrf_token %}
+                        <button type="submit"
+                                class="px-6 py-3 bg-gradient-to-r from-red-600 to-rose-700 text-white rounded-xl hover:from-red-700 hover:to-rose-800 shadow-lg shadow-red-500/30 transition-all font-medium">
+                            Reset Settings
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Modern form control styling */
+    .form-control {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        background-color: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.75rem;
+        color: #111827;
+        font-size: 0.95rem;
+        transition: all 0.2s ease;
+    }
+
+    .form-control:hover {
+        border-color: #d1d5db;
+        background-color: #fff;
+    }
+
+    .form-control:focus {
+        background-color: #fff;
+        border-color: #6366f1;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    /* Select dropdown styling */
+    select.form-control,
+    .form-select {
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        background-color: #f9fafb;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.75rem center;
+        background-size: 1.25em 1.25em;
+        padding-right: 2.5rem;
+        cursor: pointer;
+    }
+
+    select.form-control:hover,
+    .form-select:hover {
+        background-color: #fff;
+    }
+
+    select.form-control:focus,
+    .form-select:focus {
+        background-color: #fff;
+    }
+
+    /* Textarea styling */
+    textarea.form-control {
+        min-height: 100px;
+        resize: vertical;
+    }
+
+    /* Checkbox styling */
+    .form-check-input {
+        width: 1.25rem;
+        height: 1.25rem;
+        accent-color: #6366f1;
+        cursor: pointer;
+        border-radius: 0.25rem;
+    }
+
+    /* File input styling */
+    input[type="file"].form-control {
+        padding: 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    input[type="file"].form-control::file-selector-button {
+        padding: 0.5rem 1rem;
+        margin-right: 1rem;
+        background: linear-gradient(to right, #6366f1, #8b5cf6);
+        color: white;
+        border: none;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    input[type="file"].form-control::file-selector-button:hover {
+        background: linear-gradient(to right, #4f46e5, #7c3aed);
+    }
+
+    /* Number input - hide spinners */
+    input[type="number"].form-control::-webkit-outer-spin-button,
+    input[type="number"].form-control::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
+    input[type="number"].form-control {
+        -moz-appearance: textfield;
+    }
+
+    /* Hide scrollbar for tabs */
+    .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+    }
+    .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* Smooth animations */
+    @keyframes fade-in {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-fade-in {
+        animation: fade-in 0.4s ease-out;
+    }
+</style>
+{% endblock %}

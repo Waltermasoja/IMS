@@ -1,0 +1,506 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+{% load humanize %}
+
+{% block title %}Record A/R Payment{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto space-y-6">
+    <!-- Header with Breadcrumb -->
+    <div class="flex items-center justify-between">
+        <div>
+            <div class="flex items-center text-sm text-gray-500 mb-2">
+                <a href="{% url 'accounting:ar_invoice_list' %}" class="hover:text-gray-700">Invoices</a>
+                <i class="fas fa-chevron-right mx-2 text-xs"></i>
+                <span class="text-gray-900 font-medium">Record Payment</span>
+            </div>
+            <h1 class="text-3xl font-bold text-gray-900">Record Payment</h1>
+            <p class="text-gray-600 mt-1">
+                {% if customer %}
+                    Apply payment to {{ customer.name }}'s account
+                {% else %}
+                    Record a payment against a customer invoice
+                {% endif %}
+            </p>
+        </div>
+        <a href="{% if customer %}{% url 'accounting:customer_statement' customer.id %}{% else %}{% url 'accounting:ar_invoice_list' %}{% endif %}"
+           class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+            <i class="fas fa-arrow-left mr-2"></i>Back
+        </a>
+    </div>
+
+    {% if customer %}
+    <!-- Customer Summary Card -->
+    <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 text-white">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
+                    <i class="fas fa-user text-2xl"></i>
+                </div>
+                <div>
+                    <h2 class="text-2xl font-bold">{{ customer.name }}</h2>
+                    <p class="text-blue-100 text-sm">
+                        {% if customer.phone %}
+                            <i class="fas fa-phone mr-1"></i>{{ customer.phone }}
+                        {% endif %}
+                        {% if customer.email %}
+                            <span class="ml-3"><i class="fas fa-envelope mr-1"></i>{{ customer.email }}</span>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+            <div class="text-right">
+                <p class="text-blue-100 text-sm mb-1">Outstanding Balance</p>
+                <p class="text-3xl font-bold">${{ customer.current_balance|floatformat:2|intcomma }}</p>
+                <p class="text-blue-100 text-xs mt-1">
+                    Credit Limit: ${{ customer.credit_limit|floatformat:2|intcomma }}
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Invoice Selection and Payment Form - Stacked Vertically -->
+    <div class="space-y-6">
+        {% if customer_invoices %}
+        <!-- Outstanding Invoices -->
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 bg-gradient-to-r from-indigo-500 to-purple-600 text-white border-b">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-lg font-bold">Select Invoice</h3>
+                            <p class="text-sm text-indigo-100">Click on an invoice to apply payment</p>
+                        </div>
+                        <span class="px-3 py-1 bg-white/20 text-white text-sm font-semibold rounded-full">
+                            {{ customer_invoices|length }} invoice{{ customer_invoices|length|pluralize }}
+                        </span>
+                    </div>
+                </div>
+                <div class="p-6">
+                    <div class="space-y-3">
+                        {% for inv in customer_invoices %}
+                        <div class="invoice-card border-2 border-gray-200 rounded-xl p-4 hover:border-blue-400 hover:shadow-md cursor-pointer transition-all duration-200"
+                             data-invoice-id="{{ inv.id }}"
+                             data-outstanding="{{ inv.outstanding_amount }}"
+                             data-invoice-number="{{ inv.invoice_number }}">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-3 mb-2">
+                                        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold">
+                                            <i class="fas fa-file-invoice"></i>
+                                        </div>
+                                        <div>
+                                            <h4 class="font-bold text-gray-900">{{ inv.invoice_number }}</h4>
+                                            <div class="flex items-center gap-2 mt-1">
+                                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full
+                                                    {% if inv.status == 'OVERDUE' %}bg-red-100 text-red-700
+                                                    {% elif inv.status == 'PARTIAL' %}bg-blue-100 text-blue-700
+                                                    {% elif inv.status == 'PAID' %}bg-green-100 text-green-700
+                                                    {% else %}bg-yellow-100 text-yellow-700{% endif %}">
+                                                    {{ inv.get_status_display }}
+                                                </span>
+                                                {% if inv.layby_plan %}
+                                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-indigo-100 text-indigo-700">
+                                                    <i class="fas fa-calendar-alt mr-1"></i>Layby
+                                                </span>
+                                                {% else %}
+                                                <span class="px-2 py-0.5 text-xs font-semibold rounded-full bg-purple-100 text-purple-700">
+                                                    <i class="fas fa-shopping-cart mr-1"></i>Credit
+                                                </span>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="ml-13 space-y-1">
+                                        <p class="text-sm text-gray-600">
+                                            {% if inv.sale %}
+                                                <i class="fas fa-box text-gray-400 mr-1"></i>
+                                                {{ inv.sale.inventory_item.name }} <span class="text-gray-400">({{ inv.sale.quantity_sold }} units)</span>
+                                            {% elif inv.layby_plan %}
+                                                <i class="fas fa-list text-gray-400 mr-1"></i>
+                                                {{ inv.layby_plan.items.count }} item{{ inv.layby_plan.items.count|pluralize }}
+                                            {% else %}
+                                                <i class="fas fa-calendar text-gray-400 mr-1"></i>
+                                                {{ inv.invoice_date|date:"M d, Y" }}
+                                            {% endif %}
+                                        </p>
+                                        <p class="text-xs text-gray-500">
+                                            <i class="fas fa-clock text-gray-400 mr-1"></i>
+                                            Due: {{ inv.due_date|date:"M d, Y" }}
+                                            {% if inv.is_overdue %}
+                                                <span class="text-red-600 font-semibold ml-1">(OVERDUE)</span>
+                                            {% endif %}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="text-right ml-4">
+                                    <div class="text-2xl font-bold text-gray-900">${{ inv.outstanding_amount|floatformat:2|intcomma }}</div>
+                                    <div class="text-xs text-gray-500">of ${{ inv.total_amount|floatformat:2|intcomma }}</div>
+                                    <div class="mt-2">
+                                        <div class="w-24 bg-gray-200 rounded-full h-2">
+                                            <div class="bg-blue-600 h-2 rounded-full" style="width: {% widthratio inv.amount_paid inv.total_amount 100 %}%"></div>
+                                        </div>
+                                        <p class="text-xs text-gray-500 mt-1">{% widthratio inv.amount_paid inv.total_amount 100 %}% paid</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+        </div>
+        {% endif %}
+
+        <!-- Payment Form - Full Width -->
+        <div class="bg-white rounded-2xl shadow-lg">
+            <div class="px-6 py-4 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-t-2xl">
+                    <h3 class="text-lg font-bold flex items-center">
+                        <i class="fas fa-dollar-sign mr-2"></i>
+                        Payment Details
+                    </h3>
+                </div>
+
+                <form method="post" id="paymentForm" class="p-6">
+                    <div class="max-w-4xl mx-auto">
+                    {% csrf_token %}
+
+                    <!-- Form Errors -->
+                    {% if form.non_field_errors %}
+                    <div class="mb-4 bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+                        <div class="flex">
+                            <i class="fas fa-exclamation-circle text-red-500 mt-0.5"></i>
+                            <div class="ml-3">
+                                {% for error in form.non_field_errors %}
+                                <p class="text-sm text-red-800">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Form Fields in 2-Column Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Invoice Selection (Hidden for invoice cards) -->
+                        {% if not customer_invoices %}
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                Invoice <span class="text-red-500">*</span>
+                            </label>
+                            {{ form.invoice }}
+                            {% if form.invoice.errors %}
+                            <p class="mt-1 text-sm text-red-600">
+                                <i class="fas fa-exclamation-circle mr-1"></i>{{ form.invoice.errors.0 }}
+                            </p>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <div style="display: none;">
+                            {{ form.invoice }}
+                        </div>
+                        {% endif %}
+
+                        <!-- Selected Invoice Display -->
+                        <div id="selectedInvoiceDisplay" class="hidden bg-blue-50 border-l-4 border-blue-500 p-3 rounded-lg">
+                            <p class="text-xs text-blue-600 font-semibold mb-1">SELECTED INVOICE</p>
+                            <p class="text-sm font-bold text-blue-900" id="selectedInvoiceNumber">-</p>
+                            <p class="text-xs text-blue-700 mt-1">
+                                Outstanding: <span class="font-bold" id="selectedInvoiceAmount">$0.00</span>
+                            </p>
+                        </div>
+
+                        <!-- Payment Date -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                <i class="fas fa-calendar text-gray-400 mr-1"></i>
+                                Payment Date <span class="text-red-500">*</span>
+                            </label>
+                            {{ form.payment_date }}
+                            {% if form.payment_date.errors %}
+                            <p class="mt-1 text-sm text-red-600">
+                                <i class="fas fa-exclamation-circle mr-1"></i>{{ form.payment_date.errors.0 }}
+                            </p>
+                            {% endif %}
+                        </div>
+
+                        <!-- Amount -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                <i class="fas fa-dollar-sign text-gray-400 mr-1"></i>
+                                Amount <span class="text-red-500">*</span>
+                            </label>
+                            <div class="relative">
+                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</span>
+                                {{ form.amount }}
+                            </div>
+                            {% if form.amount.errors %}
+                            <p class="mt-1 text-sm text-red-600">
+                                <i class="fas fa-exclamation-circle mr-1"></i>{{ form.amount.errors.0 }}
+                            </p>
+                            {% endif %}
+                            <p class="mt-1 text-xs text-gray-500" id="outstandingHint">
+                                <i class="fas fa-info-circle mr-1"></i>Enter payment amount
+                            </p>
+
+                            <!-- Overpayment warning -->
+                            <div id="overpaymentWarning" class="hidden mt-2 bg-red-50 border-l-4 border-red-500 p-3 rounded-lg">
+                                <p class="text-xs text-red-800">
+                                    <i class="fas fa-exclamation-triangle mr-1"></i>
+                                    <strong>Warning:</strong> Amount exceeds outstanding balance!
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Payment Method -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                <i class="fas fa-wallet text-gray-400 mr-1"></i>
+                                Payment Method <span class="text-red-500">*</span>
+                            </label>
+                            {{ form.method }}
+                            {% if form.method.errors %}
+                            <p class="mt-1 text-sm text-red-600">
+                                <i class="fas fa-exclamation-circle mr-1"></i>{{ form.method.errors.0 }}
+                            </p>
+                            {% endif %}
+                        </div>
+
+                        <!-- Reference -->
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700 mb-2">
+                                <i class="fas fa-hashtag text-gray-400 mr-1"></i>
+                                Reference / Check #
+                            </label>
+                            {{ form.reference }}
+                            {% if form.reference.errors %}
+                            <p class="mt-1 text-sm text-red-600">
+                                <i class="fas fa-exclamation-circle mr-1"></i>{{ form.reference.errors.0 }}
+                            </p>
+                            {% endif %}
+                            <p class="mt-1 text-xs text-gray-500">Optional</p>
+                        </div>
+                    </div>
+
+                    <!-- Form Actions -->
+                    <div class="mt-6 pt-6 border-t space-y-3">
+                        <button type="submit" class="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold shadow-md hover:shadow-lg transition-all">
+                            <i class="fas fa-check-circle mr-2"></i>Record Payment
+                        </button>
+                        <a href="{% if customer %}{% url 'accounting:customer_statement' customer.id %}{% else %}{% url 'accounting:ar_invoice_list' %}{% endif %}"
+                           class="block w-full px-6 py-2 text-center border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors">
+                            Cancel
+                        </a>
+                    </div>
+
+                    <!-- Payment Info -->
+                    <div class="mt-6 pt-6 border-t">
+                        <div class="bg-gray-50 rounded-lg p-4 text-xs text-gray-600 space-y-2">
+                            <p class="font-semibold text-gray-700">
+                                <i class="fas fa-info-circle text-blue-500 mr-1"></i>
+                                This payment will:
+                            </p>
+                            <ul class="space-y-1 ml-5 list-disc">
+                                <li>Reduce invoice balance</li>
+                                <li>Update customer account</li>
+                                <li>Create GL entries</li>
+                                <li>Record in cashbook</li>
+                            </ul>
+                        </div>
+                    </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Enhanced form field styling */
+input[type="text"],
+input[type="number"],
+input[type="date"],
+select {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border: 2px solid #e5e7eb;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    transition: all 0.2s;
+    background-color: white;
+}
+
+input[type="number"] {
+    padding-left: 2rem;
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="date"]:focus,
+select:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+input[type="text"]:hover,
+input[type="number"]:hover,
+input[type="date"]:hover,
+select:hover {
+    border-color: #d1d5db;
+}
+
+/* Invoice card selection */
+.invoice-card {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+
+.invoice-card.selected {
+    border-color: #3b82f6;
+    background: linear-gradient(to right, #eff6ff, #dbeafe);
+    box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.1), 0 2px 4px -1px rgba(59, 130, 246, 0.06);
+}
+
+.invoice-card.selected::before {
+    content: '\f00c';
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 24px;
+    height: 24px;
+    background: #3b82f6;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+}
+
+.invoice-card:hover {
+    transform: translateY(-2px);
+}
+
+.invoice-card.selected:hover {
+    transform: translateY(-1px);
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const invoiceCards = document.querySelectorAll('.invoice-card');
+    const invoiceSelect = document.getElementById('id_invoice');
+    const amountInput = document.getElementById('id_amount');
+    const outstandingHint = document.getElementById('outstandingHint');
+    const overpaymentWarning = document.getElementById('overpaymentWarning');
+    const selectedDisplay = document.getElementById('selectedInvoiceDisplay');
+    const selectedNumber = document.getElementById('selectedInvoiceNumber');
+    const selectedAmount = document.getElementById('selectedInvoiceAmount');
+
+    let currentOutstanding = 0;
+
+    // Handle invoice card selection
+    invoiceCards.forEach(card => {
+        card.addEventListener('click', function() {
+            // Remove selected class from all cards
+            invoiceCards.forEach(c => c.classList.remove('selected'));
+
+            // Add selected class to clicked card
+            this.classList.add('selected');
+
+            // Get invoice data
+            const invoiceId = this.dataset.invoiceId;
+            const outstanding = parseFloat(this.dataset.outstanding);
+            const invoiceNumber = this.dataset.invoiceNumber;
+
+            currentOutstanding = outstanding;
+
+            // Update form
+            invoiceSelect.value = invoiceId;
+            amountInput.value = outstanding.toFixed(2);
+
+            // Update hints
+            outstandingHint.innerHTML = `<i class="fas fa-info-circle mr-1"></i>Outstanding: $${outstanding.toFixed(2)} for ${invoiceNumber}`;
+
+            // Show selected invoice display
+            selectedDisplay.classList.remove('hidden');
+            selectedNumber.textContent = invoiceNumber;
+            selectedAmount.textContent = `$${outstanding.toFixed(2)}`;
+
+            // Hide overpayment warning
+            overpaymentWarning.classList.add('hidden');
+            amountInput.classList.remove('border-red-500');
+
+            // Focus on amount input after selection
+            amountInput.focus();
+            amountInput.select();
+        });
+    });
+
+    // Real-time overpayment validation
+    amountInput.addEventListener('input', function() {
+        const amount = parseFloat(this.value);
+
+        if (amount && currentOutstanding > 0) {
+            if (amount > currentOutstanding) {
+                overpaymentWarning.classList.remove('hidden');
+                this.classList.add('border-red-500');
+            } else {
+                overpaymentWarning.classList.add('hidden');
+                this.classList.remove('border-red-500');
+            }
+        }
+    });
+
+    // Handle invoice dropdown change (for non-card view)
+    if (invoiceSelect && !invoiceCards.length) {
+        invoiceSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            if (selectedOption && selectedOption.value) {
+                // Try to get outstanding from data attributes if available
+                const matchingCard = document.querySelector(`[data-invoice-id="${this.value}"]`);
+                if (matchingCard) {
+                    currentOutstanding = parseFloat(matchingCard.dataset.outstanding);
+                    const invoiceNumber = matchingCard.dataset.invoiceNumber;
+                    outstandingHint.innerHTML = `<i class="fas fa-info-circle mr-1"></i>Outstanding: $${currentOutstanding.toFixed(2)} for ${invoiceNumber}`;
+                    amountInput.value = currentOutstanding.toFixed(2);
+                }
+            }
+        });
+    }
+
+    // Pre-select if invoice is already set
+    {% if invoice %}
+    const preSelectedCard = document.querySelector('[data-invoice-id="{{ invoice.id }}"]');
+    if (preSelectedCard) {
+        preSelectedCard.click();
+    }
+    {% endif %}
+
+    // Form submission validation
+    document.getElementById('paymentForm').addEventListener('submit', function(e) {
+        const amount = parseFloat(amountInput.value);
+
+        if (!invoiceSelect.value) {
+            e.preventDefault();
+            alert('Please select an invoice to apply payment to.');
+            return false;
+        }
+
+        if (amount > currentOutstanding && currentOutstanding > 0) {
+            if (!confirm(`WARNING: Payment amount ($${amount.toFixed(2)}) exceeds outstanding balance ($${currentOutstanding.toFixed(2)}).\n\nDo you want to continue anyway?`)) {
+                e.preventDefault();
+                return false;
+            }
+        }
+
+        if (amount <= 0) {
+            e.preventDefault();
+            alert('Payment amount must be greater than zero.');
+            return false;
+        }
+    });
+});
+</script>
+{% endblock %}

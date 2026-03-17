@@ -139,6 +139,11 @@ def layby_cancel_action(request, plan_id):
     except GLAccount.DoesNotExist:
         pass
 
+    # Reduce customer balance (reverse the AR that was created on plan creation)
+    if plan.customer:
+        plan.customer.current_balance = (plan.customer.current_balance or Decimal('0')) - plan.total_price
+        plan.customer.save(update_fields=['current_balance'])
+
     plan.status = 'CANCELLED'
     plan.save(update_fields=['status'])
     messages.success(request, f'Layby plan #{plan.id} cancelled')
@@ -291,38 +296,80 @@ def ar_invoice_list(request):
 @login_required
 def ar_invoice_detail(request, invoice_id):
     """A/R invoice detail with payment history"""
+    from datetime import date
     invoice = get_object_or_404(ARInvoice, pk=invoice_id)
-    payments = invoice.payments.all().order_by('-payment_date')
-    
+
+    # Get payment history - for layby invoices, show layby payments; for regular invoices, show AR payments
+    if hasattr(invoice, 'layby_plan') and invoice.layby_plan:
+        # For layby invoices, show layby payments
+        layby_payments = invoice.layby_plan.payments.all().order_by('-payment_date')
+        ar_payments = invoice.payments.all().order_by('-payment_date')
+        # Combine both types
+        all_payments = list(layby_payments) + list(ar_payments)
+        all_payments.sort(key=lambda x: x.payment_date, reverse=True)
+        payments = all_payments
+    else:
+        # For regular credit sale invoices, show AR payments
+        payments = invoice.payments.all().order_by('-payment_date')
+
     return render(request, 'accounting/ar_invoice_detail.html', {
         'invoice': invoice,
         'payments': payments,
+        'today': date.today().isoformat(),
     })
 
 @login_required
 def ar_payment_add(request, invoice_id=None):
-    """Add payment to A/R invoice"""
+    """Add payment to A/R invoice - supports pre-selection from invoice or customer"""
+    from inventory.models import Customer
+
     invoice = None
+    customer = None
+    customer_invoices = []
+
+    # Get customer_id from query params for customer-specific payment
+    customer_id = request.GET.get('customer_id')
+
     if invoice_id:
         invoice = get_object_or_404(ARInvoice, pk=invoice_id)
-    
+        customer = invoice.customer
+        # Get all outstanding invoices for this customer
+        customer_invoices = ARInvoice.objects.filter(
+            customer=customer,
+            status__in=['PENDING', 'PARTIAL', 'OVERDUE']
+        ).select_related('customer').order_by('-invoice_date')
+    elif customer_id:
+        customer = get_object_or_404(Customer, pk=customer_id)
+        # Get all outstanding invoices for this customer
+        customer_invoices = ARInvoice.objects.filter(
+            customer=customer,
+            status__in=['PENDING', 'PARTIAL', 'OVERDUE']
+        ).select_related('customer').order_by('-invoice_date')
+
     if request.method == 'POST':
         form = ARPaymentFormSimple(request.POST)
         if form.is_valid():
             payment = form.save(commit=False)
             payment.recorded_by = request.user
             payment.save()
-            messages.success(request, f'Payment of {payment.amount} recorded')
+            messages.success(request, f'Payment of ${payment.amount} recorded for invoice {payment.invoice.invoice_number}')
             return redirect('accounting:ar_invoice_detail', invoice_id=payment.invoice.id)
     else:
         initial = {}
         if invoice:
             initial['invoice'] = invoice
+            initial['amount'] = invoice.outstanding_amount
         form = ARPaymentFormSimple(initial=initial)
-    
+
+        # If customer is specified, limit invoice choices
+        if customer:
+            form.fields['invoice'].queryset = customer_invoices
+
     return render(request, 'accounting/ar_payment_form.html', {
         'form': form,
         'invoice': invoice,
+        'customer': customer,
+        'customer_invoices': customer_invoices,
     })
 
 # ==================== LAYBY MANAGEMENT ====================
@@ -429,13 +476,14 @@ def accounting_dashboard(request):
     )['total'] or Decimal('0')
 
     # === INVENTORY VALUE ===
-    try:
-        inventory_account = GLAccount.objects.get(code='1300')
-        inventory_value = inventory_account.balance
-    except GLAccount.DoesNotExist:
-        inventory_value = Inventory.objects.aggregate(
-            total=Sum(F('quantity_in_Stock') * F('purchase_price'))
-        )['total'] or Decimal('0')
+    # Use physical inventory calculation (quantity * purchase_price)
+    # GL Account 1300 may not reflect accurate inventory value if receiving
+    # transactions haven't been posted to the GL
+    inventory_value = Inventory.objects.aggregate(
+        total=Sum(F('quantity_in_Stock') * F('purchase_price'))
+    )['total'] or Decimal('0')
+
+        
 
     # === TOTAL ASSETS ===
     total_assets = cash_balance + ar_outstanding + inventory_value
@@ -495,6 +543,35 @@ def accounting_dashboard(request):
     low_stock_count = Inventory.objects.filter(quantity_in_Stock__lte=10, quantity_in_Stock__gt=0).count()
     out_of_stock_count = Inventory.objects.filter(quantity_in_Stock=0).count()
 
+    # === AP ALERTS ===
+    today = timezone.now().date()
+
+    # Overdue supplier invoices
+    overdue_ap_invoices = SupplierInvoice.objects.filter(
+        status__in=['PENDING', 'PARTIAL'],
+        due_date__lt=today
+    ).select_related('import_order__supplier').order_by('due_date')[:5]
+
+    overdue_ap_count = SupplierInvoice.objects.filter(
+        status__in=['PENDING', 'PARTIAL'],
+        due_date__lt=today
+    ).count()
+
+    overdue_ap_total = SupplierInvoice.objects.filter(
+        status__in=['PENDING', 'PARTIAL'],
+        due_date__lt=today
+    ).aggregate(
+        total=Sum(F('total_amount') - F('amount_paid'))
+    )['total'] or Decimal('0')
+
+    # Invoices due within 7 days
+    due_soon_date = today + timedelta(days=7)
+    due_soon_ap = SupplierInvoice.objects.filter(
+        status__in=['PENDING', 'PARTIAL'],
+        due_date__gte=today,
+        due_date__lte=due_soon_date
+    ).count()
+
     context = {
         'cash_balance': cash_balance,
         'ar_outstanding': ar_outstanding,
@@ -510,6 +587,11 @@ def accounting_dashboard(request):
         'recent_ar_payments': recent_ar_payments,
         'low_stock_count': low_stock_count,
         'out_of_stock_count': out_of_stock_count,
+        # AP Alerts
+        'overdue_ap_invoices': overdue_ap_invoices,
+        'overdue_ap_count': overdue_ap_count,
+        'overdue_ap_total': overdue_ap_total,
+        'due_soon_ap': due_soon_ap,
     }
 
     return render(request, 'accounting/dashboard.html', context)
@@ -952,11 +1034,30 @@ def profit_loss_report(request):
     end_date = timezone.make_aware(end_date)
 
     # REVENUE
-    # Get all sales (cash + credit) posted to GL in this period
-    sales_revenue = Sales.objects.filter(
-        sale_date__range=(start_date, end_date),
-        posted_to_gl=True
-    ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+    # Get gross sales from GL account 4000 (credits to revenue)
+    try:
+        revenue_account = GLAccount.objects.get(code='4000')
+        gross_sales = JournalLine.objects.filter(
+            entry__entry_date__range=(start_date, end_date),
+            account=revenue_account,
+            credit__gt=0
+        ).aggregate(total=Sum('credit'))['total'] or Decimal('0')
+    except GLAccount.DoesNotExist:
+        gross_sales = Decimal('0')
+
+    # Get sales discounts from GL account 4100 (debits to contra-revenue)
+    try:
+        discount_account = GLAccount.objects.get(code='4100')
+        sales_discounts = JournalLine.objects.filter(
+            entry__entry_date__range=(start_date, end_date),
+            account=discount_account,
+            debit__gt=0
+        ).aggregate(total=Sum('debit'))['total'] or Decimal('0')
+    except GLAccount.DoesNotExist:
+        sales_discounts = Decimal('0')
+
+    # Net sales = Gross sales - Discounts
+    sales_revenue = gross_sales - sales_discounts
 
     # Other income (layby forfeit fees, etc.)
     try:
@@ -1059,7 +1160,9 @@ def profit_loss_report(request):
         'years': years,
 
         # Revenue
-        'sales_revenue': sales_revenue,
+        'gross_sales': gross_sales,
+        'sales_discounts': sales_discounts,
+        'sales_revenue': sales_revenue,  # Net sales (gross - discounts)
         'other_income': other_income,
         'total_revenue': total_revenue,
 
@@ -1149,13 +1252,20 @@ def balance_sheet(request):
         unearned_revenue = Decimal('0')
 
     # 2. Accounts Payable (what we owe suppliers)
-    # Calculate from unpaid import order invoices
-    from inventory.models import SupplierInvoice
-    accounts_payable = SupplierInvoice.objects.filter(
-        status__in=['PENDING', 'PARTIAL', 'OVERDUE']
-    ).aggregate(
-        total=Sum(F('total_amount') - F('amount_paid'))
-    )['total'] or Decimal('0')
+    # Use GL Account 2000 balance for consistency with double-entry bookkeeping
+    # GL is credited when goods received, debited when payment made
+    # The balance property returns Credit - Debit for liability accounts (positive = owe money)
+    try:
+        ap_account = GLAccount.objects.get(code='2000')
+        accounts_payable = ap_account.balance
+    except GLAccount.DoesNotExist:
+        # Fallback to SupplierInvoice calculation if GL account doesn't exist
+        from inventory.models import SupplierInvoice
+        accounts_payable = SupplierInvoice.objects.filter(
+            status__in=['PENDING', 'PARTIAL', 'OVERDUE']
+        ).aggregate(
+            total=Sum(F('total_amount') - F('amount_paid'))
+        )['total'] or Decimal('0')
 
     total_liabilities = unearned_revenue + accounts_payable
 
@@ -1250,9 +1360,184 @@ def accounts_payable_list(request):
 
 
 @login_required
+def ap_aging_report(request):
+    """Accounts Payable Aging Report - shows outstanding invoices by age brackets."""
+    from inventory.models import SupplierInvoice, Supplier
+    from datetime import date
+
+    # Get all outstanding supplier invoices
+    invoices = SupplierInvoice.objects.exclude(
+        status__in=['PAID', 'CANCELLED']
+    ).select_related('import_order__supplier').order_by('due_date')
+
+    # Filter by supplier if specified
+    supplier_id = request.GET.get('supplier')
+    if supplier_id:
+        invoices = invoices.filter(import_order__supplier_id=supplier_id)
+
+    # Age brackets (based on due date, not invoice date)
+    today = date.today()
+    aging_data = []
+
+    for invoice in invoices:
+        outstanding = invoice.outstanding_amount
+        if outstanding <= 0:
+            continue
+
+        # Calculate days overdue (negative means not yet due)
+        if invoice.due_date:
+            days_overdue = (today - invoice.due_date).days
+        else:
+            days_overdue = (today - invoice.invoice_date).days  # Fallback to invoice date
+
+        # Determine age bracket (based on overdue days)
+        if days_overdue <= 0:
+            bracket = 'Current'
+        elif days_overdue <= 30:
+            bracket = '1-30'
+        elif days_overdue <= 60:
+            bracket = '31-60'
+        elif days_overdue <= 90:
+            bracket = '61-90'
+        else:
+            bracket = '90+'
+
+        supplier_name = invoice.import_order.supplier.name if invoice.import_order and invoice.import_order.supplier else 'Unknown'
+
+        aging_data.append({
+            'invoice': invoice,
+            'supplier_name': supplier_name,
+            'days_overdue': max(0, days_overdue),
+            'outstanding': outstanding,
+            'bracket': bracket,
+            'is_overdue': days_overdue > 0,
+        })
+
+    # Calculate bracket totals
+    brackets = {
+        'Current': Decimal('0'),
+        '1-30': Decimal('0'),
+        '31-60': Decimal('0'),
+        '61-90': Decimal('0'),
+        '90+': Decimal('0'),
+    }
+
+    for data in aging_data:
+        brackets[data['bracket']] += data['outstanding']
+
+    total_outstanding = sum(brackets.values())
+    total_overdue = total_outstanding - brackets['Current']
+
+    # Calculate percentages
+    bracket_percentages = {}
+    for bracket, amount in brackets.items():
+        if total_outstanding > 0:
+            bracket_percentages[bracket] = round(amount / total_outstanding * 100, 1)
+        else:
+            bracket_percentages[bracket] = 0
+
+    # Create template-friendly list
+    brackets_list = [
+        {'label': 'Current', 'amount': brackets['Current'], 'percentage': bracket_percentages['Current'], 'color': 'success'},
+        {'label': '1-30 Days', 'amount': brackets['1-30'], 'percentage': bracket_percentages['1-30'], 'color': 'info'},
+        {'label': '31-60 Days', 'amount': brackets['31-60'], 'percentage': bracket_percentages['31-60'], 'color': 'warning'},
+        {'label': '61-90 Days', 'amount': brackets['61-90'], 'percentage': bracket_percentages['61-90'], 'color': 'orange'},
+        {'label': '90+ Days', 'amount': brackets['90+'], 'percentage': bracket_percentages['90+'], 'color': 'danger'},
+    ]
+
+    # Supplier summary for aging
+    supplier_aging = {}
+    for data in aging_data:
+        supplier = data['supplier_name']
+        if supplier not in supplier_aging:
+            supplier_aging[supplier] = {
+                'Current': Decimal('0'),
+                '1-30': Decimal('0'),
+                '31-60': Decimal('0'),
+                '61-90': Decimal('0'),
+                '90+': Decimal('0'),
+                'total': Decimal('0'),
+            }
+        supplier_aging[supplier][data['bracket']] += data['outstanding']
+        supplier_aging[supplier]['total'] += data['outstanding']
+
+    # Convert to sorted list
+    supplier_aging_list = [
+        {'name': name, **amounts}
+        for name, amounts in supplier_aging.items()
+    ]
+    supplier_aging_list.sort(key=lambda x: x['total'], reverse=True)
+
+    # Get suppliers for filter dropdown
+    suppliers = Supplier.objects.filter(is_active=True).order_by('name')
+
+    context = {
+        'aging_data': aging_data,
+        'brackets_list': brackets_list,
+        'supplier_aging': supplier_aging_list,
+        'total_outstanding': total_outstanding,
+        'total_overdue': total_overdue,
+        'suppliers': suppliers,
+        'selected_supplier': supplier_id or '',
+        'today': today,
+    }
+
+    return render(request, 'accounting/ap_aging_report.html', context)
+
+
+@login_required
+def supplier_invoice_detail(request, invoice_id):
+    """View details of a supplier invoice with payment history."""
+    from inventory.models import SupplierInvoice, InvoicePayment
+
+    invoice = get_object_or_404(
+        SupplierInvoice.objects.select_related('import_order__supplier'),
+        pk=invoice_id
+    )
+
+    # Get payment history
+    payments = invoice.payments.all().order_by('-payment_date')
+
+    # Calculate payment timeline
+    payment_timeline = []
+    running_balance = invoice.total_amount
+
+    # Add invoice creation
+    payment_timeline.append({
+        'date': invoice.invoice_date,
+        'type': 'Invoice',
+        'description': f'Invoice {invoice.invoice_number} received',
+        'amount': invoice.total_amount,
+        'balance': running_balance,
+    })
+
+    # Add each payment
+    for payment in payments.order_by('payment_date'):
+        running_balance -= payment.amount
+        payment_timeline.append({
+            'date': payment.payment_date,
+            'type': 'Payment',
+            'description': f'{payment.get_payment_method_display()} - {payment.reference_number or "No ref"}',
+            'amount': payment.amount,
+            'balance': running_balance,
+        })
+
+    context = {
+        'invoice': invoice,
+        'payments': payments,
+        'payment_timeline': payment_timeline,
+        'supplier': invoice.import_order.supplier if invoice.import_order else None,
+        'import_order': invoice.import_order,
+    }
+
+    return render(request, 'accounting/supplier_invoice_detail.html', context)
+
+
+@login_required
 def customer_statement(request, customer_id):
     """Customer account statement - shows transaction history and balance."""
     from inventory.models import Customer
+    from accounting.models import LaybyPlan, LaybyPayment
 
     customer = get_object_or_404(Customer, pk=customer_id)
 
@@ -1267,7 +1552,7 @@ def customer_statement(request, customer_id):
     # Get all transactions for this customer
     transactions = []
 
-    # AR Invoices (debits - customer owes us)
+    # AR Invoices (debits - customer owes us) - includes both credit sales and layby plans
     invoices = ARInvoice.objects.filter(customer=customer)
     if start_date:
         invoices = invoices.filter(invoice_date__gte=start_date)
@@ -1275,17 +1560,27 @@ def customer_statement(request, customer_id):
         invoices = invoices.filter(invoice_date__lte=end_date)
 
     for invoice in invoices:
+        # Check if this is a layby invoice
+        is_layby = hasattr(invoice, 'layby_plan') and invoice.layby_plan is not None
+
+        if is_layby:
+            description = f'Layby plan #{invoice.layby_plan.id} - {invoice.invoice_number}'
+            invoice_type = 'Layby Plan'
+        else:
+            description = f'Credit sale - Invoice {invoice.invoice_number}'
+            invoice_type = 'Credit Invoice'
+
         transactions.append({
             'date': invoice.invoice_date,
-            'type': 'Invoice',
+            'type': invoice_type,
             'reference': invoice.invoice_number,
-            'description': f'Credit sale - Invoice {invoice.invoice_number}',
+            'description': description,
             'debit': invoice.total_amount,
             'credit': Decimal('0'),
             'related_object': invoice,
         })
 
-    # AR Payments (credits - customer paid us)
+    # AR Payments (credits - customer paid us on credit invoices)
     payments = ARPayment.objects.filter(invoice__customer=customer)
     if start_date:
         payments = payments.filter(payment_date__gte=start_date)
@@ -1295,12 +1590,31 @@ def customer_statement(request, customer_id):
     for payment in payments:
         transactions.append({
             'date': payment.payment_date,
-            'type': 'Payment',
+            'type': 'Credit Payment',
             'reference': payment.reference or f'Payment #{payment.id}',
-            'description': f'Payment received - {payment.get_method_display()}',
+            'description': f'Payment on {payment.invoice.invoice_number} - {payment.get_method_display()}',
             'debit': Decimal('0'),
             'credit': payment.amount,
             'related_object': payment,
+        })
+
+    # Layby Payments (credits - customer paid us on layby plans)
+    layby_payments = LaybyPayment.objects.filter(plan__customer=customer)
+    if start_date:
+        layby_payments = layby_payments.filter(payment_date__gte=start_date)
+    if end_date:
+        layby_payments = layby_payments.filter(payment_date__lte=end_date)
+
+    for lp in layby_payments:
+        invoice_ref = lp.plan.ar_invoice.invoice_number if lp.plan.ar_invoice else f'Plan #{lp.plan.id}'
+        transactions.append({
+            'date': lp.payment_date,
+            'type': 'Layby Payment',
+            'reference': lp.reference or f'LAYBY-{lp.plan.id}',
+            'description': f'Layby deposit on {invoice_ref}',
+            'debit': Decimal('0'),
+            'credit': lp.amount,
+            'related_object': lp,
         })
 
     # Sort by date
@@ -1317,15 +1631,105 @@ def customer_statement(request, customer_id):
     total_paid = sum(t['credit'] for t in transactions)
     current_balance = customer.current_balance
 
+    # Calculate available credit
+    available_credit = Decimal('0')
+    if customer.credit_limit > 0:
+        available_credit = max(Decimal('0'), customer.credit_limit - current_balance)
+
     context = {
         'customer': customer,
         'transactions': transactions,
         'total_invoiced': total_invoiced,
         'total_paid': total_paid,
         'current_balance': current_balance,
+        'available_credit': available_credit,
         'form': form,
         'start_date': start_date,
         'end_date': end_date,
     }
 
     return render(request, 'accounting/customer_statement.html', context)
+
+
+@login_required
+def outstanding_receivables_summary(request):
+    """Summary dashboard of all outstanding receivables - credit sales and layby plans."""
+    from inventory.models import Customer
+
+    # Get all outstanding AR invoices
+    outstanding_invoices = ARInvoice.objects.filter(
+        status__in=['PENDING', 'PARTIAL', 'OVERDUE']
+    ).select_related('customer').order_by('-invoice_date')
+
+    # Separate credit sales from layby plans
+    credit_invoices = []
+    layby_invoices = []
+
+    for invoice in outstanding_invoices:
+        if hasattr(invoice, 'layby_plan') and invoice.layby_plan:
+            layby_invoices.append(invoice)
+        else:
+            credit_invoices.append(invoice)
+
+    # Calculate totals
+    total_credit_outstanding = sum(inv.outstanding_amount for inv in credit_invoices)
+    total_layby_outstanding = sum(inv.outstanding_amount for inv in layby_invoices)
+    total_outstanding = total_credit_outstanding + total_layby_outstanding
+
+    # Get customers with outstanding balances
+    customers_with_balance = Customer.objects.filter(
+        current_balance__gt=0
+    ).order_by('-current_balance')
+
+    # Overdue invoices
+    overdue_invoices = [inv for inv in outstanding_invoices if inv.is_overdue]
+    total_overdue = sum(inv.outstanding_amount for inv in overdue_invoices)
+
+    context = {
+        'total_outstanding': total_outstanding,
+        'total_credit_outstanding': total_credit_outstanding,
+        'total_layby_outstanding': total_layby_outstanding,
+        'total_overdue': total_overdue,
+        'credit_invoice_count': len(credit_invoices),
+        'layby_invoice_count': len(layby_invoices),
+        'overdue_count': len(overdue_invoices),
+        'credit_invoices': credit_invoices[:10],  # Top 10
+        'layby_invoices': layby_invoices[:10],  # Top 10
+        'customers_with_balance': customers_with_balance[:10],  # Top 10
+        'overdue_invoices': overdue_invoices[:10],  # Top 10
+    }
+
+    return render(request, 'accounting/outstanding_receivables.html', context)
+
+
+@login_required
+def manage_gl_accounts(request):
+    """
+    Manage General Ledger accounts - user-friendly interface to view and manage GL accounts
+    without needing Django admin access.
+    """
+    # Group accounts by type
+    accounts_by_type = {}
+    for account_type, type_label in GLAccount.TYPE_CHOICES:
+        accounts = GLAccount.objects.filter(type=account_type, is_active=True).order_by('code')
+        if accounts.exists():
+            accounts_by_type[account_type] = {
+                'label': type_label,
+                'accounts': accounts,
+                'count': accounts.count()
+            }
+
+    # Calculate totals for balance sheet items
+    asset_balance = sum(acc.balance for acc in GLAccount.objects.filter(type='ASSET', is_active=True))
+    liability_balance = sum(acc.balance for acc in GLAccount.objects.filter(type='LIAB', is_active=True))
+    equity_balance = sum(acc.balance for acc in GLAccount.objects.filter(type='EQUITY', is_active=True))
+
+    context = {
+        'accounts_by_type': accounts_by_type,
+        'total_accounts': GLAccount.objects.filter(is_active=True).count(),
+        'asset_balance': asset_balance,
+        'liability_balance': liability_balance,
+        'equity_balance': equity_balance,
+    }
+
+    return render(request, 'accounting/manage_gl_accounts.html', context)

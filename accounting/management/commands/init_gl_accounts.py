@@ -29,6 +29,7 @@ class Command(BaseCommand):
             
             # Income
             {'code': '4000', 'name': 'Sales Revenue', 'type': 'INCOME'},
+            {'code': '4100', 'name': 'Sales Discounts', 'type': 'CONTRA_REV'},  # Contra-revenue account
             {'code': '4800', 'name': 'Other Income', 'type': 'INCOME'},
             
             # Expenses
@@ -56,15 +57,15 @@ class Command(BaseCommand):
             
             if created:
                 self.stdout.write(
-                    self.style.SUCCESS(f'✓ Created: {acc_data["code"]} - {acc_data["name"]}')
+                    self.style.SUCCESS(f'[+] Created: {acc_data["code"]} - {acc_data["name"]}')
                 )
                 created_count += 1
             else:
                 self.stdout.write(
-                    self.style.WARNING(f'⊗ Exists:  {acc_data["code"]} - {acc_data["name"]}')
+                    self.style.WARNING(f'[*] Exists:  {acc_data["code"]} - {acc_data["name"]}')
                 )
                 skipped_count += 1
-        
+
         self.stdout.write('\n')
         self.stdout.write(self.style.SUCCESS(f'Summary: {created_count} created, {skipped_count} already existed'))
         self.stdout.write(self.style.SUCCESS('GL accounts initialization complete!'))

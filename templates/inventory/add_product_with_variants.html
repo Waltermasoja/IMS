@@ -1,0 +1,220 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Add Product with Variants - IMS Pro{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6 animate-fade-in">
+    <!-- Page Header -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">{{ title }}</h1>
+            <p class="text-gray-500 mt-1">Create a product with multiple size/color variants</p>
+        </div>
+        <a href="{% url 'inventory' %}"
+           class="inline-flex items-center space-x-2 px-6 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors">
+            <i class="fas fa-arrow-left"></i>
+            <span class="font-medium">Back to Inventory</span>
+        </a>
+    </div>
+
+    <!-- Progress Steps -->
+    <div class="bg-white rounded-2xl shadow-sm p-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold">1</div>
+                <span class="ml-3 font-semibold text-blue-600">Product Info</span>
+            </div>
+            <div class="flex-1 h-1 mx-4 bg-gray-200 rounded"></div>
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-bold">2</div>
+                <span class="ml-3 text-gray-500">Select Options</span>
+            </div>
+            <div class="flex-1 h-1 mx-4 bg-gray-200 rounded"></div>
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-bold">3</div>
+                <span class="ml-3 text-gray-500">Configure Variants</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Form Card -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <form method="POST" action="" enctype="multipart/form-data" class="p-8">
+            {% csrf_token %}
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Category Field -->
+                <div>
+                    <label for="id_category" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-folder text-blue-500 mr-2"></i>Category
+                    </label>
+                    <select name="category" id="id_category"
+                            class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                        <option value="">Select a category</option>
+                        {% for choice in form.category.field.queryset %}
+                            <option value="{{ choice.id }}" {% if form.category.value == choice.id %}selected{% endif %}>{{ choice.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Name Field -->
+                <div>
+                    <label for="id_name" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-box text-purple-500 mr-2"></i>Product Name <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" name="name" id="id_name"
+                           value="{{ form.name.value|default:'' }}" required
+                           class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                           placeholder="e.g., Cotton T-Shirt">
+                </div>
+
+                <!-- Product Code Field -->
+                <div>
+                    <label for="id_product_code" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-barcode text-blue-500 mr-2"></i>Product Code
+                        <span class="text-xs text-gray-500 font-normal">- Optional</span>
+                    </label>
+                    <input type="text" name="product_code" id="id_product_code"
+                           value="{{ form.product_code.value|default:'' }}"
+                           class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all font-mono"
+                           placeholder="Auto-generated if blank">
+                </div>
+
+                <!-- Weight Field -->
+                <div>
+                    <label for="id_weight" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-weight-hanging text-gray-500 mr-2"></i>Weight (kg)
+                        <span class="text-xs text-gray-500 font-normal">- Optional</span>
+                    </label>
+                    <input type="number" step="0.01" name="weight" id="id_weight"
+                           value="{{ form.weight.value|default:'' }}"
+                           class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                           placeholder="0.00">
+                </div>
+
+                <!-- Default Purchase Price -->
+                <div>
+                    <label for="id_purchase_price" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-dollar-sign text-orange-500 mr-2"></i>Default Purchase Price
+                    </label>
+                    <div class="relative">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</span>
+                        <input type="number" step="0.01" name="purchase_price" id="id_purchase_price"
+                               value="{{ form.purchase_price.value|default:'' }}"
+                               class="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="0.00">
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Can be overridden per variant</p>
+                </div>
+
+                <!-- Default Selling Price -->
+                <div>
+                    <label for="id_selling_price" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-money-bill-wave text-emerald-500 mr-2"></i>Default Selling Price
+                    </label>
+                    <div class="relative">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</span>
+                        <input type="number" step="0.01" name="selling_price" id="id_selling_price"
+                               value="{{ form.selling_price.value|default:'' }}"
+                               class="w-full pl-8 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                               placeholder="0.00">
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Can be overridden per variant</p>
+                </div>
+
+                <!-- Default Reorder Point -->
+                <div>
+                    <label for="id_reorder_point" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-exclamation-triangle text-yellow-500 mr-2"></i>Default Reorder Point
+                    </label>
+                    <input type="number" name="reorder_point" id="id_reorder_point"
+                           value="{{ form.reorder_point.value|default:'5' }}"
+                           class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                           placeholder="5">
+                </div>
+
+                <!-- On Sale Toggle -->
+                <div class="flex items-center">
+                    <div class="bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-xl border border-blue-100 w-full">
+                        <label class="flex items-center cursor-pointer group">
+                            <input type="checkbox" name="on_sale" id="id_on_sale"
+                                   {% if form.on_sale.value %}checked{% endif %}
+                                   class="w-5 h-5 text-blue-600 bg-white border-gray-300 rounded focus:ring-2 focus:ring-blue-500 transition-all">
+                            <span class="ml-3 text-sm font-semibold text-gray-700 group-hover:text-blue-600 transition-colors">
+                                <i class="fas fa-shopping-cart mr-2"></i>Available for Sale
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Description -->
+                <div class="lg:col-span-2">
+                    <label for="id_description" class="block text-sm font-semibold text-gray-700 mb-2">
+                        <i class="fas fa-align-left text-gray-500 mr-2"></i>Description
+                    </label>
+                    <textarea name="description" id="id_description" rows="3"
+                              class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+                              placeholder="Product description (optional)">{{ form.description.value|default:'' }}</textarea>
+                </div>
+
+                <!-- Product Image -->
+                <div class="lg:col-span-2">
+                    <div class="bg-gradient-to-r from-purple-50 to-blue-50 p-6 rounded-xl border border-purple-100">
+                        <label for="id_image" class="block text-sm font-semibold text-gray-700 mb-3">
+                            <i class="fas fa-camera text-purple-500 mr-2"></i>Product Image
+                            <span class="text-xs text-gray-500 font-normal">- Optional</span>
+                        </label>
+                        <input type="file" name="image" id="id_image"
+                               accept="image/jpeg,image/jpg,image/png,image/webp"
+                               class="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
+                    </div>
+                </div>
+
+                <!-- Variant Attribute Types Selection -->
+                <div class="lg:col-span-2">
+                    <div class="bg-gradient-to-r from-amber-50 to-orange-50 p-6 rounded-xl border border-amber-200">
+                        <label class="block text-sm font-semibold text-gray-700 mb-3">
+                            <i class="fas fa-layer-group text-amber-500 mr-2"></i>Variant Attributes <span class="text-red-500">*</span>
+                        </label>
+                        <p class="text-sm text-gray-600 mb-4">Select which attributes this product will have variants for:</p>
+
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            {% for attr_type in form.variant_attribute_types.field.queryset %}
+                            <label class="flex items-center p-4 bg-white rounded-xl border-2 border-gray-200 cursor-pointer hover:border-amber-400 transition-all group">
+                                <input type="checkbox" name="variant_attribute_types" value="{{ attr_type.id }}"
+                                       class="w-5 h-5 text-amber-500 border-gray-300 rounded focus:ring-amber-500">
+                                <span class="ml-3 font-medium text-gray-700 group-hover:text-amber-600">{{ attr_type.display_name }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+
+                        {% if form.variant_attribute_types.errors %}
+                        <p class="text-red-500 text-sm mt-2">{{ form.variant_attribute_types.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex items-center justify-between mt-8 pt-6 border-t border-gray-200">
+                <a href="{% url 'add_inventory' %}"
+                   class="text-gray-500 hover:text-gray-700 transition-colors">
+                    <i class="fas fa-plus mr-2"></i>Add simple product instead
+                </a>
+                <div class="flex space-x-4">
+                    <a href="{% url 'inventory' %}"
+                       class="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
+                        Cancel
+                    </a>
+                    <button type="submit"
+                            class="flex items-center space-x-2 px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+                        <span>Next: Select Options</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

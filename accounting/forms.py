@@ -54,6 +54,25 @@ class ARPaymentFormSimple(ModelForm):
         for f in self.fields.values():
             f.widget.attrs.update({'class': 'form-control'})
 
+    def clean(self):
+        cleaned_data = super().clean()
+        invoice = cleaned_data.get('invoice')
+        amount = cleaned_data.get('amount')
+
+        if invoice and amount:
+            # Check for overpayment
+            if amount > invoice.outstanding_amount:
+                raise forms.ValidationError(
+                    f'Payment amount (${amount}) exceeds outstanding balance (${invoice.outstanding_amount}). '
+                    f'Please enter an amount equal to or less than ${invoice.outstanding_amount}.'
+                )
+
+            # Check for zero or negative amount
+            if amount <= 0:
+                raise forms.ValidationError('Payment amount must be greater than zero.')
+
+        return cleaned_data
+
 # ==================== LAYBY FORMS ====================
 
 class LaybyPlanForm(ModelForm):
@@ -91,6 +110,28 @@ class LaybyPaymentFormSimple(ModelForm):
         super().__init__(*args, **kwargs)
         for f in self.fields.values():
             f.widget.attrs.update({'class': 'form-control'})
+
+    def clean(self):
+        cleaned_data = super().clean()
+        plan = cleaned_data.get('plan')
+        amount = cleaned_data.get('amount')
+
+        if plan and amount:
+            # Calculate remaining balance
+            remaining = plan.total_price - plan.amount_paid
+
+            # Check for overpayment
+            if amount > remaining:
+                raise forms.ValidationError(
+                    f'Payment amount (${amount}) exceeds remaining balance (${remaining}). '
+                    f'Please enter an amount equal to or less than ${remaining}.'
+                )
+
+            # Check for zero or negative amount
+            if amount <= 0:
+                raise forms.ValidationError('Payment amount must be greater than zero.')
+
+        return cleaned_data
 
 # ==================== CASHBOOK FORMS ====================
 

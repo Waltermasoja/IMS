@@ -69,7 +69,10 @@
               </span>
             </td>
             <td class="py-3 pr-4">
-              <a href="{% url 'customer_update' customer.pk %}" class="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50">Edit</a>
+              <div class="flex gap-2">
+                <a href="{% url 'customer_update' customer.pk %}" class="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50">Edit</a>
+                <a href="{% url 'accounting:customer_statement' customer.pk %}" class="px-3 py-1.5 border border-blue-500 text-blue-600 rounded-lg text-sm hover:bg-blue-50">Statement</a>
+              </div>
             </td>
           </tr>
           {% endfor %}

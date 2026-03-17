@@ -124,15 +124,39 @@
                 </h3>
             </div>
             <div class="p-6 space-y-3">
-                {% if ap_outstanding > 0 %}
-                <div class="flex items-start space-x-3 p-3 bg-red-50 rounded-lg border border-red-100">
-                    <i class="fas fa-exclamation-circle text-red-600 mt-0.5"></i>
+                {% if overdue_ap_count > 0 %}
+                <div class="flex items-start space-x-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                    <i class="fas fa-exclamation-triangle text-red-600 mt-0.5"></i>
+                    <div class="flex-1">
+                        <p class="text-sm font-semibold text-red-800">OVERDUE: {{ overdue_ap_count }} Supplier Invoice{{ overdue_ap_count|pluralize }}</p>
+                        <p class="text-xs text-red-600">${{ overdue_ap_total|floatformat:2 }} past due - pay immediately</p>
+                    </div>
+                    <a href="{% url 'accounting:ap_aging_report' %}"
+                       class="text-xs text-red-600 hover:text-red-800 font-medium">View</a>
+                </div>
+                {% endif %}
+
+                {% if due_soon_ap > 0 %}
+                <div class="flex items-start space-x-3 p-3 bg-orange-50 rounded-lg border border-orange-100">
+                    <i class="fas fa-clock text-orange-600 mt-0.5"></i>
+                    <div class="flex-1">
+                        <p class="text-sm font-semibold text-gray-900">Due Soon: {{ due_soon_ap }} Invoice{{ due_soon_ap|pluralize }}</p>
+                        <p class="text-xs text-gray-600">Supplier invoices due within 7 days</p>
+                    </div>
+                    <a href="{% url 'accounting:ap_aging_report' %}"
+                       class="text-xs text-orange-600 hover:text-orange-800 font-medium">View</a>
+                </div>
+                {% endif %}
+
+                {% if ap_outstanding > 0 and not overdue_ap_count %}
+                <div class="flex items-start space-x-3 p-3 bg-yellow-50 rounded-lg border border-yellow-100">
+                    <i class="fas fa-file-invoice text-yellow-600 mt-0.5"></i>
                     <div class="flex-1">
                         <p class="text-sm font-semibold text-gray-900">Unpaid Suppliers</p>
                         <p class="text-xs text-gray-600">${{ ap_outstanding|floatformat:2 }} owed to suppliers</p>
                     </div>
                     <a href="{% url 'accounting:accounts_payable_list' %}"
-                       class="text-xs text-red-600 hover:text-red-800 font-medium">View</a>
+                       class="text-xs text-yellow-600 hover:text-yellow-800 font-medium">View</a>
                 </div>
                 {% endif %}
 
@@ -270,6 +294,11 @@
                class="flex items-center space-x-2 px-4 py-3 bg-white rounded-lg hover:bg-blue-50 transition-colors border border-gray-200">
                 <i class="fas fa-clock text-yellow-600"></i>
                 <span class="text-sm font-medium text-gray-700">AR Aging</span>
+            </a>
+            <a href="{% url 'accounting:ap_aging_report' %}"
+               class="flex items-center space-x-2 px-4 py-3 bg-white rounded-lg hover:bg-red-50 transition-colors border border-gray-200">
+                <i class="fas fa-file-invoice-dollar text-red-600"></i>
+                <span class="text-sm font-medium text-gray-700">AP Aging</span>
             </a>
             <a href="{% url 'accounting:layby_list' %}"
                class="flex items-center space-x-2 px-4 py-3 bg-white rounded-lg hover:bg-blue-50 transition-colors border border-gray-200">

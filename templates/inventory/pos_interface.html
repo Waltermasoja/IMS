@@ -53,25 +53,31 @@
                 </div>
                 
                 <!-- Search Results -->
-                <div x-show="searchResults.length > 0" 
+                <div x-show="searchResults.length > 0"
                      class="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-80 overflow-y-auto">
                     <template x-for="(product, index) in searchResults" :key="product.id">
-                        <div @click="addToCart(product)"
+                        <div @click="handleProductClick(product)"
                              :class="{'ring-2 ring-green-500': selectedResultIndex === index}"
                              class="p-4 bg-gray-50 rounded-xl hover:bg-green-50 cursor-pointer transition-all border-2 border-transparent hover:border-green-200">
                             <div class="flex items-start justify-between">
                                 <div class="flex-1">
-                                    <p class="font-semibold text-gray-900" x-text="product.name"></p>
+                                    <p class="font-semibold text-gray-900">
+                                        <span x-text="product.name"></span>
+                                        <span x-show="product.has_variants" class="ml-2 px-2 py-0.5 bg-purple-100 text-purple-600 text-xs rounded-full">
+                                            <i class="fas fa-layer-group mr-1"></i><span x-text="product.variant_count"></span> variants
+                                        </span>
+                                    </p>
                                     <p class="text-sm text-blue-600 font-mono" x-text="product.product_code"></p>
                                     <p class="text-xs text-gray-500 mt-1">
-                                        <span x-text="product.category"></span> • 
+                                        <span x-text="product.category"></span> •
                                         Stock: <span x-text="product.quantity_in_stock" class="font-medium"></span>
                                     </p>
                                 </div>
                                 <div class="text-right">
                                     <p class="text-lg font-bold text-green-600" x-text="'$' + product.selling_price"></p>
                                     <button class="mt-1 px-3 py-1 bg-green-500 text-white text-xs rounded-full hover:bg-green-600">
-                                        Add to Cart
+                                        <span x-show="!product.has_variants">Add to Cart</span>
+                                        <span x-show="product.has_variants">Select Variant</span>
                                     </button>
                                 </div>
                             </div>
@@ -131,20 +137,31 @@
                             <div class="flex-1">
                                 <p class="font-medium text-gray-900" x-text="item.name"></p>
                                 <p class="text-xs text-gray-500 font-mono" x-text="item.product_code"></p>
+                                <!-- Variant Info -->
+                                <div x-show="item.variant_id" class="flex flex-wrap gap-1 mt-1">
+                                    <template x-for="attr in item.variant_attributes || []" :key="attr.type">
+                                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700">
+                                            <span x-show="attr.color_code"
+                                                  class="w-2 h-2 rounded-full mr-1"
+                                                  :style="`background-color: ${attr.color_code}`"></span>
+                                            <span x-text="attr.value"></span>
+                                        </span>
+                                    </template>
+                                </div>
                             </div>
-                            <button @click="removeFromCart(index)" 
+                            <button @click="removeFromCart(index)"
                                     class="text-red-500 hover:text-red-700 ml-2">
                                 <i class="fas fa-trash text-sm"></i>
                             </button>
                         </div>
                         <div class="flex items-center justify-between mt-2">
                             <div class="flex items-center space-x-2">
-                                <button @click="updateQuantity(index, item.quantity - 1)" 
+                                <button @click="updateQuantity(index, item.quantity - 1)"
                                         class="w-8 h-8 bg-gray-200 rounded-full hover:bg-gray-300 flex items-center justify-center">
                                     <i class="fas fa-minus text-xs"></i>
                                 </button>
                                 <span class="w-12 text-center font-medium" x-text="item.quantity"></span>
-                                <button @click="updateQuantity(index, item.quantity + 1)" 
+                                <button @click="updateQuantity(index, item.quantity + 1)"
                                         class="w-8 h-8 bg-gray-200 rounded-full hover:bg-gray-300 flex items-center justify-center">
                                     <i class="fas fa-plus text-xs"></i>
                                 </button>
@@ -204,6 +221,87 @@
                     Processing...
                 </span>
             </button>
+        </div>
+    </div>
+</div>
+
+<!-- Variant Selector Modal -->
+<div x-show="showVariantModal"
+     x-transition:enter="transition ease-out duration-300"
+     x-transition:enter-start="opacity-0"
+     x-transition:enter-end="opacity-100"
+     x-transition:leave="transition ease-in duration-200"
+     x-transition:leave-start="opacity-100"
+     x-transition:leave-end="opacity-0"
+     class="fixed inset-0 z-50 overflow-y-auto"
+     style="display: none;">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50" @click="closeVariantModal()"></div>
+
+        <div class="relative bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-bold text-gray-900">
+                    <i class="fas fa-layer-group text-purple-500 mr-2"></i>Select Variant
+                </h3>
+                <button @click="closeVariantModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <!-- Product Info -->
+            <div x-show="selectedProduct" class="bg-gray-50 rounded-xl p-4 mb-4">
+                <p class="font-semibold text-gray-900" x-text="selectedProduct?.name"></p>
+                <p class="text-sm text-blue-600 font-mono" x-text="selectedProduct?.product_code"></p>
+            </div>
+
+            <!-- Variant List -->
+            <div class="space-y-2 max-h-80 overflow-y-auto">
+                <template x-for="variant in selectedProduct?.variants || []" :key="variant.id">
+                    <div @click="addVariantToCart(variant)"
+                         class="p-4 bg-gray-50 rounded-xl hover:bg-purple-50 cursor-pointer transition-all border-2 border-transparent hover:border-purple-200"
+                         :class="{'opacity-50 cursor-not-allowed': variant.quantity_in_stock <= 0}">
+                        <div class="flex items-center justify-between">
+                            <div class="flex-1">
+                                <!-- Variant Attributes -->
+                                <div class="flex flex-wrap gap-2 mb-2">
+                                    <template x-for="attr in variant.attributes" :key="attr.type + attr.value">
+                                        <span class="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium"
+                                              :class="attr.color_code ? 'bg-gray-100 text-gray-700' : 'bg-blue-100 text-blue-700'">
+                                            <span x-show="attr.color_code"
+                                                  class="w-3 h-3 rounded-full mr-1 border border-gray-300"
+                                                  :style="`background-color: ${attr.color_code}`"></span>
+                                            <span x-text="attr.type + ': ' + attr.value"></span>
+                                        </span>
+                                    </template>
+                                </div>
+                                <p class="text-xs text-gray-500 font-mono" x-text="'SKU: ' + variant.sku"></p>
+                                <p class="text-xs mt-1"
+                                   :class="variant.is_low_stock ? 'text-amber-600' : 'text-gray-500'">
+                                    Stock: <span x-text="variant.quantity_in_stock" class="font-medium"></span>
+                                    <span x-show="variant.is_low_stock" class="ml-1">⚠️ Low</span>
+                                </p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-lg font-bold text-green-600" x-text="'$' + variant.selling_price"></p>
+                                <button x-show="variant.quantity_in_stock > 0"
+                                        class="mt-1 px-3 py-1 bg-purple-500 text-white text-xs rounded-full hover:bg-purple-600">
+                                    Add
+                                </button>
+                                <span x-show="variant.quantity_in_stock <= 0"
+                                      class="mt-1 px-3 py-1 bg-gray-300 text-gray-600 text-xs rounded-full">
+                                    Out of Stock
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- No variants message -->
+            <div x-show="!selectedProduct?.variants?.length" class="text-center py-8">
+                <i class="fas fa-exclamation-circle text-gray-300 text-4xl mb-3"></i>
+                <p class="text-gray-500">No variants available</p>
+            </div>
         </div>
     </div>
 </div>
@@ -273,18 +371,22 @@ function posInterface() {
         selectedResultIndex: -1,
         searching: false,
         searchTimeout: null,
-        
+
         cart: [],
         discount: 0,
         subtotal: 0,
         discountAmount: 0,
         total: 0,
-        
+
         processing: false,
         showSuccessModal: false,
         successMessage: '',
         lastSale: null,
-        
+
+        // Variant modal state
+        showVariantModal: false,
+        selectedProduct: null,
+
         init() {
             // Focus search input on load
             this.$nextTick(() => {
@@ -326,24 +428,80 @@ function posInterface() {
         
         selectFirstResult() {
             if (this.searchResults.length > 0) {
-                this.addToCart(this.searchResults[0]);
+                this.handleProductClick(this.searchResults[0]);
             }
         },
-        
+
         navigateResults(direction) {
             if (this.searchResults.length === 0) return;
-            
+
             if (direction === 'down') {
                 this.selectedResultIndex = Math.min(this.selectedResultIndex + 1, this.searchResults.length - 1);
             } else {
                 this.selectedResultIndex = Math.max(this.selectedResultIndex - 1, -1);
             }
         },
-        
+
+        // Handle product click - show variant modal if has variants
+        handleProductClick(product) {
+            if (product.has_variants && product.variants && product.variants.length > 0) {
+                this.selectedProduct = product;
+                this.showVariantModal = true;
+            } else {
+                this.addToCart(product);
+            }
+        },
+
+        // Close variant modal
+        closeVariantModal() {
+            this.showVariantModal = false;
+            this.selectedProduct = null;
+        },
+
+        // Add variant to cart
+        addVariantToCart(variant) {
+            if (variant.quantity_in_stock <= 0) {
+                alert('This variant is out of stock');
+                return;
+            }
+
+            // Create unique key for variant (product_id + variant_id)
+            const cartKey = `${this.selectedProduct.id}_${variant.id}`;
+
+            // Check if this specific variant already in cart
+            const existingIndex = this.cart.findIndex(item =>
+                item.id === this.selectedProduct.id && item.variant_id === variant.id
+            );
+
+            if (existingIndex >= 0) {
+                // Increase quantity if already in cart
+                this.updateQuantity(existingIndex, this.cart[existingIndex].quantity + 1);
+            } else {
+                // Add new variant to cart
+                this.cart.push({
+                    id: this.selectedProduct.id,
+                    variant_id: variant.id,
+                    name: this.selectedProduct.name,
+                    product_code: variant.sku,  // Use variant SKU
+                    selling_price: parseFloat(variant.selling_price),
+                    quantity: 1,
+                    max_quantity: variant.quantity_in_stock,
+                    variant_attributes: variant.attributes,
+                    variant_string: variant.attribute_string
+                });
+            }
+
+            this.calculateTotals();
+            this.closeVariantModal();
+            this.clearSearch();
+        },
+
         addToCart(product) {
-            // Check if product already in cart
-            const existingIndex = this.cart.findIndex(item => item.id === product.id);
-            
+            // Check if product already in cart (non-variant products only)
+            const existingIndex = this.cart.findIndex(item =>
+                item.id === product.id && !item.variant_id
+            );
+
             if (existingIndex >= 0) {
                 // Increase quantity if already in cart
                 this.updateQuantity(existingIndex, this.cart[existingIndex].quantity + 1);
@@ -351,14 +509,17 @@ function posInterface() {
                 // Add new item to cart
                 this.cart.push({
                     id: product.id,
+                    variant_id: null,
                     name: product.name,
                     product_code: product.product_code,
                     selling_price: parseFloat(product.selling_price),
                     quantity: 1,
-                    max_quantity: product.quantity_in_stock
+                    max_quantity: product.quantity_in_stock,
+                    variant_attributes: null,
+                    variant_string: null
                 });
             }
-            
+
             this.calculateTotals();
             this.clearSearch();
         },
@@ -410,9 +571,9 @@ function posInterface() {
         
         processCheckout() {
             if (this.cart.length === 0) return;
-            
+
             this.processing = true;
-            
+
             // Process each item in cart
             const salePromises = this.cart.map(item => {
                 const formData = new FormData();
@@ -420,13 +581,18 @@ function posInterface() {
                 formData.append('quantity_sold', item.quantity);
                 formData.append('sale_price', item.selling_price);
                 formData.append('discount_applied', this.discount);
-                
+
+                // Include variant_id if this is a variant sale
+                if (item.variant_id) {
+                    formData.append('variant_id', item.variant_id);
+                }
+
                 return fetch(`/inventory/make_sale/${item.id}/`, {
                     method: 'POST',
                     body: formData
                 }).then(response => response.json());
             });
-            
+
             Promise.all(salePromises)
                 .then(results => {
                     const allSuccessful = results.every(result => result.success);

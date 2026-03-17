@@ -1,0 +1,432 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Select Variant Options - {{ product.name }} - IMS Pro{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6 animate-fade-in">
+    <!-- Page Header -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">{{ title }}</h1>
+            <p class="text-gray-500 mt-1">Select the specific options (sizes, colors) for this product</p>
+        </div>
+    </div>
+
+    <!-- Progress Steps -->
+    <div class="bg-white rounded-2xl shadow-sm p-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center font-bold">
+                    <i class="fas fa-check"></i>
+                </div>
+                <span class="ml-3 text-green-600">Product Info</span>
+            </div>
+            <div class="flex-1 h-1 mx-4 bg-green-500 rounded"></div>
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold">2</div>
+                <span class="ml-3 font-semibold text-blue-600">Select Options</span>
+            </div>
+            <div class="flex-1 h-1 mx-4 bg-gray-200 rounded"></div>
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center font-bold">3</div>
+                <span class="ml-3 text-gray-500">Configure Variants</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Product Summary -->
+    <div class="bg-white rounded-2xl shadow-sm p-6">
+        <div class="flex items-center space-x-4">
+            {% if product.image %}
+            <img src="{{ product.image.url }}" alt="{{ product.name }}" class="w-16 h-16 rounded-xl object-cover">
+            {% else %}
+            <div class="w-16 h-16 rounded-xl bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center">
+                <i class="fas fa-box text-2xl text-blue-400"></i>
+            </div>
+            {% endif %}
+            <div>
+                <h3 class="font-bold text-lg text-gray-900">{{ product.name }}</h3>
+                <p class="text-gray-500 text-sm">{{ product.product_code }}</p>
+            </div>
+            <div class="ml-auto text-right">
+                <p class="text-sm text-gray-500">Default Price</p>
+                <p class="font-bold text-lg text-emerald-600">${{ product.selling_price }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Attribute Selection Form -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <form method="POST" action="" class="p-8">
+            {% csrf_token %}
+
+            <div class="space-y-8">
+                {% for field in form %}
+                <div class="bg-gradient-to-r from-gray-50 to-slate-50 p-6 rounded-xl border border-gray-200">
+                    <label class="block text-lg font-bold text-gray-800 mb-4">
+                        <i class="fas fa-tags text-blue-500 mr-2"></i>{{ field.label }}
+                    </label>
+                    <p class="text-sm text-gray-600 mb-4">{{ field.help_text }}</p>
+
+                    {% if 'Size' in field.label %}
+                    <!-- Size field with grouped options -->
+                    <div class="space-y-4">
+                        <!-- Clothing Sizes (Common) -->
+                        <div>
+                            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                                <i class="fas fa-tshirt mr-1"></i>Clothing Sizes
+                            </p>
+                            <div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                                {% for choice in field.field.queryset %}
+                                {% if choice.value in 'XS,S,M,L,XL,XXL,XXXL' %}
+                                <label class="relative cursor-pointer group variant-option">
+                                    <input type="checkbox" name="{{ field.name }}" value="{{ choice.id }}"
+                                           class="variant-checkbox absolute opacity-0 w-full h-full cursor-pointer"
+                                           onchange="handleCheckboxChange(this)">
+                                    <div class="variant-box flex items-center justify-center p-2 bg-white rounded-lg border-2 border-gray-200 transition-all hover:border-gray-300 min-w-[50px]">
+                                        <span class="font-semibold text-gray-700 text-sm">{{ choice.display_value|default:choice.value }}</span>
+                                        <div class="check-indicator absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full hidden items-center justify-center">
+                                            <i class="fas fa-check text-white" style="font-size: 8px;"></i>
+                                        </div>
+                                    </div>
+                                </label>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <!-- Shoe/Numeric Sizes (Collapsible) -->
+                        <div x-data="{ showNumeric: false }">
+                            <button type="button" @click="showNumeric = !showNumeric"
+                                    class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center hover:text-blue-600 transition-colors">
+                                <i class="fas fa-shoe-prints mr-1"></i>Numeric Sizes (36-46)
+                                <i class="fas fa-chevron-down ml-2 transition-transform duration-200" :class="showNumeric ? 'rotate-180' : ''"></i>
+                            </button>
+                            <div x-show="showNumeric"
+                                 x-transition:enter="transition ease-out duration-200"
+                                 x-transition:enter-start="opacity-0 transform -translate-y-2"
+                                 x-transition:enter-end="opacity-100 transform translate-y-0"
+                                 x-transition:leave="transition ease-in duration-150"
+                                 x-transition:leave-start="opacity-100 transform translate-y-0"
+                                 x-transition:leave-end="opacity-0 transform -translate-y-2"
+                                 class="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-11 gap-2">
+                                {% for choice in field.field.queryset %}
+                                {% if choice.value in '36,37,38,39,40,41,42,43,44,45,46' %}
+                                <label class="relative cursor-pointer group variant-option">
+                                    <input type="checkbox" name="{{ field.name }}" value="{{ choice.id }}"
+                                           class="variant-checkbox absolute opacity-0 w-full h-full cursor-pointer"
+                                           onchange="handleCheckboxChange(this)">
+                                    <div class="variant-box flex items-center justify-center p-2 bg-white rounded-lg border-2 border-gray-200 transition-all hover:border-gray-300 min-w-[40px]">
+                                        <span class="font-semibold text-gray-700 text-sm">{{ choice.value }}</span>
+                                        <div class="check-indicator absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full hidden items-center justify-center">
+                                            <i class="fas fa-check text-white" style="font-size: 8px;"></i>
+                                        </div>
+                                    </div>
+                                </label>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <!-- Custom Size Input -->
+                        <div class="flex items-center gap-2 pt-2 border-t border-gray-200">
+                            <input type="text" id="customSizeInput" placeholder="Add custom size (e.g., 4XL, 48)"
+                                   class="flex-1 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <button type="button" onclick="addCustomSize()"
+                                    class="px-4 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium">
+                                <i class="fas fa-plus mr-1"></i>Add
+                            </button>
+                        </div>
+                        <div id="customSizesContainer" class="flex flex-wrap gap-2"></div>
+                    </div>
+                    {% else %}
+                    <!-- Standard grid for Color/Material -->
+                    <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+                        {% for choice in field.field.queryset %}
+                        <label class="relative cursor-pointer group variant-option"
+                               data-field="{{ field.name }}" data-value="{{ choice.id }}">
+                            <input type="checkbox" name="{{ field.name }}" value="{{ choice.id }}"
+                                   class="variant-checkbox absolute opacity-0 w-full h-full cursor-pointer"
+                                   onchange="handleCheckboxChange(this)"
+                                   {% if choice.id in field.value %}checked{% endif %}>
+
+                            {% if choice.color_code %}
+                            <!-- Color swatch style -->
+                            <div class="variant-box flex flex-col items-center p-3 bg-white rounded-xl border-2 border-gray-200 transition-all hover:border-gray-300">
+                                <div class="w-10 h-10 rounded-full border-2 border-gray-200 shadow-inner mb-2"
+                                     style="background-color: {{ choice.color_code }}"></div>
+                                <span class="text-xs font-medium text-gray-700">{{ choice.display_value|default:choice.value }}</span>
+                                <div class="check-indicator absolute -top-1 -right-1 w-5 h-5 bg-blue-500 rounded-full hidden items-center justify-center">
+                                    <i class="fas fa-check text-white text-xs"></i>
+                                </div>
+                            </div>
+                            {% else %}
+                            <!-- Standard option style -->
+                            <div class="variant-box flex items-center justify-center p-3 bg-white rounded-xl border-2 border-gray-200 transition-all hover:border-gray-300 min-w-[60px]">
+                                <span class="font-semibold text-gray-700">{{ choice.display_value|default:choice.value }}</span>
+                                <div class="check-indicator absolute -top-1 -right-1 w-5 h-5 bg-blue-500 rounded-full hidden items-center justify-center">
+                                    <i class="fas fa-check text-white text-xs"></i>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </label>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    {% if field.errors %}
+                    <p class="text-red-500 text-sm mt-3"><i class="fas fa-exclamation-circle mr-1"></i>{{ field.errors.0 }}</p>
+                    {% endif %}
+
+                    <!-- Quick actions -->
+                    <div class="mt-4 flex gap-2">
+                        <button type="button" onclick="selectAll('{{ field.name }}')"
+                                class="text-xs px-3 py-1 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors">
+                            Select All
+                        </button>
+                        <button type="button" onclick="deselectAll('{{ field.name }}')"
+                                class="text-xs px-3 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
+                            Clear
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Variant Count Preview -->
+            <div id="variantPreview" class="mt-6 p-4 bg-amber-50 rounded-xl border border-amber-200">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <i class="fas fa-calculator text-amber-500 mr-3"></i>
+                        <span class="font-medium text-gray-700">Variants to create:</span>
+                    </div>
+                    <span id="variantCount" class="text-2xl font-bold text-amber-600">0</span>
+                </div>
+                <p class="text-xs text-gray-500 mt-2">Number of variants = Size options x Color options (all combinations)</p>
+            </div>
+
+            <!-- Form Actions -->
+            <div class="flex items-center justify-between mt-8 pt-6 border-t border-gray-200">
+                <a href="{% url 'per_product' product.id %}"
+                   class="text-gray-500 hover:text-gray-700 transition-colors">
+                    <i class="fas fa-times mr-2"></i>Cancel
+                </a>
+                <div class="flex space-x-4">
+                    <a href="{% url 'add_product_with_variants' %}"
+                       class="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
+                        <i class="fas fa-arrow-left mr-2"></i>Back
+                    </a>
+                    <button type="submit"
+                            class="flex items-center space-x-2 px-8 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+                        <span>Next: Configure Variants</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Store the Size field name for custom sizes
+let sizeFieldName = null;
+
+function handleCheckboxChange(checkbox) {
+    updateVisualState(checkbox);
+    updateVariantCount();
+}
+
+function updateVisualState(checkbox) {
+    const label = checkbox.closest('label');
+    const box = label.querySelector('.variant-box');
+    const indicator = label.querySelector('.check-indicator');
+
+    if (checkbox.checked) {
+        box.classList.add('border-blue-500', 'bg-blue-50');
+        box.classList.remove('border-gray-200');
+        indicator.classList.remove('hidden');
+        indicator.classList.add('flex');
+    } else {
+        box.classList.remove('border-blue-500', 'bg-blue-50');
+        box.classList.add('border-gray-200');
+        indicator.classList.add('hidden');
+        indicator.classList.remove('flex');
+    }
+}
+
+function selectAll(fieldName) {
+    document.querySelectorAll(`input[name="${fieldName}"]`).forEach(cb => {
+        cb.checked = true;
+        updateVisualState(cb);
+    });
+    updateVariantCount();
+}
+
+function deselectAll(fieldName) {
+    document.querySelectorAll(`input[name="${fieldName}"]`).forEach(cb => {
+        cb.checked = false;
+        updateVisualState(cb);
+    });
+    updateVariantCount();
+}
+
+function updateVariantCount() {
+    const groups = {};
+    document.querySelectorAll('input.variant-checkbox').forEach(cb => {
+        const name = cb.name;
+        if (!groups[name]) groups[name] = [];
+        if (cb.checked) groups[name].push(cb.value);
+    });
+
+    let count = 1;
+    let hasAny = false;
+    Object.values(groups).forEach(arr => {
+        if (arr.length > 0) {
+            count *= arr.length;
+            hasAny = true;
+        }
+    });
+
+    const finalCount = hasAny ? count : 0;
+    document.getElementById('variantCount').textContent = finalCount;
+}
+
+// Custom size functionality
+function addCustomSize() {
+    const input = document.getElementById('customSizeInput');
+    const value = input.value.trim();
+
+    if (!value) {
+        alert('Please enter a size value');
+        return;
+    }
+
+    // Find the Size field name
+    if (!sizeFieldName) {
+        const sizeCheckbox = document.querySelector('input.variant-checkbox[name*="attr_"]');
+        if (sizeCheckbox) {
+            // Find which field contains Size
+            document.querySelectorAll('.variant-checkbox').forEach(cb => {
+                const label = cb.closest('.bg-gradient-to-r');
+                if (label && label.querySelector('label')?.textContent.includes('Size')) {
+                    sizeFieldName = cb.name;
+                }
+            });
+        }
+    }
+
+    // Make AJAX request to create the new size
+    fetch('{% url "add_attribute_value_ajax" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            attribute_type: 'Size',
+            value: value,
+            display_value: value
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Add the new size as a checkbox
+            const container = document.getElementById('customSizesContainer');
+            const newId = data.id;
+
+            // Create new checkbox element
+            const label = document.createElement('label');
+            label.className = 'relative cursor-pointer group variant-option';
+            label.innerHTML = `
+                <input type="checkbox" name="${sizeFieldName || 'attr_1'}" value="${newId}"
+                       class="variant-checkbox absolute opacity-0 w-full h-full cursor-pointer"
+                       onchange="handleCheckboxChange(this)" checked>
+                <div class="variant-box flex items-center justify-center p-2 bg-white rounded-lg border-2 border-blue-500 bg-blue-50 transition-all hover:border-gray-300 min-w-[50px]">
+                    <span class="font-semibold text-gray-700 text-sm">${value}</span>
+                    <div class="check-indicator absolute -top-1 -right-1 w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+                        <i class="fas fa-check text-white" style="font-size: 8px;"></i>
+                    </div>
+                    <button type="button" onclick="removeCustomSize(this, ${newId})"
+                            class="absolute -top-1 -left-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600">
+                        <i class="fas fa-times text-white" style="font-size: 8px;"></i>
+                    </button>
+                </div>
+            `;
+            container.appendChild(label);
+
+            // Clear input
+            input.value = '';
+
+            // Update variant count
+            updateVariantCount();
+
+            // Show success message
+            showToast('Size "' + value + '" added successfully!', 'success');
+        } else {
+            alert('Error: ' + (data.error || 'Failed to add size'));
+        }
+    })
+    .catch(error => {
+        console.error('Error adding custom size:', error);
+        alert('Error adding custom size. Please try again.');
+    });
+}
+
+function removeCustomSize(button, id) {
+    const label = button.closest('label');
+    label.remove();
+    updateVariantCount();
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${
+        type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+    }`;
+    toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check' : 'exclamation'}-circle mr-2"></i>${message}`;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.classList.add('opacity-0', 'transition-opacity');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Allow Enter key to add custom size
+document.addEventListener('DOMContentLoaded', function() {
+    const customSizeInput = document.getElementById('customSizeInput');
+    if (customSizeInput) {
+        customSizeInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addCustomSize();
+            }
+        });
+    }
+
+    // Find and store the size field name
+    document.querySelectorAll('.bg-gradient-to-r').forEach(section => {
+        const labelText = section.querySelector('label')?.textContent || '';
+        if (labelText.includes('Size')) {
+            const checkbox = section.querySelector('.variant-checkbox');
+            if (checkbox) {
+                sizeFieldName = checkbox.name;
+            }
+        }
+    });
+
+    // Initialize visual state for any pre-checked checkboxes
+    document.querySelectorAll('input.variant-checkbox').forEach(cb => {
+        if (cb.checked) {
+            updateVisualState(cb);
+        }
+    });
+
+    updateVariantCount();
+});
+</script>
+{% endblock %}

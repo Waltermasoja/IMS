@@ -9,6 +9,200 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django_resized import ResizedImageField
 from django.core.exceptions import ValidationError
+from django.core.cache import cache
+
+
+# ==================== SITE SETTINGS (SINGLETON) ====================
+
+class SiteSettings(models.Model):
+    """
+    Singleton model for site-wide settings.
+    Only one instance should exist - use SiteSettings.get_settings() to access.
+    """
+
+    CURRENCY_CHOICES = [
+        ('USD', 'US Dollar ($)'),
+        ('ZAR', 'South African Rand (R)'),
+        ('GBP', 'British Pound (£)'),
+        ('EUR', 'Euro (€)'),
+        ('ZWL', 'Zimbabwe Dollar (Z$)'),
+        ('BWP', 'Botswana Pula (P)'),
+        ('KES', 'Kenyan Shilling (KSh)'),
+        ('NGN', 'Nigerian Naira (₦)'),
+    ]
+
+    CURRENCY_SYMBOLS = {
+        'USD': '$',
+        'ZAR': 'R',
+        'GBP': '£',
+        'EUR': '€',
+        'ZWL': 'Z$',
+        'BWP': 'P',
+        'KES': 'KSh',
+        'NGN': '₦',
+    }
+
+    DATE_FORMAT_CHOICES = [
+        ('Y-m-d', 'YYYY-MM-DD (2025-01-15)'),
+        ('d/m/Y', 'DD/MM/YYYY (15/01/2025)'),
+        ('m/d/Y', 'MM/DD/YYYY (01/15/2025)'),
+        ('d-m-Y', 'DD-MM-YYYY (15-01-2025)'),
+        ('d M Y', 'DD Mon YYYY (15 Jan 2025)'),
+    ]
+
+    FINANCIAL_YEAR_CHOICES = [
+        (1, 'January'),
+        (2, 'February'),
+        (3, 'March'),
+        (4, 'April'),
+        (5, 'May'),
+        (6, 'June'),
+        (7, 'July'),
+        (8, 'August'),
+        (9, 'September'),
+        (10, 'October'),
+        (11, 'November'),
+        (12, 'December'),
+    ]
+
+    # ==================== COMPANY INFORMATION ====================
+    company_name = models.CharField(max_length=200, default='My Company',
+                                    help_text="Your business name")
+    company_address = models.TextField(blank=True,
+                                       help_text="Full business address")
+    company_phone = models.CharField(max_length=50, blank=True)
+    company_email = models.EmailField(blank=True)
+    company_website = models.URLField(blank=True)
+    tax_registration_number = models.CharField(max_length=50, blank=True,
+                                               help_text="VAT/TIN number")
+    company_logo = models.ImageField(upload_to='company/', blank=True, null=True,
+                                     help_text="Logo for receipts and invoices")
+
+    # ==================== FINANCIAL SETTINGS ====================
+    default_currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='USD',
+                                        help_text="Base currency for all transactions")
+    currency_symbol_position = models.CharField(max_length=10, default='before',
+                                                choices=[('before', 'Before ($100)'),
+                                                        ('after', 'After (100$)')])
+    decimal_places = models.IntegerField(default=2, choices=[(0, '0'), (2, '2')],
+                                         help_text="Decimal places for prices")
+    tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                   help_text="Default tax/VAT rate (%)")
+    financial_year_start = models.IntegerField(choices=FINANCIAL_YEAR_CHOICES, default=1,
+                                               help_text="Month financial year begins")
+
+    # ==================== CREDIT & AR SETTINGS ====================
+    default_credit_limit = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+                                               help_text="Default credit limit for new customers")
+    default_payment_terms_days = models.IntegerField(default=30,
+                                                     help_text="Default payment terms (Net X days)")
+    credit_grace_period_days = models.IntegerField(default=0,
+                                                   help_text="Days after due date before considered overdue")
+    # Future: Interest settings
+    enable_interest_charges = models.BooleanField(default=False,
+                                                  help_text="Enable interest on overdue accounts")
+    interest_rate_monthly = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                                help_text="Monthly interest rate (%) - for future use")
+
+    # ==================== LAYBY SETTINGS ====================
+    layby_minimum_deposit_percent = models.DecimalField(max_digits=5, decimal_places=2, default=20,
+                                                        help_text="Minimum deposit required (%)")
+    layby_max_duration_days = models.IntegerField(default=90,
+                                                  help_text="Maximum days to complete layby")
+    layby_cancellation_fee_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                                         help_text="Fee charged on layby cancellation (%)")
+
+    # ==================== INVENTORY SETTINGS ====================
+    low_stock_threshold = models.IntegerField(default=10,
+                                              help_text="Default low stock warning level")
+    default_markup_percent = models.DecimalField(max_digits=5, decimal_places=2, default=40,
+                                                 help_text="Default markup percentage for new products")
+    allow_negative_stock = models.BooleanField(default=False,
+                                               help_text="Allow sales when stock is zero")
+    track_stock_movements = models.BooleanField(default=True,
+                                                help_text="Log all stock changes")
+
+    # ==================== POS & SALES SETTINGS ====================
+    receipt_prefix = models.CharField(max_length=10, default='RCP',
+                                      help_text="Prefix for receipt numbers")
+    invoice_prefix = models.CharField(max_length=10, default='INV',
+                                      help_text="Prefix for invoice numbers")
+    import_order_prefix = models.CharField(max_length=10, default='IO',
+                                           help_text="Prefix for import order numbers")
+    layby_prefix = models.CharField(max_length=10, default='LB',
+                                    help_text="Prefix for layby plan numbers")
+    max_discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=50,
+                                               help_text="Maximum discount allowed (%)")
+    require_customer_for_sales = models.BooleanField(default=False,
+                                                     help_text="Require customer for all sales")
+    print_receipt_automatically = models.BooleanField(default=False,
+                                                      help_text="Auto-print receipt after sale")
+
+    # ==================== DISPLAY SETTINGS ====================
+    date_format = models.CharField(max_length=20, choices=DATE_FORMAT_CHOICES, default='Y-m-d')
+    time_format = models.CharField(max_length=10, default='H:i',
+                                   choices=[('H:i', '24-hour (14:30)'),
+                                           ('h:i A', '12-hour (2:30 PM)')])
+    items_per_page = models.IntegerField(default=25,
+                                         choices=[(10, '10'), (25, '25'), (50, '50'), (100, '100')])
+
+    # ==================== METADATA ====================
+    created_date = models.DateTimeField(auto_now_add=True)
+    last_updated = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Site Settings'
+        verbose_name_plural = 'Site Settings'
+
+    def __str__(self):
+        return f"Site Settings - {self.company_name}"
+
+    def save(self, *args, **kwargs):
+        # Ensure only one instance exists (singleton pattern)
+        self.pk = 1
+        super().save(*args, **kwargs)
+        # Clear cache when settings are saved
+        cache.delete('site_settings')
+
+    def delete(self, *args, **kwargs):
+        # Prevent deletion of settings
+        pass
+
+    @classmethod
+    def get_settings(cls):
+        """
+        Get the singleton settings instance.
+        Creates default settings if none exist.
+        Uses caching for performance.
+        """
+        # Try to get from cache first
+        settings = cache.get('site_settings')
+        if settings is None:
+            settings, created = cls.objects.get_or_create(pk=1)
+            # Cache for 5 minutes
+            cache.set('site_settings', settings, 300)
+        return settings
+
+    @property
+    def currency_symbol(self):
+        """Get the currency symbol for the default currency"""
+        return self.CURRENCY_SYMBOLS.get(self.default_currency, '$')
+
+    def format_currency(self, amount):
+        """Format a number as currency according to settings"""
+        if amount is None:
+            amount = 0
+        symbol = self.currency_symbol
+        if self.decimal_places == 0:
+            formatted = f"{amount:,.0f}"
+        else:
+            formatted = f"{amount:,.2f}"
+
+        if self.currency_symbol_position == 'before':
+            return f"{symbol}{formatted}"
+        else:
+            return f"{formatted}{symbol}"
 
 
 def validate_image_size(image):
@@ -121,6 +315,11 @@ class Inventory(models.Model):
     on_sale = models.BooleanField(default=True)
     category = models.ForeignKey('Inventory_category', on_delete=models.SET_NULL, null=True, blank=True)
 
+    # Variant support
+    has_variants = models.BooleanField(default=False, help_text="Enable if this product has size/color variants")
+    variant_attributes = models.ManyToManyField('AttributeType', blank=True,
+                                                help_text="Attribute types used for variants (e.g., Size, Color)")
+
     # Product Images - Optimized for performance
     image = ResizedImageField(
         size=[800, 600],
@@ -162,6 +361,60 @@ class Inventory(models.Model):
     @property
     def total_quantity_sold(self):
         return self.sales_records.aggregate(total=models.Sum('quantity_sold'))['total'] or 0
+
+    @property
+    def total_stock(self):
+        """
+        Total stock across all variants (if has_variants) or direct stock.
+        For products with variants, sums variant stock.
+        For simple products, returns quantity_in_Stock.
+        """
+        if self.has_variants:
+            return self.variants.filter(is_active=True).aggregate(
+                total=models.Sum('quantity_in_stock')
+            )['total'] or 0
+        return self.quantity_in_Stock
+
+    @property
+    def variant_count(self):
+        """Number of active variants"""
+        if self.has_variants:
+            return self.variants.filter(is_active=True).count()
+        return 0
+
+    @property
+    def low_stock_variants(self):
+        """Get variants that are at or below reorder point"""
+        if self.has_variants:
+            return self.variants.filter(
+                is_active=True,
+                quantity_in_stock__lte=models.F('reorder_point')
+            )
+        return self.variants.none()
+
+    def get_variant_by_attributes(self, attribute_values):
+        """
+        Find a variant matching the given attribute values.
+        attribute_values: list of AttributeValue IDs or instances
+        """
+        if not self.has_variants:
+            return None
+
+        # Convert to IDs if needed
+        value_ids = set()
+        for val in attribute_values:
+            if hasattr(val, 'id'):
+                value_ids.add(val.id)
+            else:
+                value_ids.add(val)
+
+        # Find variant with exactly these attributes
+        for variant in self.variants.filter(is_active=True):
+            variant_attr_ids = set(variant.attribute_values.values_list('id', flat=True))
+            if variant_attr_ids == value_ids:
+                return variant
+
+        return None
 
     def generate_product_code(self):
         """Auto-generate product code based on category and sequence"""
@@ -209,6 +462,156 @@ class Inventory_category(models.Model):
     def __str__(self):
         return self.name
 
+
+# ==================== PRODUCT VARIANTS SYSTEM ====================
+
+class AttributeType(models.Model):
+    """
+    Defines types of attributes like Size, Color, Material, etc.
+    Each attribute type can have multiple values.
+    """
+    name = models.CharField(max_length=50, unique=True)  # "Size", "Color"
+    display_name = models.CharField(max_length=50)  # "Size", "Colour" (user-facing)
+    display_order = models.IntegerField(default=0, help_text="Order in which attributes appear")
+    is_active = models.BooleanField(default=True)
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['display_order', 'name']
+        verbose_name = 'Attribute Type'
+        verbose_name_plural = 'Attribute Types'
+
+    def __str__(self):
+        return self.display_name
+
+
+class AttributeValue(models.Model):
+    """
+    Individual values for an attribute type.
+    E.g., Size: S, M, L, XL or Color: Black, White, Red
+    """
+    attribute_type = models.ForeignKey(AttributeType, on_delete=models.CASCADE, related_name='values')
+    value = models.CharField(max_length=50)  # "Medium", "Black", "42"
+    display_value = models.CharField(max_length=50, blank=True)  # Optional display name
+    color_code = models.CharField(max_length=7, blank=True, help_text="Hex color code for color swatches (e.g., #000000)")
+    display_order = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['attribute_type', 'display_order', 'value']
+        unique_together = ['attribute_type', 'value']
+        verbose_name = 'Attribute Value'
+        verbose_name_plural = 'Attribute Values'
+
+    def __str__(self):
+        return f"{self.attribute_type.name}: {self.display_value or self.value}"
+
+    @property
+    def label(self):
+        """Return the display value or fall back to value"""
+        return self.display_value or self.value
+
+
+class ProductVariant(models.Model):
+    """
+    A specific variant of a product with its own SKU, price, and stock.
+    E.g., "T-Shirt - Medium - Black"
+    """
+    product = models.ForeignKey('Inventory', on_delete=models.CASCADE, related_name='variants')
+    sku = models.CharField(max_length=50, unique=True, help_text="Unique SKU for this variant")
+
+    # Variant-specific pricing (can override parent product)
+    purchase_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                         help_text="Leave blank to use product default")
+    selling_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                        help_text="Leave blank to use product default")
+
+    # Variant-specific stock
+    quantity_in_stock = models.IntegerField(default=0)
+    reorder_point = models.IntegerField(default=0, help_text="Minimum stock level before reordering")
+
+    # Attributes for this variant (Size: M, Color: Black)
+    attribute_values = models.ManyToManyField(AttributeValue, related_name='variants')
+
+    # Status
+    is_active = models.BooleanField(default=True)
+
+    # Metadata
+    created_date = models.DateTimeField(auto_now_add=True)
+    last_updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['product', 'sku']
+        verbose_name = 'Product Variant'
+        verbose_name_plural = 'Product Variants'
+
+    def __str__(self):
+        attrs = self.attribute_string
+        if attrs:
+            return f"{self.product.name} - {attrs}"
+        return f"{self.product.name} ({self.sku})"
+
+    @property
+    def attribute_string(self):
+        """Returns formatted string like 'M / Black'"""
+        attrs = self.attribute_values.all().order_by('attribute_type__display_order')
+        return " / ".join([attr.label for attr in attrs])
+
+    @property
+    def attribute_dict(self):
+        """Returns dict like {'Size': 'M', 'Color': 'Black'}"""
+        return {
+            attr.attribute_type.name: attr.label
+            for attr in self.attribute_values.all()
+        }
+
+    @property
+    def effective_purchase_price(self):
+        """Return variant price or fall back to product price"""
+        if self.purchase_price is not None:
+            return self.purchase_price
+        return self.product.purchase_price or Decimal('0')
+
+    @property
+    def effective_selling_price(self):
+        """Return variant price or fall back to product price"""
+        if self.selling_price is not None:
+            return self.selling_price
+        return self.product.selling_price or Decimal('0')
+
+    @property
+    def is_low_stock(self):
+        """Check if stock is at or below reorder point"""
+        return self.quantity_in_stock <= self.reorder_point
+
+    def generate_sku(self):
+        """
+        Auto-generate SKU based on product code and attribute values.
+        E.g., TSH-0001-M-BLK
+        """
+        base_code = self.product.product_code or 'PROD'
+
+        # Get attribute abbreviations
+        abbrevs = []
+        for attr in self.attribute_values.all().order_by('attribute_type__display_order'):
+            # Take first 3 chars of value, uppercase
+            abbrev = attr.value[:3].upper()
+            abbrevs.append(abbrev)
+
+        if abbrevs:
+            return f"{base_code}-{'-'.join(abbrevs)}"
+        return f"{base_code}-VAR"
+
+    def save(self, *args, **kwargs):
+        # Auto-generate SKU if not provided
+        if not self.sku:
+            # Need to save first to have access to M2M relationship
+            if self.pk is None:
+                # Temporary SKU, will be updated after M2M is set
+                temp_sku = f"TEMP-{self.product.product_code or 'PROD'}-{timezone.now().timestamp()}"
+                self.sku = temp_sku
+        super().save(*args, **kwargs)
+
 class Sales(models.Model):
     PAYMENT_METHODS = [
         ('CASH', 'Cash'),
@@ -216,6 +619,10 @@ class Sales(models.Model):
         ('LAYBY', 'Layby'),
     ]
     inventory_item = models.ForeignKey('Inventory', on_delete=models.CASCADE, related_name='sales_records')
+    # Optional variant reference - if product has variants, this tracks which specific variant was sold
+    product_variant = models.ForeignKey('ProductVariant', on_delete=models.SET_NULL, null=True, blank=True,
+                                        related_name='sales_records',
+                                        help_text="Specific variant sold (if product has variants)")
     quantity_sold = models.IntegerField()
     sale_price = models.DecimalField(max_digits=10, decimal_places=2)
     sale_date = models.DateTimeField(default=timezone.now)
@@ -293,6 +700,36 @@ class missing_inventory(models.Model):
     quantity_missing = models.IntegerField()
     missing_date = models.DateTimeField(auto_now_add=True)
     reason = models.TextField()
+
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+
+        if is_new and self.quantity_missing > 0:
+            # Update inventory stock
+            self.inventory_item.quantity_in_Stock -= self.quantity_missing
+            self.inventory_item.save(update_fields=['quantity_in_Stock'])
+
+            # Create stock movement
+            StockMovement.objects.create(
+                inventory_item=self.inventory_item,
+                movement_type='OUT',
+                quantity=self.quantity_missing,
+                reason=f'Missing/Shrinkage: {self.reason}'
+            )
+
+            # Post GL entry: Dr COGS/Loss, Cr Inventory
+            try:
+                from accounting.utils import post_inventory_adjustment
+                post_inventory_adjustment(
+                    self.inventory_item,
+                    self.quantity_missing,
+                    self.reason or 'Missing inventory',
+                    adjustment_type='SHRINKAGE',
+                    user=None
+                )
+            except Exception as e:
+                print(f"[SHRINKAGE] Warning: GL posting failed: {e}")
 
     def __str__(self):
         return f"Missing {self.quantity_missing} of {self.inventory_item.name}"
@@ -587,26 +1024,36 @@ class InvoicePayment(models.Model):
         ordering = ['-payment_date']
     
     def save(self, *args, **kwargs):
+        is_new = self.pk is None
         super().save(*args, **kwargs)
-        
+
         # Auto-update invoice amount paid
         total_paid = self.invoice.payments.aggregate(total=Sum('amount'))['total'] or 0
         self.invoice.amount_paid = total_paid
         self.invoice.update_status()
-        
-        # Create cashbook payment entry (supplier payment)
-        try:
-            CashbookEntry.objects.create(
-                date=self.payment_date,
-                reference=self.reference_number or self.invoice.invoice_number,
-                description=f"Supplier payment - {self.invoice.import_order.supplier.name}",
-                receipt_amount=0,
-                payment_amount=self.amount,
-                category='SUPPLIER',
-                recorded_by=self.recorded_by,
-            )
-        except Exception:
-            pass
+
+        # Only post GL and cashbook for new payments
+        if is_new:
+            # Post to GL: Dr Accounts Payable, Cr Cash
+            try:
+                from accounting.utils import post_supplier_payment
+                post_supplier_payment(self, user=self.recorded_by)
+            except Exception as e:
+                print(f"[SUPPLIER] Warning: GL posting failed for payment {self.id}: {e}")
+
+            # Create cashbook payment entry (supplier payment)
+            try:
+                CashbookEntry.objects.create(
+                    date=self.payment_date,
+                    reference=self.reference_number or self.invoice.invoice_number,
+                    description=f"Supplier payment - {self.invoice.import_order.supplier.name}",
+                    receipt_amount=0,
+                    payment_amount=self.amount,
+                    category='SUPPLIER',
+                    recorded_by=self.recorded_by,
+                )
+            except Exception:
+                pass
     
     def __str__(self):
         return f"Payment of {self.amount} on {self.payment_date}"
@@ -732,8 +1179,10 @@ class ImportOrderItem(models.Model):
             elif self.product_category:
                 markup = self.product_category.default_markup / 100
             else:
-                markup = Decimal('0.40')  # 40% default
-        
+                # Use site settings default markup
+                settings = SiteSettings.get_settings()
+                markup = settings.default_markup_percent / 100
+
         return self.landed_cost_per_unit * (1 + markup)
     
     def create_inventory_item(self):
@@ -823,6 +1272,15 @@ class ImportOrderItem(models.Model):
                 quantity=quantity_received,
                 reason=f'Import Order {self.import_order.order_number} received'
             )
+
+            # Post to GL: Dr Inventory, Cr Accounts Payable
+            # Import the function here to avoid circular imports
+            try:
+                from accounting.utils import post_inventory_receipt
+                post_inventory_receipt(self, user=None)
+            except Exception as e:
+                # Log but don't fail the receipt if GL posting fails
+                print(f"[IMPORT] Warning: GL posting failed for item {self.id}: {e}")
 
         self.save()
     

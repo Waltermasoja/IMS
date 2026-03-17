@@ -1,0 +1,318 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Configure Variants - {{ product.name }} - IMS Pro{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto space-y-6 animate-fade-in">
+    <!-- Page Header -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">{{ title }}</h1>
+            <p class="text-gray-500 mt-1">Set stock, prices, and SKUs for each variant</p>
+        </div>
+    </div>
+
+    <!-- Progress Steps -->
+    <div class="bg-white rounded-2xl shadow-sm p-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center font-bold">
+                    <i class="fas fa-check"></i>
+                </div>
+                <span class="ml-3 text-green-600">Product Info</span>
+            </div>
+            <div class="flex-1 h-1 mx-4 bg-green-500 rounded"></div>
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-green-500 text-white flex items-center justify-center font-bold">
+                    <i class="fas fa-check"></i>
+                </div>
+                <span class="ml-3 text-green-600">Select Options</span>
+            </div>
+            <div class="flex-1 h-1 mx-4 bg-green-500 rounded"></div>
+            <div class="flex items-center">
+                <div class="w-10 h-10 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold">3</div>
+                <span class="ml-3 font-semibold text-blue-600">Configure Variants</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Product Summary -->
+    <div class="bg-white rounded-2xl shadow-sm p-6">
+        <div class="flex items-center space-x-4">
+            {% if product.image %}
+            <img src="{{ product.image.url }}" alt="{{ product.name }}" class="w-16 h-16 rounded-xl object-cover">
+            {% else %}
+            <div class="w-16 h-16 rounded-xl bg-gradient-to-br from-blue-100 to-purple-100 flex items-center justify-center">
+                <i class="fas fa-box text-2xl text-blue-400"></i>
+            </div>
+            {% endif %}
+            <div>
+                <h3 class="font-bold text-lg text-gray-900">{{ product.name }}</h3>
+                <p class="text-gray-500 text-sm">{{ product.product_code }} &bull; {{ variant_data|length }} variants</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Variant Configuration Form -->
+    <form method="POST" action="">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="save_variants">
+
+        <!-- Bulk Actions -->
+        <div class="bg-white rounded-2xl shadow-sm p-6 mb-6">
+            <h3 class="font-bold text-gray-800 mb-4"><i class="fas fa-magic text-purple-500 mr-2"></i>Bulk Actions</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Set All Costs</label>
+                    <div class="flex">
+                        <input type="number" step="0.01" id="bulk_purchase_price" placeholder="${{ product.purchase_price }}"
+                               class="flex-1 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <button type="button" onclick="applyBulkValue('purchase_price')"
+                                class="px-3 py-2 bg-purple-100 text-purple-600 rounded-r-lg hover:bg-purple-200 transition-colors text-sm font-medium">
+                            Apply
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Set All Prices</label>
+                    <div class="flex">
+                        <input type="number" step="0.01" id="bulk_selling_price" placeholder="${{ product.selling_price }}"
+                               class="flex-1 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <button type="button" onclick="applyBulkValue('selling_price')"
+                                class="px-3 py-2 bg-purple-100 text-purple-600 rounded-r-lg hover:bg-purple-200 transition-colors text-sm font-medium">
+                            Apply
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Set All Stock</label>
+                    <div class="flex">
+                        <input type="number" id="bulk_quantity" placeholder="0"
+                               class="flex-1 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <button type="button" onclick="applyBulkValue('quantity')"
+                                class="px-3 py-2 bg-purple-100 text-purple-600 rounded-r-lg hover:bg-purple-200 transition-colors text-sm font-medium">
+                            Apply
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Set All Reorder Points</label>
+                    <div class="flex">
+                        <input type="number" id="bulk_reorder_point" placeholder="{{ product.reorder_point }}"
+                               class="flex-1 px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <button type="button" onclick="applyBulkValue('reorder_point')"
+                                class="px-3 py-2 bg-purple-100 text-purple-600 rounded-r-lg hover:bg-purple-200 transition-colors text-sm font-medium">
+                            Apply
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="mt-4 flex gap-2">
+                <button type="button" onclick="selectAllVariants()"
+                        class="text-xs px-3 py-1 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-colors">
+                    <i class="fas fa-check-square mr-1"></i>Select All
+                </button>
+                <button type="button" onclick="deselectAllVariants()"
+                        class="text-xs px-3 py-1 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors">
+                    <i class="fas fa-square mr-1"></i>Deselect All
+                </button>
+            </div>
+        </div>
+
+        <!-- Variants Grid -->
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                                <input type="checkbox" id="selectAll" onchange="toggleAllVariants(this)"
+                                       class="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
+                            </th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Variant</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">SKU</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cost</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Price</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Stock</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Reorder</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for variant in variant_data %}
+                        <tr class="hover:bg-gray-50 transition-colors variant-row">
+                            <td class="px-4 py-3">
+                                <input type="checkbox" name="variant_{{ variant.index }}_is_active"
+                                       class="variant-checkbox w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" checked>
+                            </td>
+                            <td class="px-4 py-3">
+                                <div class="flex items-center space-x-2">
+                                    {% for attr in variant.attributes %}
+                                    {% if attr.color_code %}
+                                    <span class="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-700">
+                                        <span class="w-3 h-3 rounded-full mr-1" style="background-color: {{ attr.color_code }}"></span>
+                                        {{ attr.label }}
+                                    </span>
+                                    {% else %}
+                                    <span class="inline-flex items-center px-2 py-1 rounded-lg text-xs font-medium bg-blue-100 text-blue-700">
+                                        {{ attr.label }}
+                                    </span>
+                                    {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </td>
+                            <td class="px-4 py-3">
+                                <input type="text" name="variant_{{ variant.index }}_sku"
+                                       value="{{ variant.suggested_sku }}"
+                                       class="sku-input w-32 px-2 py-1 text-sm font-mono bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </td>
+                            <td class="px-4 py-3">
+                                <div class="relative">
+                                    <span class="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                                    <input type="number" step="0.01" name="variant_{{ variant.index }}_purchase_price"
+                                           value="{{ variant.default_purchase_price }}"
+                                           placeholder="{{ variant.default_purchase_price }}"
+                                           class="purchase-price-input w-24 pl-5 pr-2 py-1 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                            </td>
+                            <td class="px-4 py-3">
+                                <div class="relative">
+                                    <span class="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">$</span>
+                                    <input type="number" step="0.01" name="variant_{{ variant.index }}_selling_price"
+                                           value="{{ variant.default_selling_price }}"
+                                           placeholder="{{ variant.default_selling_price }}"
+                                           class="selling-price-input w-24 pl-5 pr-2 py-1 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
+                            </td>
+                            <td class="px-4 py-3">
+                                <input type="number" name="variant_{{ variant.index }}_quantity"
+                                       value="0"
+                                       class="quantity-input w-20 px-2 py-1 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </td>
+                            <td class="px-4 py-3">
+                                <input type="number" name="variant_{{ variant.index }}_reorder_point"
+                                       value="{{ variant.default_reorder_point }}"
+                                       class="reorder-input w-20 px-2 py-1 text-sm bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                                <i class="fas fa-exclamation-circle text-3xl mb-2"></i>
+                                <p>No variants to configure. Please go back and select options.</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Summary -->
+        <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl p-6 mt-6 border border-green-200">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-gray-800"><i class="fas fa-info-circle text-green-500 mr-2"></i>Summary</h3>
+                    <p class="text-sm text-gray-600 mt-1">
+                        <span id="selectedCount">{{ variant_data|length }}</span> variants will be created for <strong>{{ product.name }}</strong>
+                    </p>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm text-gray-500">Total Initial Stock</p>
+                    <p id="totalStock" class="text-2xl font-bold text-green-600">0</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="flex items-center justify-between mt-8">
+            <a href="{% url 'select_variant_attributes' product.id %}"
+               class="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
+                <i class="fas fa-arrow-left mr-2"></i>Back
+            </a>
+            <button type="submit"
+                    class="flex items-center space-x-2 px-8 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl hover:from-green-600 hover:to-emerald-700 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all font-medium">
+                <i class="fas fa-check mr-2"></i>
+                <span>Create Variants</span>
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function applyBulkValue(field) {
+    const value = document.getElementById(`bulk_${field}`).value;
+    if (!value) return;
+
+    const inputClass = {
+        'purchase_price': 'purchase-price-input',
+        'selling_price': 'selling-price-input',
+        'quantity': 'quantity-input',
+        'reorder_point': 'reorder-input'
+    }[field];
+
+    document.querySelectorAll(`.${inputClass}`).forEach(input => {
+        const row = input.closest('.variant-row');
+        const checkbox = row.querySelector('.variant-checkbox');
+        if (checkbox.checked) {
+            input.value = value;
+        }
+    });
+
+    updateTotalStock();
+}
+
+function selectAllVariants() {
+    document.querySelectorAll('.variant-checkbox').forEach(cb => cb.checked = true);
+    document.getElementById('selectAll').checked = true;
+    updateSelectedCount();
+}
+
+function deselectAllVariants() {
+    document.querySelectorAll('.variant-checkbox').forEach(cb => cb.checked = false);
+    document.getElementById('selectAll').checked = false;
+    updateSelectedCount();
+}
+
+function toggleAllVariants(checkbox) {
+    document.querySelectorAll('.variant-checkbox').forEach(cb => cb.checked = checkbox.checked);
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const count = document.querySelectorAll('.variant-checkbox:checked').length;
+    document.getElementById('selectedCount').textContent = count;
+}
+
+function updateTotalStock() {
+    let total = 0;
+    document.querySelectorAll('.quantity-input').forEach(input => {
+        const row = input.closest('.variant-row');
+        const checkbox = row.querySelector('.variant-checkbox');
+        if (checkbox.checked) {
+            total += parseInt(input.value) || 0;
+        }
+    });
+    document.getElementById('totalStock').textContent = total;
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.variant-checkbox').forEach(cb => {
+        cb.addEventListener('change', () => {
+            updateSelectedCount();
+            updateTotalStock();
+        });
+    });
+
+    document.querySelectorAll('.quantity-input').forEach(input => {
+        input.addEventListener('input', updateTotalStock);
+    });
+
+    updateSelectedCount();
+    updateTotalStock();
+});
+</script>
+{% endblock %}

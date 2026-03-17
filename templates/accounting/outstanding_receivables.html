@@ -1,0 +1,230 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Outstanding Receivables{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="bg-white rounded-2xl shadow-sm p-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">Outstanding Receivables</h1>
+                <p class="text-gray-500 text-sm mt-1">Track all money owed by customers - credit sales and layby plans</p>
+            </div>
+            <div class="flex gap-3">
+                <a href="{% url 'accounting:ar_invoice_list' %}" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-file-invoice mr-2"></i>All Invoices
+                </a>
+                <a href="{% url 'accounting:layby_list' %}" class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-calendar-alt mr-2"></i>All Layby Plans
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-2xl shadow-sm p-6 border-l-4 border-blue-500">
+            <div class="text-center">
+                <h3 class="text-xs uppercase text-gray-500 mb-2">Total Outstanding</h3>
+                <div class="text-2xl font-bold text-blue-600">${{ total_outstanding|floatformat:2|intcomma }}</div>
+                <p class="text-xs text-gray-500 mt-1">All A/R</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm p-6 border-l-4 border-purple-500">
+            <div class="text-center">
+                <h3 class="text-xs uppercase text-gray-500 mb-2">Credit Sales</h3>
+                <div class="text-2xl font-bold text-purple-600">${{ total_credit_outstanding|floatformat:2|intcomma }}</div>
+                <p class="text-xs text-gray-500 mt-1">{{ credit_invoice_count }} invoice{{ credit_invoice_count|pluralize }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm p-6 border-l-4 border-indigo-500">
+            <div class="text-center">
+                <h3 class="text-xs uppercase text-gray-500 mb-2">Layby Plans</h3>
+                <div class="text-2xl font-bold text-indigo-600">${{ total_layby_outstanding|floatformat:2|intcomma }}</div>
+                <p class="text-xs text-gray-500 mt-1">{{ layby_invoice_count}} plan{{ layby_invoice_count|pluralize }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-2xl shadow-sm p-6 border-l-4 border-red-500">
+            <div class="text-center">
+                <h3 class="text-xs uppercase text-gray-500 mb-2">Overdue</h3>
+                <div class="text-2xl font-bold text-red-600">${{ total_overdue|floatformat:2|intcomma }}</div>
+                <p class="text-xs text-gray-500 mt-1">{{ overdue_count }} invoice{{ overdue_count|pluralize }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Two Column Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Outstanding Credit Sales -->
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b bg-purple-50">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-gray-900">
+                        <i class="fas fa-credit-card text-purple-600 mr-2"></i>Outstanding Credit Sales
+                    </h3>
+                    <a href="{% url 'accounting:ar_invoice_list' %}" class="text-sm text-purple-600 hover:text-purple-700">
+                        View All →
+                    </a>
+                </div>
+            </div>
+            <div class="divide-y divide-gray-200">
+                {% if credit_invoices %}
+                    {% for invoice in credit_invoices %}
+                    <div class="p-4 hover:bg-gray-50">
+                        <div class="flex justify-between items-start">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2">
+                                    <a href="{% url 'accounting:ar_invoice_detail' invoice.id %}" class="font-medium text-gray-900 hover:text-blue-600">
+                                        {{ invoice.invoice_number }}
+                                    </a>
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full {% if invoice.status == 'OVERDUE' %}bg-red-100 text-red-700{% elif invoice.status == 'PARTIAL' %}bg-blue-100 text-blue-700{% else %}bg-yellow-100 text-yellow-700{% endif %}">
+                                        {{ invoice.get_status_display }}
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-600 mt-1">{{ invoice.customer.name }}</p>
+                                <p class="text-xs text-gray-500">Due: {{ invoice.due_date|date:"M d, Y" }}</p>
+                            </div>
+                            <div class="text-right">
+                                <div class="font-semibold text-gray-900">${{ invoice.outstanding_amount|floatformat:2|intcomma }}</div>
+                                <div class="text-xs text-gray-500">of ${{ invoice.total_amount|floatformat:2|intcomma }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="p-8 text-center text-gray-500">
+                        <i class="fas fa-check-circle text-4xl text-green-500 mb-2"></i>
+                        <p>No outstanding credit sales</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Outstanding Layby Plans -->
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b bg-indigo-50">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-semibold text-gray-900">
+                        <i class="fas fa-calendar-check text-indigo-600 mr-2"></i>Outstanding Layby Plans
+                    </h3>
+                    <a href="{% url 'accounting:layby_list' %}" class="text-sm text-indigo-600 hover:text-indigo-700">
+                        View All →
+                    </a>
+                </div>
+            </div>
+            <div class="divide-y divide-gray-200">
+                {% if layby_invoices %}
+                    {% for invoice in layby_invoices %}
+                    <div class="p-4 hover:bg-gray-50">
+                        <div class="flex justify-between items-start">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2">
+                                    <a href="{% url 'accounting:layby_detail' invoice.layby_plan.id %}" class="font-medium text-gray-900 hover:text-blue-600">
+                                        Layby Plan #{{ invoice.layby_plan.id }}
+                                    </a>
+                                    <span class="px-2 py-1 text-xs font-medium rounded-full bg-indigo-100 text-indigo-700">
+                                        {{ invoice.layby_plan.get_status_display }}
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-600 mt-1">{{ invoice.customer.name }}</p>
+                                <p class="text-xs text-gray-500">
+                                    Paid: ${{ invoice.layby_plan.amount_paid|floatformat:2|intcomma }} of ${{ invoice.layby_plan.total_price|floatformat:2|intcomma }}
+                                </p>
+                            </div>
+                            <div class="text-right">
+                                <div class="font-semibold text-gray-900">${{ invoice.outstanding_amount|floatformat:2|intcomma }}</div>
+                                <div class="text-xs text-gray-500">remaining</div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="p-8 text-center text-gray-500">
+                        <i class="fas fa-check-circle text-4xl text-green-500 mb-2"></i>
+                        <p>No outstanding layby plans</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Customers with Outstanding Balances -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b bg-gray-50">
+            <h3 class="text-lg font-semibold text-gray-900">
+                <i class="fas fa-users text-gray-600 mr-2"></i>Top Customers by Outstanding Balance
+            </h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Balance Owed</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Credit Limit</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for customer in customers_with_balance %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="font-medium text-gray-900">{{ customer.name }}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                            {% if customer.phone %}{{ customer.phone }}{% else %}-{% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right">
+                            <span class="font-semibold {% if customer.current_balance > customer.credit_limit %}text-red-600{% else %}text-amber-600{% endif %}">
+                                ${{ customer.current_balance|floatformat:2|intcomma }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-600">
+                            ${{ customer.credit_limit|floatformat:2|intcomma }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-center">
+                            <a href="{% url 'accounting:customer_statement' customer.id %}" class="text-blue-600 hover:text-blue-800 text-sm">
+                                View Statement
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-8 text-center text-gray-500">
+                            <i class="fas fa-check-circle text-4xl text-green-500 mb-2"></i>
+                            <p>No customers with outstanding balances</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Overdue Invoices Alert -->
+    {% if overdue_invoices %}
+    <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-lg">
+        <div class="flex">
+            <div class="flex-shrink-0">
+                <i class="fas fa-exclamation-triangle text-red-500"></i>
+            </div>
+            <div class="ml-3 flex-1">
+                <h3 class="text-sm font-medium text-red-800">Overdue Invoices Require Attention</h3>
+                <div class="mt-2 text-sm text-red-700">
+                    <p>You have {{ overdue_count }} overdue invoice{{ overdue_count|pluralize }} totaling ${{ total_overdue|floatformat:2|intcomma }}.</p>
+                    <a href="{% url 'accounting:ar_aging_report' %}" class="font-medium underline hover:text-red-900 mt-2 inline-block">
+                        View Aging Report →
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

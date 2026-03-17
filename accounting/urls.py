@@ -37,13 +37,19 @@ urlpatterns = [
     path('reports/ar-aging/', views.ar_aging_report, name='ar_aging_report'),
     path('reports/credit-utilization/', views.customer_credit_utilization_report, name='customer_credit_utilization_report'),
     path('reports/credit-sales-summary/', views.credit_sales_summary_report, name='credit_sales_summary_report'),
+    path('reports/outstanding-receivables/', views.outstanding_receivables_summary, name='outstanding_receivables_summary'),
 
     # AP Reports
     path('payables/', views.accounts_payable_list, name='accounts_payable_list'),
+    path('reports/ap-aging/', views.ap_aging_report, name='ap_aging_report'),
+    path('payables/invoice/<int:invoice_id>/', views.supplier_invoice_detail, name='supplier_invoice_detail'),
 
     # Simple Business Reports
     path('reports/daily-cash/', views.daily_cash_summary, name='daily_cash_summary'),
     path('reports/profit-loss/', views.profit_loss_report, name='profit_loss_report'),
     path('reports/balance-sheet/', views.balance_sheet, name='balance_sheet'),
     path('reports/customer-statement/<int:customer_id>/', views.customer_statement, name='customer_statement'),
+
+    # Management Pages
+    path('manage/gl-accounts/', views.manage_gl_accounts, name='manage_gl_accounts'),
 ]

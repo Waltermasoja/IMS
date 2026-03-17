@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Manage Product Attributes - IMS Pro{% endblock %}
+
+{% block content %}
+<div class="space-y-6 animate-fade-in">
+    <!-- Page Header -->
+    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+        <div class="flex items-center space-x-3">
+            
+            <div>
+                <h1 class="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">Manage Product Attributes</h1>
+                <p class="text-gray-500 mt-1">Configure attributes and values for product variants</p>
+            </div>
+        </div>
+        <div>
+            <a href="{% url 'site_settings' %}" class="inline-flex items-center space-x-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 shadow-sm">
+                <i class="fas fa-arrow-left"></i>
+                <span class="font-medium">Back to Settings</span>
+            </a>
+        </div>
+    </div>
+
+    <!-- Messages -->
+    {% if messages %}
+    <div class="space-y-3">
+        {% for message in messages %}
+        <div class="flex items-center p-4 rounded-2xl shadow-sm {% if message.tags == 'success' %}bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200{% elif message.tags == 'error' %}bg-gradient-to-r from-red-50 to-rose-50 border border-red-200{% else %}bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200{% endif %}">
+            <div class="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center {% if message.tags == 'success' %}bg-emerald-100 text-emerald-600{% elif message.tags == 'error' %}bg-red-100 text-red-600{% else %}bg-blue-100 text-blue-600{% endif %}">
+                <i class="fas {% if message.tags == 'success' %}fa-check{% elif message.tags == 'error' %}fa-exclamation{% else %}fa-info{% endif %}"></i>
+            </div>
+            <span class="ml-3 font-medium {% if message.tags == 'success' %}text-emerald-800{% elif message.tags == 'error' %}text-red-800{% else %}text-blue-800{% endif %}">{{ message }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Existing Attributes -->
+        <div class="lg:col-span-2">
+            <div class="bg-white rounded-3xl shadow-xl shadow-gray-200/50 overflow-hidden border border-gray-100">
+                <div class="bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200 px-6 py-4">
+                    <h5 class="text-lg font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-list text-violet-600 mr-2"></i>
+                        Existing Attributes
+                    </h5>
+                </div>
+                <div class="p-6">
+                    {% if attribute_types %}
+                        <div class="space-y-4">
+                        {% for attr_type in attribute_types %}
+                        <div class="border border-gray-200 rounded-2xl p-5 bg-gradient-to-r from-gray-50 to-slate-50 hover:shadow-md transition-shadow">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h5 class="text-lg font-bold text-gray-900 flex items-center mb-1">
+                                        <i class="fas fa-tag text-violet-600 mr-2"></i>
+                                        {{ attr_type.name }}
+                                    </h5>
+                                    <small class="text-gray-500">{{ attr_type.values.count }} value(s)</small>
+                                </div>
+                                <a href="/admin/inventory/attributetype/{{ attr_type.id }}/change/"
+                                   target="_blank"
+                                   class="inline-flex items-center px-3 py-1.5 bg-white border border-gray-300 text-white text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors shadow-sm">
+                                    <i class="fas fa-edit mr-1.5 text-white"></i>Edit in Admin
+                                </a>
+                            </div>
+
+                            <div class="flex flex-wrap gap-2">
+                                {% for value in attr_type.values.all %}
+                                <span class="inline-flex items-center px-4 py-2 bg-violet-100 text-violet-800 text-sm font-medium rounded-lg">{{ value.value }}</span>
+                                {% empty %}
+                                <span class="text-gray-500 text-sm">No values defined yet</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="text-center py-12">
+                            <div class="w-20 h-20 bg-gradient-to-br from-violet-100 to-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <i class="fas fa-info-circle text-violet-600 text-3xl"></i>
+                            </div>
+                            <p class="text-gray-600 mb-2 font-medium">No attributes have been created yet.</p>
+                            <p class="text-gray-500 text-sm mb-6">Run the "Setup Product Attributes" task from Site Settings to initialize default attributes.</p>
+                            <a href="{% url 'site_settings' %}?tab=setup" class="inline-flex items-center px-5 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl hover:from-violet-700 hover:to-purple-700 shadow-lg shadow-violet-500/30 transition-all font-medium">
+                                <i class="fas fa-cog mr-2"></i>Go to Setup
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="space-y-6">
+            <div class="bg-white rounded-3xl shadow-xl shadow-gray-200/50 overflow-hidden border border-gray-100">
+                <div class="bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200 px-6 py-4">
+                    <h5 class="text-lg font-bold text-gray-900 flex items-center">
+                        <i class="fas fa-bolt text-violet-600 mr-2"></i>
+                        Quick Actions
+                    </h5>
+                </div>
+                <div class="p-6 space-y-4">
+                    <a href="/admin/inventory/attributetype/add/"
+                       target="_blank"
+                       class="flex items-center justify-center px-5 py-4 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl hover:from-violet-700 hover:to-purple-700 shadow-xl shadow-violet-500/40 hover:shadow-2xl hover:shadow-violet-500/50 transform hover:-translate-y-0.5 transition-all font-bold text-base">
+                        <i class="fas fa-plus-circle mr-2 text-lg"></i>Add New Attribute Type
+                    </a>
+
+                    <a href="/admin/inventory/attributetype/"
+                       target="_blank"
+                       class="flex items-center justify-center px-5 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 shadow-xl shadow-blue-500/40 hover:shadow-2xl hover:shadow-blue-500/50 transform hover:-translate-y-0.5 transition-all font-bold text-base">
+                        <i class="fas fa-cog mr-2 text-lg"></i>Manage in Admin Panel
+                    </a>
+
+                    <div class="border-t-2 border-gray-200 pt-4 mt-4">
+                        <form method="post" action="{% url 'setup_seed_attributes' %}">
+                            {% csrf_token %}
+                            <button type="submit" class="w-full flex items-center justify-center px-5 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 shadow-xl shadow-green-500/40 hover:shadow-2xl hover:shadow-green-500/50 transform hover:-translate-y-0.5 transition-all font-bold text-base">
+                                <i class="fas fa-seedling mr-2 text-lg"></i>Initialize Default Attributes
+                            </button>
+                            <small class="text-gray-600 text-xs block mt-3 text-center font-medium">
+                                Creates Size and Color attributes with common values
+                            </small>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Info Card -->
+            <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-3xl border border-blue-200 p-6 shadow-sm">
+                <h6 class="text-blue-800 font-bold mb-4 flex items-center">
+                    <i class="fas fa-info-circle mr-2"></i>About Attributes
+                </h6>
+                <ul class="text-sm text-blue-700 space-y-2">
+                    <li class="flex items-start">
+                        <i class="fas fa-check text-blue-600 mt-1 mr-2 flex-shrink-0"></i>
+                        <span>Attributes define variant options (Size, Color, Style, etc.)</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fas fa-check text-blue-600 mt-1 mr-2 flex-shrink-0"></i>
+                        <span>Each attribute can have multiple values (S, M, L, XL)</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fas fa-check text-blue-600 mt-1 mr-2 flex-shrink-0"></i>
+                        <span>Use attributes to create product variants with different SKUs</span>
+                    </li>
+                    <li class="flex items-start">
+                        <i class="fas fa-check text-blue-600 mt-1 mr-2 flex-shrink-0"></i>
+                        <span>Manage attributes via Django Admin for full control</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    @keyframes fade-in {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .animate-fade-in {
+        animation: fade-in 0.4s ease-out;
+    }
+
+    /* Force button and link text to be visible with maximum specificity */
+    .p-6.space-y-4 a[href*="admin"],
+    .p-6.space-y-4 a[href*="admin"]:visited,
+    .p-6.space-y-4 a[href*="admin"]:hover,
+    .p-6.space-y-4 a[href*="admin"]:active,
+    div.p-6.space-y-4 > a,
+    form button[type="submit"],
+    form button[type="submit"]:hover {
+        color: #ffffff !important;
+    }
+
+    .p-6.space-y-4 a[href*="admin"] i,
+    .p-6.space-y-4 a[href*="admin"] span,
+    form button[type="submit"] i,
+    form button[type="submit"] span {
+        color: #ffffff !important;
+    }
+
+    /* Ensure gradient backgrounds stay */
+    a[href*="attributetype/add"] {
+        background: linear-gradient(to right, #7c3aed, #9333ea) !important;
+    }
+
+    a[href*="attributetype/add"]:hover {
+        background: linear-gradient(to right, #6d28d9, #7e22ce) !important;
+    }
+
+    a[href*="attributetype/"] {
+        background: linear-gradient(to right, #2563eb, #4f46e5) !important;
+    }
+
+    a[href*="attributetype/"]:hover {
+        background: linear-gradient(to right, #1d4ed8, #4338ca) !important;
+    }
+
+    button[type="submit"] {
+        background: linear-gradient(to right, #059669, #10b981) !important;
+    }
+
+    button[type="submit"]:hover {
+        background: linear-gradient(to right, #047857, #059669) !important;
+    }
+</style>
+{% endblock %}

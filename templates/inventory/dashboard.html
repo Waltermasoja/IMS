@@ -132,7 +132,8 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+{% load static %}
+<script src="{% static 'js/apexcharts.min.js' %}"></script>
 <script>
     // Parse data from Django
     const salesData = {{ sales_data|safe }};
