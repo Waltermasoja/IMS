@@ -22,12 +22,39 @@ def require_gl(code: str) -> GLAccount:
         ) from e
 
 
+# Tender type -> GL account code. Sales, expense payments, and refunds
+# all settle through one of these asset accounts.
+#
+#   CASH          -> 1000 Cash on Hand
+#   ECOCASH       -> 1010 EcoCash Float
+#   BANK_TRANSFER -> 1020 Bank Current Account
+#   CARD          -> 1020 (POS card machine settles to bank; split later if needed)
+TENDER_TO_GL = {
+    'CASH': '1000',
+    'ECOCASH': '1010',
+    'BANK_TRANSFER': '1020',
+    'CARD': '1020',
+}
+
+
+def get_tender_account(tender_type: str) -> GLAccount:
+    """Resolve a SalesTicket.tender_type (or equivalent) to its GL account."""
+    code = TENDER_TO_GL.get((tender_type or 'CASH').upper(), '1000')
+    return require_gl(code)
+
+
 def get_expense_payment_credit_account(payment_method: str) -> GLAccount:
-    """Credit side for expense JE: cash on hand vs operating bank (non-cash methods)."""
-    if payment_method == 'CASH':
+    """Credit side for expense JE. Maps tender-style codes onto the new GL layout
+    and preserves the legacy CASH / non-CASH split for rows that still carry the
+    old payment_method values."""
+    pm = (payment_method or '').upper()
+    if pm in TENDER_TO_GL:
+        return get_tender_account(pm)
+    if pm == 'CASH':
         return require_gl('1000')
+    # Legacy non-CASH expense payments assumed to be bank settled.
     try:
-        return require_gl('1010')
+        return require_gl('1020')
     except MissingGLAccountError:
         return require_gl('1000')
 
