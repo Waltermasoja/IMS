@@ -59,6 +59,121 @@ def get_expense_payment_credit_account(payment_method: str) -> GLAccount:
         return require_gl('1000')
 
 @transaction.atomic
+def post_ticket(ticket, user=None):
+    """Post a SalesTicket to GL, cashbook, and ShopStock. Idempotent.
+
+    Uses the flags on the ticket:
+      - posted_to_gl
+      - posted_to_cashbook
+      - stock_posted
+
+    Routes by terms:
+      - IMMEDIATE: Dr tender_account, Cr Revenue (excl VAT), Cr VAT Payable,
+                   Dr COGS, Cr Inventory. Cashbook receipt written.
+      - CREDIT / LAYBY: wired up in A4 once ARInvoice and LaybyPlan gain ticket FKs.
+    """
+    from inventory.models import SalesTicket, StockMovement, ShopStock
+
+    if not isinstance(ticket, SalesTicket):
+        raise TypeError('post_ticket expects a SalesTicket instance')
+
+    if ticket.voided:
+        return
+
+    ticket.recalc_totals(save=False)
+    total = Decimal(ticket.total_incl_vat or 0)
+    if total <= 0:
+        return
+
+    if ticket.terms != SalesTicket.TERMS_IMMEDIATE:
+        # A4 will extend this to CREDIT and LAYBY. Until then, refuse to post
+        # so posting doesn't silently leave receivables unposted.
+        raise NotImplementedError(
+            f'post_ticket for terms={ticket.terms} is wired in A4. '
+            'Use IMMEDIATE-term tickets for now.'
+        )
+
+    revenue_excl = Decimal(ticket.subtotal_excl_vat or 0)
+    vat_amount = Decimal(ticket.vat_total or 0)
+
+    if not ticket.posted_to_gl:
+        tender_acct = get_tender_account(ticket.tender_type)
+        revenue = require_gl('4000')
+        vat_payable = require_gl('2400') if vat_amount > 0 else None
+        cogs_acct = require_gl('5000')
+        inventory_acct = require_gl('1300')
+
+        je = JournalEntry.objects.create(
+            memo=f'Sales ticket {ticket.receipt_number} @ {ticket.shop.code}',
+            reference=ticket.receipt_number,
+            created_by=user or ticket.cashier,
+        )
+        JournalLine.objects.create(
+            entry=je, account=tender_acct, debit=total,
+            description=f'{ticket.get_tender_type_display()} received',
+        )
+        JournalLine.objects.create(
+            entry=je, account=revenue, credit=revenue_excl,
+            description='Sales revenue (excl VAT)',
+        )
+        if vat_payable and vat_amount > 0:
+            JournalLine.objects.create(
+                entry=je, account=vat_payable, credit=vat_amount,
+                description='Output VAT',
+            )
+
+        total_cogs = Decimal('0')
+        for line in ticket.lines.all():
+            line_cogs = (line.unit_cost or Decimal('0')) * line.quantity
+            if line_cogs > 0:
+                total_cogs += line_cogs
+        if total_cogs > 0:
+            JournalLine.objects.create(
+                entry=je, account=cogs_acct, debit=total_cogs,
+                description='COGS',
+            )
+            JournalLine.objects.create(
+                entry=je, account=inventory_acct, credit=total_cogs,
+                description='Inventory out',
+            )
+
+        je.assert_balanced()
+        ticket.posted_to_gl = True
+        ticket.save(update_fields=['posted_to_gl'])
+
+    if not ticket.posted_to_cashbook:
+        CashbookEntry.objects.create(
+            date=timezone.localdate(),
+            reference=ticket.receipt_number,
+            description=f'Sale @ {ticket.shop.code} via {ticket.get_tender_type_display()}',
+            category='SALES',
+            receipt_amount=total,
+            payment_amount=Decimal('0'),
+            recorded_by=user or ticket.cashier,
+        )
+        ticket.posted_to_cashbook = True
+        ticket.save(update_fields=['posted_to_cashbook'])
+
+    if not ticket.stock_posted:
+        for line in ticket.lines.all():
+            stock_row = ShopStock.get_or_create_for(
+                ticket.shop, line.inventory_item, line.variant,
+            )
+            stock_row.quantity = max(0, stock_row.quantity - line.quantity)
+            stock_row.save(update_fields=['quantity', 'last_updated'])
+            StockMovement.objects.create(
+                inventory_item=line.inventory_item,
+                movement_type='OUT',
+                quantity=line.quantity,
+                reason=f'Sale {ticket.receipt_number} @ {ticket.shop.code}',
+            )
+        ticket.stock_posted = True
+        ticket.save(update_fields=['stock_posted'])
+
+    return ticket
+
+
+@transaction.atomic
 def post_inventory_receipt(import_order_item, user=None):
     """
     Post GL entry when inventory is received from an import order.

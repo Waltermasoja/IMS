@@ -24,6 +24,7 @@ class Command(BaseCommand):
             {'code': '2000', 'name': 'Accounts Payable', 'type': 'LIAB'},
             {'code': '2100', 'name': 'Short-term Debt', 'type': 'LIAB'},
             {'code': '2300', 'name': 'Unearned Revenue', 'type': 'LIAB'},
+            {'code': '2400', 'name': 'Output VAT Payable', 'type': 'LIAB'},
 
             # Equity
             {'code': '3000', 'name': 'Owner\'s Equity', 'type': 'EQUITY'},

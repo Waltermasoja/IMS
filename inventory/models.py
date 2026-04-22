@@ -829,6 +829,184 @@ class Sales(models.Model):
     def __str__(self):
         return f"Sale of {self.quantity_sold} {self.inventory_item.name}(s) on {self.sale_date.date()}"
 
+
+# ============================================================
+# Cart-based sales (SalesTicket + SalesLine)
+# ============================================================
+# Replaces the single-row Sales model. A ticket is one receipt with
+# one or more lines. Money is stored VAT-inclusive on the line; VAT
+# is backed out for the subtotal/vat columns at compute() time.
+# Posting is handled by accounting.utils.post_ticket().
+
+class SalesTicket(models.Model):
+    TERMS_IMMEDIATE = 'IMMEDIATE'
+    TERMS_CREDIT = 'CREDIT'
+    TERMS_LAYBY = 'LAYBY'
+    TERMS_CHOICES = [
+        (TERMS_IMMEDIATE, 'Paid Immediately'),
+        (TERMS_CREDIT, 'On Account (AR)'),
+        (TERMS_LAYBY, 'Layby'),
+    ]
+
+    TENDER_CASH = 'CASH'
+    TENDER_ECOCASH = 'ECOCASH'
+    TENDER_BANK = 'BANK_TRANSFER'
+    TENDER_CARD = 'CARD'
+    TENDER_CHOICES = [
+        (TENDER_CASH, 'Cash'),
+        (TENDER_ECOCASH, 'EcoCash'),
+        (TENDER_BANK, 'Bank Transfer'),
+        (TENDER_CARD, 'Card'),
+    ]
+
+    receipt_number = models.CharField(max_length=32, unique=True, blank=True)
+    shop = models.ForeignKey('Shop', on_delete=models.PROTECT, related_name='sales_tickets')
+    cashier = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='tickets_rung',
+    )
+    customer = models.ForeignKey(
+        'Customer', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='sales_tickets',
+    )
+
+    terms = models.CharField(max_length=12, choices=TERMS_CHOICES, default=TERMS_IMMEDIATE)
+    tender_type = models.CharField(max_length=16, choices=TENDER_CHOICES, default=TENDER_CASH)
+    tender_reference = models.CharField(
+        max_length=100, blank=True,
+        help_text='EcoCash agent code, bank transfer ref, or card auth number',
+    )
+
+    # Header totals — recomputed from lines via recalc_totals().
+    subtotal_excl_vat = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'))
+    vat_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'))
+    discount_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'))
+    total_incl_vat = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'))
+
+    posted_to_gl = models.BooleanField(default=False)
+    posted_to_cashbook = models.BooleanField(default=False)
+    stock_posted = models.BooleanField(default=False)
+
+    voided = models.BooleanField(default=False)
+    voided_at = models.DateTimeField(null=True, blank=True)
+    voided_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='tickets_voided',
+    )
+
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Sales Ticket'
+        verbose_name_plural = 'Sales Tickets'
+
+    def __str__(self):
+        return f"{self.receipt_number or f'(unsaved)'} @ {self.shop.code}"
+
+    def save(self, *args, **kwargs):
+        if not self.receipt_number and self.shop_id:
+            self.receipt_number = self._next_receipt_number()
+        super().save(*args, **kwargs)
+
+    def _next_receipt_number(self):
+        today = timezone.localdate()
+        prefix = f"{self.shop.code}-{today:%Y%m%d}-"
+        existing = SalesTicket.objects.filter(
+            receipt_number__startswith=prefix
+        ).values_list('receipt_number', flat=True)
+        max_seq = 0
+        for num in existing:
+            try:
+                max_seq = max(max_seq, int(num.rsplit('-', 1)[1]))
+            except (ValueError, IndexError):
+                continue
+        return f"{prefix}{max_seq + 1:04d}"
+
+    def recalc_totals(self, save=True):
+        agg = self.lines.aggregate(
+            subtotal=Sum('line_subtotal_excl_vat'),
+            vat=Sum('vat_amount'),
+            discount=Sum('discount_amount'),
+            total=Sum('line_total_incl_vat'),
+        )
+        self.subtotal_excl_vat = agg['subtotal'] or Decimal('0')
+        self.vat_total = agg['vat'] or Decimal('0')
+        self.discount_total = agg['discount'] or Decimal('0')
+        self.total_incl_vat = agg['total'] or Decimal('0')
+        if save:
+            self.save(update_fields=[
+                'subtotal_excl_vat', 'vat_total', 'discount_total',
+                'total_incl_vat', 'updated_at',
+            ])
+
+
+class SalesLine(models.Model):
+    ticket = models.ForeignKey(
+        'SalesTicket', on_delete=models.CASCADE, related_name='lines',
+    )
+    inventory_item = models.ForeignKey(
+        'Inventory', on_delete=models.PROTECT, related_name='ticket_lines',
+    )
+    variant = models.ForeignKey(
+        'ProductVariant', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='ticket_lines',
+    )
+    quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+
+    # VAT-inclusive shelf price snapshot.
+    unit_price_incl_vat = models.DecimalField(max_digits=10, decimal_places=2)
+    discount_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal('0'),
+        help_text='Currency discount on this line (not percent).',
+    )
+    # Snapshotted from the product at sale time. C1 will wire up the
+    # per-product is_vat_exempt flag; until then tickets default to taxable.
+    is_vat_exempt = models.BooleanField(default=False)
+    vat_rate_applied = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0'))
+
+    # Computed columns — populated by compute().
+    line_subtotal_excl_vat = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'))
+    vat_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'))
+    line_total_incl_vat = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0'))
+
+    # Captured unit cost for stable COGS even if product purchase_price changes later.
+    unit_cost = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+
+    class Meta:
+        ordering = ['id']
+        verbose_name = 'Sales Line'
+        verbose_name_plural = 'Sales Lines'
+
+    def __str__(self):
+        sku = self.variant.sku if self.variant else self.inventory_item.name
+        return f"{self.quantity} × {sku}"
+
+    def compute(self, vat_rate=None):
+        if vat_rate is None:
+            vat_rate = SiteSettings.get_settings().tax_rate or Decimal('0')
+        self.vat_rate_applied = Decimal('0') if self.is_vat_exempt else Decimal(vat_rate)
+
+        gross_incl = (self.unit_price_incl_vat * self.quantity) - self.discount_amount
+        if gross_incl < 0:
+            gross_incl = Decimal('0')
+
+        if self.is_vat_exempt or self.vat_rate_applied == 0:
+            self.vat_amount = Decimal('0')
+            self.line_subtotal_excl_vat = gross_incl
+        else:
+            vat = (gross_incl * self.vat_rate_applied /
+                   (Decimal('100') + self.vat_rate_applied)).quantize(Decimal('0.01'))
+            self.vat_amount = vat
+            self.line_subtotal_excl_vat = gross_incl - vat
+        self.line_total_incl_vat = gross_incl
+
+        if not self.unit_cost and self.inventory_item_id:
+            self.unit_cost = self.inventory_item.purchase_price or Decimal('0')
+
+
 class Return(models.Model):
     inventory_item = models.ForeignKey(Inventory, on_delete=models.PROTECT)
     quantity_returned = models.IntegerField(blank=False, null=False)

@@ -9,6 +9,7 @@ from .models import (
     SalesInvoice, SalesInvoiceItem,
     AttributeType, AttributeValue, ProductVariant,
     Shop, ShopStock, StockTransfer,
+    SalesTicket, SalesLine,
 )
 
 # ==================== MULTI-SHOP (PHASE A1) ====================
@@ -55,6 +56,47 @@ class StockTransferAdmin(admin.ModelAdmin):
                 self.message_user(request, f"Transfer #{t.pk} failed: {e}", level='error')
         self.message_user(request, f"Executed {executed} transfer(s).")
     execute_transfers.short_description = "Execute selected DRAFT transfers"
+
+
+# ==================== SALES TICKETS (PHASE A3) ====================
+
+class SalesLineInline(admin.TabularInline):
+    model = SalesLine
+    extra = 0
+    autocomplete_fields = ['inventory_item', 'variant']
+    readonly_fields = ['line_subtotal_excl_vat', 'vat_amount', 'line_total_incl_vat', 'unit_cost', 'vat_rate_applied']
+    fields = [
+        'inventory_item', 'variant', 'quantity',
+        'unit_price_incl_vat', 'discount_amount', 'is_vat_exempt',
+        'vat_rate_applied', 'line_subtotal_excl_vat', 'vat_amount',
+        'line_total_incl_vat', 'unit_cost',
+    ]
+
+
+@admin.register(SalesTicket)
+class SalesTicketAdmin(admin.ModelAdmin):
+    list_display = [
+        'receipt_number', 'shop', 'cashier', 'terms', 'tender_type',
+        'total_incl_vat', 'posted_to_gl', 'posted_to_cashbook',
+        'stock_posted', 'voided', 'created_at',
+    ]
+    list_filter = ['shop', 'terms', 'tender_type', 'voided', 'posted_to_gl']
+    search_fields = ['receipt_number', 'tender_reference', 'customer__name', 'notes']
+    readonly_fields = [
+        'receipt_number', 'subtotal_excl_vat', 'vat_total',
+        'discount_total', 'total_incl_vat', 'posted_to_gl',
+        'posted_to_cashbook', 'stock_posted', 'created_at', 'updated_at',
+        'voided_at', 'voided_by',
+    ]
+    inlines = [SalesLineInline]
+    fieldsets = (
+        ('Header', {'fields': ('receipt_number', 'shop', 'cashier', 'customer', 'created_at')}),
+        ('Terms & Tender', {'fields': ('terms', 'tender_type', 'tender_reference')}),
+        ('Totals', {'fields': ('subtotal_excl_vat', 'vat_total', 'discount_total', 'total_incl_vat')}),
+        ('Posting', {'fields': ('posted_to_gl', 'posted_to_cashbook', 'stock_posted')}),
+        ('Void', {'fields': ('voided', 'voided_at', 'voided_by'), 'classes': ('collapse',)}),
+        ('Notes', {'fields': ('notes',), 'classes': ('collapse',)}),
+    )
 
 
 # ==================== EXISTING MODELS ====================
