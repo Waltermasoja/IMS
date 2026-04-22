@@ -55,6 +55,12 @@ class JournalEntry(models.Model):
     created_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True)
     posted_at = models.DateTimeField(auto_now_add=True)
 
+    # NULL = corporate / inter-shop entry. Shop-scoped P&L filters on this.
+    shop = models.ForeignKey(
+        'inventory.Shop', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='journal_entries',
+    )
+
     def __str__(self):
         return f"JE#{self.id} {self.entry_date.date()} - {self.memo}"
 
@@ -126,8 +132,17 @@ class ARInvoice(models.Model):
     amount_paid = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', db_index=True)
 
-    # Optional linkage to a POS sale or order
+    # Optional linkage to a POS sale or ticket
     sale = models.ForeignKey('inventory.Sales', on_delete=models.SET_NULL, null=True, blank=True, related_name='ar_invoices')
+    ticket = models.OneToOneField(
+        'inventory.SalesTicket', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='ar_invoice',
+    )
+
+    shop = models.ForeignKey(
+        'inventory.Shop', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='ar_invoices',
+    )
 
     created_date = models.DateTimeField(auto_now_add=True)
     last_updated = models.DateTimeField(auto_now=True)
@@ -174,12 +189,20 @@ class ARPayment(models.Model):
     reference = models.CharField(max_length=100, blank=True)
     recorded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True)
 
+    # Denormalized from invoice.shop for reporting / cashbook reconciliation.
+    shop = models.ForeignKey(
+        'inventory.Shop', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='ar_payments',
+    )
+
     created_date = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
         from accounting.utils import require_gl
 
         is_new = self.pk is None
+        if self.invoice_id and not self.shop_id:
+            self.shop = self.invoice.shop
         with transaction.atomic():
             super().save(*args, **kwargs)
 
@@ -204,7 +227,9 @@ class ARPayment(models.Model):
 
             cash = require_gl('1000')
             ar = require_gl('1200')
-            je = JournalEntry.objects.create(memo=f"AR payment {self.reference}")
+            je = JournalEntry.objects.create(
+                memo=f"AR payment {self.reference}", shop=self.shop,
+            )
             JournalLine.objects.create(entry=je, account=cash, debit=self.amount, description='AR payment')
             JournalLine.objects.create(
                 entry=je, account=ar, credit=self.amount,
@@ -221,6 +246,7 @@ class ARPayment(models.Model):
                 payment_amount=0,
                 category='AR',
                 recorded_by=self.recorded_by,
+                shop=self.shop,
             )
 
     def __str__(self):
@@ -248,6 +274,15 @@ class LaybyPlan(models.Model):
     # Link to AR Invoice for proper receivables tracking
     ar_invoice = models.OneToOneField('ARInvoice', on_delete=models.SET_NULL, null=True, blank=True,
                                       related_name='layby_plan')
+    ticket = models.OneToOneField(
+        'inventory.SalesTicket', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='layby_plan',
+    )
+
+    shop = models.ForeignKey(
+        'inventory.Shop', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='layby_plans',
+    )
 
     def recompute_totals(self):
         line_expr = ExpressionWrapper(
@@ -289,12 +324,20 @@ class LaybyPayment(models.Model):
     reference = models.CharField(max_length=100, blank=True)
     recorded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True)
 
+    # Denormalized from plan.shop for reporting.
+    shop = models.ForeignKey(
+        'inventory.Shop', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='layby_payments',
+    )
+
     created_date = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
         from accounting.utils import create_layby_ar_invoice, require_gl
 
         is_new = self.pk is None
+        if self.plan_id and not self.shop_id:
+            self.shop = self.plan.shop
         print(f"[LAYBY][MODEL] Saving LaybyPayment: plan={getattr(self.plan,'id',None)}, amount={self.amount}, reference={self.reference}")
         with transaction.atomic():
             super().save(*args, **kwargs)
@@ -327,7 +370,9 @@ class LaybyPayment(models.Model):
 
             cash = require_gl('1000')
             ar = require_gl('1200')
-            je = JournalEntry.objects.create(memo=f"Layby payment - Plan #{self.plan_id}")
+            je = JournalEntry.objects.create(
+                memo=f"Layby payment - Plan #{self.plan_id}", shop=self.shop,
+            )
             JournalLine.objects.create(entry=je, account=cash, debit=self.amount, description='Layby payment received')
             JournalLine.objects.create(
                 entry=je, account=ar, credit=self.amount,
@@ -347,6 +392,7 @@ class LaybyPayment(models.Model):
                 payment_amount=0,
                 category='LAYBY',
                 recorded_by=self.recorded_by,
+                shop=self.shop,
             )
             print("[LAYBY][MODEL] Cashbook receipt created")
 
@@ -364,6 +410,10 @@ class CashbookEntry(models.Model):
     receipt_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     payment_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     recorded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True)
+    shop = models.ForeignKey(
+        'inventory.Shop', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='cashbook_entries',
+    )
     created_date = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -416,6 +466,12 @@ class Expense(models.Model):
     payment_method = models.CharField(max_length=10, choices=PAYMENT_METHODS, default='CASH')
     reference = models.CharField(max_length=100, blank=True)
     recorded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True)
+    # NULL = corporate expense (accounting fees, directors, software). Non-NULL
+    # shops roll into that shop's P&L only.
+    shop = models.ForeignKey(
+        'inventory.Shop', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='expenses',
+    )
     created_date = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
@@ -427,7 +483,10 @@ class Expense(models.Model):
             if not is_new:
                 return
             credit_acct = get_expense_payment_credit_account(self.payment_method)
-            je = JournalEntry.objects.create(memo=f"Expense: {self.category}", reference=self.reference, created_by=self.recorded_by)
+            je = JournalEntry.objects.create(
+                memo=f"Expense: {self.category}", reference=self.reference,
+                created_by=self.recorded_by, shop=self.shop,
+            )
             JournalLine.objects.create(entry=je, account=self.gl_account, debit=self.amount, description=self.description)
             JournalLine.objects.create(
                 entry=je, account=credit_acct, credit=self.amount,
@@ -442,4 +501,5 @@ class Expense(models.Model):
                 receipt_amount=0,
                 payment_amount=self.amount,
                 recorded_by=self.recorded_by,
+                shop=self.shop,
             )

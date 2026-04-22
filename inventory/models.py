@@ -1014,6 +1014,10 @@ class Return(models.Model):
     reason = models.TextField()
     receipt_number = models.CharField(max_length=20, blank=True, null=True)
     sale = models.ForeignKey('Sales', on_delete=models.SET_NULL, null=True, blank=True)
+    shop = models.ForeignKey(
+        'Shop', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='returns',
+    )
 
     def __str__(self) -> str:
         return f'Return of {self.quantity_returned} {self.inventory_item.name}'
@@ -1022,12 +1026,13 @@ class Damaged(models.Model):
     inventory_item = models.ForeignKey('Inventory', on_delete=models.PROTECT)
     quantity_damaged = models.PositiveIntegerField()
     damage_description = models.TextField()
-   
-  
+    shop = models.ForeignKey(
+        'Shop', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='damaged_items',
+    )
 
     def __str__(self):
         return f"{self.inventory_item.name} - {self.quantity_damaged} damaged"
-from django.db import models
 
 class StockMovement(models.Model):
     inventory_item = models.ForeignKey(Inventory, on_delete=models.PROTECT)
@@ -1035,6 +1040,10 @@ class StockMovement(models.Model):
     quantity = models.IntegerField(default=0, validators=[MinValueValidator(1)])
     reason = models.CharField(max_length=200,blank=True,null=True)
     stock_date = models.DateTimeField(auto_now_add=True, db_index=True)
+    shop = models.ForeignKey(
+        'Shop', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='stock_movements',
+    )
 
     def __str__(self):
         return f"{self.movement_type} - {self.quantity} units of {self.inventory_item.name}"
@@ -1047,6 +1056,10 @@ class missing_inventory(models.Model):
     quantity_missing = models.IntegerField()
     missing_date = models.DateTimeField(auto_now_add=True)
     reason = models.TextField()
+    shop = models.ForeignKey(
+        'Shop', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='missing_inventory_records',
+    )
 
     def save(self, *args, **kwargs):
         is_new = self.pk is None
@@ -1497,6 +1510,14 @@ class ImportOrderItem(models.Model):
     quantity_received = models.IntegerField(default=0, help_text="Quantity actually received")
     is_received = models.BooleanField(default=False)
     received_date = models.DateField(null=True, blank=True)
+
+    # Per-line routing: a single trip can supply both shops. NULL means the
+    # receiving user picks at goods-in time.
+    destination_shop = models.ForeignKey(
+        'Shop', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='inbound_items',
+        help_text="Which shop this line's stock is destined for when goods are received.",
+    )
 
     # Optional: specific markup for this item
     markup_percentage = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)

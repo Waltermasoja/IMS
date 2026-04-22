@@ -1,8 +1,9 @@
+from datetime import timedelta
 from decimal import Decimal
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import F
-from .models import GLAccount, JournalEntry, JournalLine, CashbookEntry, ARInvoice
+from .models import GLAccount, JournalEntry, JournalLine, CashbookEntry, ARInvoice, LaybyPlan, LaybyItem
 
 
 class MissingGLAccountError(Exception):
@@ -60,17 +61,20 @@ def get_expense_payment_credit_account(payment_method: str) -> GLAccount:
 
 @transaction.atomic
 def post_ticket(ticket, user=None):
-    """Post a SalesTicket to GL, cashbook, and ShopStock. Idempotent.
+    """Post a SalesTicket to GL, cashbook, ShopStock, and receivables.
 
-    Uses the flags on the ticket:
-      - posted_to_gl
-      - posted_to_cashbook
-      - stock_posted
+    Idempotent via posted_to_gl / posted_to_cashbook / stock_posted flags
+    and the one-to-one ARInvoice / LaybyPlan links on the ticket.
 
     Routes by terms:
-      - IMMEDIATE: Dr tender_account, Cr Revenue (excl VAT), Cr VAT Payable,
-                   Dr COGS, Cr Inventory. Cashbook receipt written.
-      - CREDIT / LAYBY: wired up in A4 once ARInvoice and LaybyPlan gain ticket FKs.
+      IMMEDIATE:  Dr tender acct, Cr Revenue (excl VAT), Cr Output VAT,
+                  Dr COGS, Cr Inventory, drain ShopStock, write cashbook.
+      CREDIT:     Dr AR,          Cr Revenue (excl VAT), Cr Output VAT,
+                  Dr COGS, Cr Inventory, drain ShopStock, create ARInvoice.
+                  No cashbook entry (cash not yet received).
+      LAYBY:      Dr AR, Cr Unearned Revenue (full incl VAT), reserve stock
+                  via ShopStock drain, create LaybyPlan + LaybyItems linked
+                  to ticket. Revenue + VAT are recognised on fulfilment.
     """
     from inventory.models import SalesTicket, StockMovement, ShopStock
 
@@ -85,14 +89,52 @@ def post_ticket(ticket, user=None):
     if total <= 0:
         return
 
-    if ticket.terms != SalesTicket.TERMS_IMMEDIATE:
-        # A4 will extend this to CREDIT and LAYBY. Until then, refuse to post
-        # so posting doesn't silently leave receivables unposted.
-        raise NotImplementedError(
-            f'post_ticket for terms={ticket.terms} is wired in A4. '
-            'Use IMMEDIATE-term tickets for now.'
-        )
+    if ticket.terms == SalesTicket.TERMS_IMMEDIATE:
+        _post_ticket_immediate(ticket, user, total)
+    elif ticket.terms == SalesTicket.TERMS_CREDIT:
+        _post_ticket_credit(ticket, user, total)
+    elif ticket.terms == SalesTicket.TERMS_LAYBY:
+        _post_ticket_layby(ticket, user, total)
+    else:
+        raise ValueError(f'Unknown ticket.terms={ticket.terms!r}')
 
+    if not ticket.stock_posted and ticket.terms in (
+        SalesTicket.TERMS_IMMEDIATE,
+        SalesTicket.TERMS_CREDIT,
+        SalesTicket.TERMS_LAYBY,
+    ):
+        for line in ticket.lines.all():
+            stock_row = ShopStock.get_or_create_for(
+                ticket.shop, line.inventory_item, line.variant,
+            )
+            stock_row.quantity = max(0, stock_row.quantity - line.quantity)
+            stock_row.save(update_fields=['quantity', 'last_updated'])
+            StockMovement.objects.create(
+                inventory_item=line.inventory_item,
+                movement_type='OUT',
+                quantity=line.quantity,
+                reason=f'Sale {ticket.receipt_number} @ {ticket.shop.code}',
+                shop=ticket.shop,
+            )
+        ticket.stock_posted = True
+        ticket.save(update_fields=['stock_posted'])
+
+    return ticket
+
+
+def _ticket_cogs_lines(ticket, je):
+    cogs_acct = require_gl('5000')
+    inventory_acct = require_gl('1300')
+    total_cogs = sum(
+        (Decimal(line.unit_cost or 0) * line.quantity for line in ticket.lines.all()),
+        Decimal('0'),
+    )
+    if total_cogs > 0:
+        JournalLine.objects.create(entry=je, account=cogs_acct, debit=total_cogs, description='COGS')
+        JournalLine.objects.create(entry=je, account=inventory_acct, credit=total_cogs, description='Inventory out')
+
+
+def _post_ticket_immediate(ticket, user, total):
     revenue_excl = Decimal(ticket.subtotal_excl_vat or 0)
     vat_amount = Decimal(ticket.vat_total or 0)
 
@@ -100,13 +142,12 @@ def post_ticket(ticket, user=None):
         tender_acct = get_tender_account(ticket.tender_type)
         revenue = require_gl('4000')
         vat_payable = require_gl('2400') if vat_amount > 0 else None
-        cogs_acct = require_gl('5000')
-        inventory_acct = require_gl('1300')
 
         je = JournalEntry.objects.create(
             memo=f'Sales ticket {ticket.receipt_number} @ {ticket.shop.code}',
             reference=ticket.receipt_number,
             created_by=user or ticket.cashier,
+            shop=ticket.shop,
         )
         JournalLine.objects.create(
             entry=je, account=tender_acct, debit=total,
@@ -121,22 +162,7 @@ def post_ticket(ticket, user=None):
                 entry=je, account=vat_payable, credit=vat_amount,
                 description='Output VAT',
             )
-
-        total_cogs = Decimal('0')
-        for line in ticket.lines.all():
-            line_cogs = (line.unit_cost or Decimal('0')) * line.quantity
-            if line_cogs > 0:
-                total_cogs += line_cogs
-        if total_cogs > 0:
-            JournalLine.objects.create(
-                entry=je, account=cogs_acct, debit=total_cogs,
-                description='COGS',
-            )
-            JournalLine.objects.create(
-                entry=je, account=inventory_acct, credit=total_cogs,
-                description='Inventory out',
-            )
-
+        _ticket_cogs_lines(ticket, je)
         je.assert_balanced()
         ticket.posted_to_gl = True
         ticket.save(update_fields=['posted_to_gl'])
@@ -150,27 +176,137 @@ def post_ticket(ticket, user=None):
             receipt_amount=total,
             payment_amount=Decimal('0'),
             recorded_by=user or ticket.cashier,
+            shop=ticket.shop,
         )
         ticket.posted_to_cashbook = True
         ticket.save(update_fields=['posted_to_cashbook'])
 
-    if not ticket.stock_posted:
-        for line in ticket.lines.all():
-            stock_row = ShopStock.get_or_create_for(
-                ticket.shop, line.inventory_item, line.variant,
-            )
-            stock_row.quantity = max(0, stock_row.quantity - line.quantity)
-            stock_row.save(update_fields=['quantity', 'last_updated'])
-            StockMovement.objects.create(
-                inventory_item=line.inventory_item,
-                movement_type='OUT',
-                quantity=line.quantity,
-                reason=f'Sale {ticket.receipt_number} @ {ticket.shop.code}',
-            )
-        ticket.stock_posted = True
-        ticket.save(update_fields=['stock_posted'])
 
-    return ticket
+def _post_ticket_credit(ticket, user, total):
+    if ticket.customer_id is None:
+        raise ValueError('CREDIT ticket requires a customer')
+
+    revenue_excl = Decimal(ticket.subtotal_excl_vat or 0)
+    vat_amount = Decimal(ticket.vat_total or 0)
+
+    # Credit-limit enforcement — mirrors the legacy make_sale() check.
+    cust = ticket.customer
+    limit = Decimal(cust.credit_limit or 0)
+    current = Decimal(cust.current_balance or 0)
+    if limit > 0 and (current + total) > limit:
+        raise ValueError(
+            f'Customer {cust.name} exceeds credit limit: balance ${current} + ticket ${total} > limit ${limit}'
+        )
+
+    if not ticket.posted_to_gl:
+        ar_acct = require_gl('1200')
+        revenue = require_gl('4000')
+        vat_payable = require_gl('2400') if vat_amount > 0 else None
+
+        ar_invoice = _get_or_create_ticket_ar_invoice(ticket)
+
+        je = JournalEntry.objects.create(
+            memo=f'Credit sale {ticket.receipt_number} @ {ticket.shop.code}',
+            reference=ar_invoice.invoice_number,
+            created_by=user or ticket.cashier,
+            shop=ticket.shop,
+        )
+        JournalLine.objects.create(
+            entry=je, account=ar_acct, debit=total,
+            description=f'AR - {cust.name}', customer=cust,
+        )
+        JournalLine.objects.create(
+            entry=je, account=revenue, credit=revenue_excl,
+            description='Sales revenue (excl VAT)',
+        )
+        if vat_payable and vat_amount > 0:
+            JournalLine.objects.create(
+                entry=je, account=vat_payable, credit=vat_amount,
+                description='Output VAT',
+            )
+        _ticket_cogs_lines(ticket, je)
+        je.assert_balanced()
+
+        cust.current_balance = current + total
+        cust.save(update_fields=['current_balance'])
+
+        ticket.posted_to_gl = True
+        ticket.posted_to_cashbook = True  # No cashbook receipt until payment.
+        ticket.save(update_fields=['posted_to_gl', 'posted_to_cashbook'])
+
+
+def _get_or_create_ticket_ar_invoice(ticket):
+    """Create (or return) the ARInvoice linked to this ticket."""
+    existing = ARInvoice.objects.filter(ticket=ticket).first()
+    if existing:
+        return existing
+
+    year = ticket.created_at.year
+    prefix = f'AR-TKT-{year}-'
+    existing = ARInvoice.objects.filter(invoice_number__startswith=prefix).values_list('invoice_number', flat=True)
+    max_seq = 0
+    for inv in existing:
+        try:
+            max_seq = max(max_seq, int(inv[len(prefix):]))
+        except (ValueError, IndexError):
+            continue
+    invoice_number = f'{prefix}{max_seq + 1:04d}'
+
+    ar_invoice = ARInvoice.objects.create(
+        customer=ticket.customer,
+        invoice_number=invoice_number,
+        invoice_date=ticket.created_at.date(),
+        due_date=ticket.created_at.date() + timedelta(days=30),
+        total_amount=ticket.total_incl_vat,
+        amount_paid=Decimal('0'),
+        status='PENDING',
+        ticket=ticket,
+        shop=ticket.shop,
+    )
+    return ar_invoice
+
+
+def _post_ticket_layby(ticket, user, total):
+    if ticket.customer_id is None:
+        raise ValueError('LAYBY ticket requires a customer')
+
+    if not ticket.posted_to_gl:
+        # create_layby_ar_invoice() posts the Dr AR / Cr Unearned journal and
+        # the customer balance update. Revenue + VAT + COGS are recognised on
+        # fulfilment (via post_layby_fulfillment), so the cashbook is written
+        # per-LaybyPayment, not here.
+        plan = _get_or_create_ticket_layby_plan(ticket)
+        if not plan.ar_invoice:
+            create_layby_ar_invoice(plan)
+
+        ticket.posted_to_gl = True
+        ticket.posted_to_cashbook = True
+        ticket.save(update_fields=['posted_to_gl', 'posted_to_cashbook'])
+
+
+def _get_or_create_ticket_layby_plan(ticket):
+    """Create (or return) the LaybyPlan linked to this ticket, mirroring lines into LaybyItems."""
+    existing = LaybyPlan.objects.filter(ticket=ticket).first()
+    if existing:
+        return existing
+
+    plan = LaybyPlan.objects.create(
+        customer=ticket.customer,
+        deposit_amount=Decimal('0'),
+        total_price=ticket.total_incl_vat,
+        amount_paid=Decimal('0'),
+        status='ACTIVE',
+        shop=ticket.shop,
+        ticket=ticket,
+    )
+    for line in ticket.lines.all():
+        LaybyItem.objects.create(
+            plan=plan,
+            inventory_item=line.inventory_item,
+            quantity=line.quantity,
+            unit_price=line.unit_price_incl_vat,
+        )
+    return plan
 
 
 @transaction.atomic
@@ -554,8 +690,6 @@ def post_credit_sale(sale, customer_invoice: ARInvoice | None = None):
 @transaction.atomic
 def create_layby_ar_invoice(plan):
     """Create AR invoice for a layby plan to track receivables properly."""
-    from datetime import timedelta
-
     # Don't create duplicate invoice
     if plan.ar_invoice:
         return plan.ar_invoice
@@ -586,7 +720,8 @@ def create_layby_ar_invoice(plan):
         due_date=plan.due_date or (plan.created_date.date() if hasattr(plan.created_date, 'date') else plan.created_date) + timedelta(days=30),
         total_amount=plan.total_price,
         amount_paid=plan.amount_paid,
-        status='PENDING'
+        status='PENDING',
+        shop=plan.shop,
     )
 
     # Link to plan
@@ -599,7 +734,8 @@ def create_layby_ar_invoice(plan):
     je = JournalEntry.objects.create(
         memo=f"Layby plan AR invoice {invoice_number}",
         reference=invoice_number,
-        created_by=None
+        created_by=None,
+        shop=plan.shop,
     )
     JournalLine.objects.create(
         entry=je,
