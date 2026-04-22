@@ -1779,3 +1779,144 @@ def manage_gl_accounts(request):
     }
 
     return render(request, 'accounting/manage_gl_accounts.html', context)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# C2 — VAT return: output VAT − input VAT per period, per shop
+# ──────────────────────────────────────────────────────────────────────────────
+
+@login_required
+def vat_report(request):
+    """VAT return summary: output VAT (from sales) − input VAT (from expenses, imports)."""
+    from inventory.models import SalesTicket, SalesLine, Shop, ImportExpense
+    from .models import Expense
+    from datetime import date as date_cls
+    from datetime import timedelta
+
+    today = timezone.localdate()
+    default_start = today.replace(day=1)
+    start_str = request.GET.get('start_date', default_start.isoformat())
+    end_str = request.GET.get('end_date', today.isoformat())
+    shop_id = request.GET.get('shop_id') or None
+
+    try:
+        start_date = date_cls.fromisoformat(start_str)
+        end_date = date_cls.fromisoformat(end_str)
+    except ValueError:
+        start_date, end_date = default_start, today
+
+    shop_filter = None
+    if shop_id:
+        shop_filter = Shop.objects.filter(pk=shop_id).first()
+
+    # Output VAT — from non-voided SalesTicket within period
+    tickets_qs = SalesTicket.objects.filter(
+        created_at__date__gte=start_date,
+        created_at__date__lte=end_date,
+        voided=False,
+    )
+    if shop_filter:
+        tickets_qs = tickets_qs.filter(shop=shop_filter)
+
+    output_agg = tickets_qs.aggregate(
+        taxable_excl=Sum('subtotal_excl_vat'),
+        output_vat=Sum('vat_total'),
+        gross=Sum('total_incl_vat'),
+    )
+    output_vat = output_agg['output_vat'] or Decimal('0')
+    taxable_excl = output_agg['taxable_excl'] or Decimal('0')
+    gross_sales = output_agg['gross'] or Decimal('0')
+
+    # Per-tender breakdown for context
+    tender_rows = []
+    for tender, label in [('IMMEDIATE', 'Immediate'), ('CREDIT', 'Credit'), ('LAYBY', 'Layby')]:
+        tagg = tickets_qs.filter(terms=tender).aggregate(
+            t=Sum('total_incl_vat'), v=Sum('vat_total'),
+        )
+        tender_rows.append({
+            'label': label,
+            'total': tagg['t'] or Decimal('0'),
+            'vat': tagg['v'] or Decimal('0'),
+        })
+
+    # Zero-rated / exempt sales (line-level aggregation)
+    line_qs = SalesLine.objects.filter(
+        ticket__in=tickets_qs,
+    )
+    exempt_sales = line_qs.filter(is_vat_exempt=True).aggregate(
+        t=Sum('line_total_incl_vat')
+    )['t'] or Decimal('0')
+
+    # Input VAT — from Expense.vat_amount
+    expenses_qs = Expense.objects.filter(date__gte=start_date, date__lte=end_date)
+    if shop_filter:
+        expenses_qs = expenses_qs.filter(Q(shop=shop_filter) | Q(shop__isnull=True))
+    input_vat_exp = expenses_qs.aggregate(v=Sum('vat_amount'))['v'] or Decimal('0')
+
+    # Input VAT from ImportExpense rows tagged as VAT
+    import_vat_qs = ImportExpense.objects.filter(
+        import_order__order_date__gte=start_date,
+        import_order__order_date__lte=end_date,
+        expense_type='VAT',
+    )
+    input_vat_imports = import_vat_qs.aggregate(a=Sum('amount'))['a'] or Decimal('0')
+
+    total_input_vat = input_vat_exp + input_vat_imports
+    net_vat_due = output_vat - total_input_vat
+
+    context = {
+        'start_date': start_date,
+        'end_date': end_date,
+        'shops': Shop.objects.filter(is_active=True).order_by('name'),
+        'selected_shop': shop_filter,
+        'output_vat': output_vat,
+        'taxable_excl_vat': taxable_excl,
+        'gross_sales': gross_sales,
+        'exempt_sales': exempt_sales,
+        'tender_rows': tender_rows,
+        'input_vat_expenses': input_vat_exp,
+        'input_vat_imports': input_vat_imports,
+        'total_input_vat': total_input_vat,
+        'net_vat_due': net_vat_due,
+        'expenses': expenses_qs.select_related('gl_account', 'shop').order_by('date'),
+        'ticket_count': tickets_qs.count(),
+    }
+    return render(request, 'accounting/vat_report.html', context)
+
+
+@login_required
+def vat_report_export_csv(request):
+    """CSV export for the VAT report."""
+    import csv
+    from inventory.models import SalesTicket
+    from datetime import date as date_cls
+
+    start_str = request.GET.get('start_date')
+    end_str = request.GET.get('end_date')
+    shop_id = request.GET.get('shop_id') or None
+    today = timezone.localdate()
+    try:
+        start_date = date_cls.fromisoformat(start_str) if start_str else today.replace(day=1)
+        end_date = date_cls.fromisoformat(end_str) if end_str else today
+    except ValueError:
+        start_date, end_date = today.replace(day=1), today
+
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="vat_report_{start_date}_{end_date}.csv"'
+    w = csv.writer(response)
+    w.writerow(['Receipt', 'Shop', 'Date', 'Terms', 'Subtotal_Excl_VAT', 'VAT', 'Total_Incl_VAT'])
+
+    qs = SalesTicket.objects.filter(
+        created_at__date__gte=start_date,
+        created_at__date__lte=end_date,
+        voided=False,
+    ).select_related('shop')
+    if shop_id:
+        qs = qs.filter(shop_id=shop_id)
+
+    for t in qs.order_by('created_at'):
+        w.writerow([
+            t.receipt_number, t.shop.code, t.created_at.date(), t.terms,
+            t.subtotal_excl_vat, t.vat_total, t.total_incl_vat,
+        ])
+    return response

@@ -462,6 +462,10 @@ class Expense(models.Model):
     category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
     description = models.CharField(max_length=255, blank=True)
     amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    vat_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal('0'),
+        help_text='Input VAT recoverable (portion of amount). 0 for exempt/non-VATable expenses.',
+    )
     gl_account = models.ForeignKey(GLAccount, on_delete=models.PROTECT, limit_choices_to={'type': 'EXP'})
     payment_method = models.CharField(max_length=10, choices=PAYMENT_METHODS, default='CASH')
     reference = models.CharField(max_length=100, blank=True)

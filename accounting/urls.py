@@ -52,4 +52,8 @@ urlpatterns = [
 
     # Management Pages
     path('manage/gl-accounts/', views.manage_gl_accounts, name='manage_gl_accounts'),
+
+    # VAT Return
+    path('reports/vat/', views.vat_report, name='vat_report'),
+    path('reports/vat/export/', views.vat_report_export_csv, name='vat_report_export_csv'),
 ]
