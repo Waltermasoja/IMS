@@ -1,0 +1,163 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Receipt {{ ticket.receipt_number }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    @media print {
+      @page { margin: 6mm; size: 80mm auto; }
+      .no-print { display: none !important; }
+      body { -webkit-print-color-adjust: exact; }
+    }
+    body { font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica, Arial; color: #111827; font-size: 12px; line-height: 1.4; }
+    .container { max-width: 80mm; margin: 0 auto; padding: 12px; }
+    .wide { max-width: 600px; }
+    .center { text-align: center; }
+    .right { text-align: right; }
+    .muted { color: #6b7280; font-size: 10px; }
+    .bold { font-weight: 700; }
+    .xl { font-size: 18px; }
+    .lg { font-size: 14px; }
+    .sep { border-top: 1px dashed #9ca3af; margin: 8px 0; }
+    .sep-solid { border-top: 2px solid #111827; margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 2px 0; vertical-align: top; }
+    .item-row td { padding: 3px 0; }
+    .tot-row td { padding: 2px 0; }
+    .header-row td { padding: 4px 0; border-bottom: 1px solid #d1d5db; font-size: 10px; color: #6b7280; }
+    .badge { display: inline-block; padding: 2px 6px; background: #dcfce7; color: #166534; border-radius: 4px; font-size: 10px; font-weight: 600; }
+    .badge.credit { background: #dbeafe; color: #1e40af; }
+    .badge.layby { background: #e0e7ff; color: #3730a3; }
+    .badge.exempt { background: #f3f4f6; color: #6b7280; font-size: 9px; }
+    .btn { display: inline-block; background: #111827; color: #fff; border-radius: 6px; padding: 6px 12px; text-decoration: none; font-size: 12px; margin-right: 6px; }
+    .controls { margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="controls no-print">
+      <a class="btn" href="#" onclick="window.print(); return false;"><i class="fas fa-print"></i> Print</a>
+      <a class="btn" style="background:#6b7280" href="javascript:window.close()">Close</a>
+    </div>
+
+    <!-- Company header -->
+    <div class="center">
+      <div class="xl bold">{{ site_settings.company_name|default:"IMS Pro" }}</div>
+      {% if shop %}<div class="lg bold">{{ shop.name }}</div>{% endif %}
+      {% if shop.address %}<div class="muted">{{ shop.address }}</div>{% endif %}
+      {% if shop.phone %}<div class="muted">{{ shop.phone }}</div>{% endif %}
+      {% if site_settings.tax_registration_number or shop.vat_number_override %}
+      <div class="muted">
+        VAT No:
+        {% if shop.vat_number_override %}{{ shop.vat_number_override }}{% else %}{{ site_settings.tax_registration_number }}{% endif %}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="sep-solid"></div>
+
+    <!-- Receipt metadata -->
+    <table>
+      <tr><td class="muted">Receipt:</td><td class="right bold">{{ ticket.receipt_number }}</td></tr>
+      <tr><td class="muted">Date:</td><td class="right">{{ ticket.created_at|date:"Y-m-d H:i" }}</td></tr>
+      <tr><td class="muted">Cashier:</td><td class="right">{{ ticket.cashier.get_full_name|default:ticket.cashier.username|default:"—" }}</td></tr>
+      <tr>
+        <td class="muted">Terms:</td>
+        <td class="right">
+          <span class="badge {% if ticket.terms == 'CREDIT' %}credit{% elif ticket.terms == 'LAYBY' %}layby{% endif %}">
+            {{ ticket.get_terms_display }}
+          </span>
+        </td>
+      </tr>
+      <tr><td class="muted">Tender:</td><td class="right">{{ ticket.get_tender_type_display }}</td></tr>
+      {% if ticket.tender_reference %}
+      <tr><td class="muted">Reference:</td><td class="right muted" style="font-family:monospace">{{ ticket.tender_reference }}</td></tr>
+      {% endif %}
+      {% if customer %}
+      <tr><td class="muted">Customer:</td><td class="right bold">{{ customer.name }}</td></tr>
+      {% if customer.phone %}<tr><td></td><td class="right muted">{{ customer.phone }}</td></tr>{% endif %}
+      {% endif %}
+    </table>
+
+    <div class="sep"></div>
+
+    <!-- Line items -->
+    <table>
+      <tr class="header-row">
+        <td>ITEM</td>
+        <td class="right">QTY × UNIT</td>
+        <td class="right">AMOUNT</td>
+      </tr>
+      {% for line in lines %}
+      <tr class="item-row">
+        <td>
+          <div class="bold">{{ line.inventory_item.name }}</div>
+          {% if line.variant %}
+          <div class="muted" style="font-family:monospace">{{ line.variant.sku }}</div>
+          {% else %}
+          <div class="muted" style="font-family:monospace">{{ line.inventory_item.product_code }}</div>
+          {% endif %}
+          {% if line.is_vat_exempt %}<span class="badge exempt">VAT EXEMPT</span>{% endif %}
+        </td>
+        <td class="right">
+          {{ line.quantity }} × {{ site_settings.currency_symbol }}{{ line.unit_price_incl_vat|floatformat:2 }}
+          {% if line.discount_amount %}<div class="muted">less {{ site_settings.currency_symbol }}{{ line.discount_amount|floatformat:2 }}</div>{% endif %}
+        </td>
+        <td class="right bold">{{ site_settings.currency_symbol }}{{ line.line_total_incl_vat|floatformat:2 }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+
+    <div class="sep"></div>
+
+    <!-- Totals with VAT breakdown -->
+    <table>
+      <tr class="tot-row">
+        <td class="muted">Subtotal (excl VAT):</td>
+        <td class="right">{{ site_settings.currency_symbol }}{{ ticket.subtotal_excl_vat|floatformat:2 }}</td>
+      </tr>
+      <tr class="tot-row">
+        <td class="muted">VAT ({{ vat_rate }}%):</td>
+        <td class="right">{{ site_settings.currency_symbol }}{{ ticket.vat_total|floatformat:2 }}</td>
+      </tr>
+      {% if ticket.discount_total %}
+      <tr class="tot-row">
+        <td class="muted">Discounts:</td>
+        <td class="right">-{{ site_settings.currency_symbol }}{{ ticket.discount_total|floatformat:2 }}</td>
+      </tr>
+      {% endif %}
+    </table>
+
+    <div class="sep-solid"></div>
+
+    <table>
+      <tr>
+        <td class="lg bold">TOTAL:</td>
+        <td class="right lg bold">{{ site_settings.currency_symbol }}{{ ticket.total_incl_vat|floatformat:2 }}</td>
+      </tr>
+    </table>
+
+    {% if ticket.terms == 'LAYBY' %}
+    <div class="sep"></div>
+    <div class="center muted">
+      <div class="bold" style="color:#3730a3">LAYBY RESERVATION</div>
+      <div>Goods will be released on full payment.</div>
+    </div>
+    {% elif ticket.terms == 'CREDIT' %}
+    <div class="sep"></div>
+    <div class="center muted">
+      <div class="bold" style="color:#1e40af">ON ACCOUNT — PAYMENT DUE</div>
+      <div>Please settle by due date on invoice.</div>
+    </div>
+    {% endif %}
+
+    <div class="sep"></div>
+    <div class="center muted">
+      Thank you for your business!<br>
+      {% if site_settings.receipt_footer_message %}{{ site_settings.receipt_footer_message }}{% endif %}
+    </div>
+  </div>
+</body>
+</html>

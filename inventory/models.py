@@ -391,6 +391,9 @@ class Inventory(models.Model):
         help_text="Thumbnail (auto-generated 200x200 with smart crop)"
     )
     
+    # VAT
+    is_vat_exempt = models.BooleanField(default=False, help_text="Zero-rated for VAT (e.g. basic foodstuffs)")
+
     # Stock control fields
     reorder_point = models.IntegerField(default=0, help_text="Minimum stock level before reordering")
     lead_time_days = models.IntegerField(default=0, help_text="Supplier lead time in days")
@@ -582,12 +585,22 @@ class ProductVariant(models.Model):
     # Attributes for this variant (Size: M, Color: Black)
     attribute_values = models.ManyToManyField(AttributeValue, related_name='variants')
 
+    # VAT (inherits from product when None)
+    is_vat_exempt = models.BooleanField(null=True, blank=True,
+                                        help_text="Override product VAT status. Leave blank to inherit.")
+
     # Status
     is_active = models.BooleanField(default=True)
 
     # Metadata
     created_date = models.DateTimeField(auto_now_add=True)
     last_updated = models.DateTimeField(auto_now=True)
+
+    @property
+    def effective_is_vat_exempt(self):
+        if self.is_vat_exempt is not None:
+            return self.is_vat_exempt
+        return self.product.is_vat_exempt
 
     class Meta:
         ordering = ['product', 'sku']

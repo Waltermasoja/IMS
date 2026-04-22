@@ -732,7 +732,7 @@ function posInterface() {
 
     printReceipt() {
       if (this.lastTicket && this.lastTicket.receipt_number) {
-        window.open(`/inventory/invoice/print/${this.lastTicket.receipt_number}/`, '_blank');
+        window.open(`/inventory/receipt/${this.lastTicket.receipt_number}/`, '_blank');
       }
     },
 

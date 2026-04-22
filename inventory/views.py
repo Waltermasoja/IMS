@@ -971,6 +971,10 @@ def checkout_ticket(request):
 
                 discount_amount = (unit_price * qty * discount_percent / 100).quantize(Decimal('0.01'))
 
+                vat_exempt = (
+                    variant.effective_is_vat_exempt if variant else inv.is_vat_exempt
+                )
+
                 line = SalesLine(
                     ticket=ticket,
                     inventory_item=inv,
@@ -978,6 +982,7 @@ def checkout_ticket(request):
                     quantity=qty,
                     unit_price_incl_vat=unit_price,
                     discount_amount=discount_amount,
+                    is_vat_exempt=vat_exempt,
                     unit_cost=inv.purchase_price or Decimal('0'),
                 )
                 line.compute(vat_rate=vat_rate)
@@ -2549,6 +2554,7 @@ def product_search_ajax(request):
             'display_name': f"{product.product_code} - {product.name}",
             'thumbnail_url': thumbnail_url,
             'has_variants': product.has_variants,
+            'is_vat_exempt': product.is_vat_exempt,
         }
 
         if product.has_variants:
@@ -2632,7 +2638,39 @@ def invoice_print(request, receipt_number):
         'total_amount': total_amount,
         'sale_date': sales.first().sale_date,
     }
+    # If no legacy Sales found, try SalesTicket (new multi-shop receipts)
+    if not sales.exists():
+        ticket = SalesTicket.objects.filter(receipt_number=receipt_number).select_related('shop', 'customer', 'cashier').first()
+        if ticket:
+            return _render_ticket_receipt(request, ticket)
+
     return render(request, 'inventory/invoice_print.html', context)
+
+
+def _render_ticket_receipt(request, ticket):
+    """Render a SalesTicket-based receipt with proper VAT breakdown."""
+    settings_ = SiteSettings.get_settings()
+    lines = ticket.lines.select_related('inventory_item', 'variant').all()
+    context = {
+        'ticket': ticket,
+        'lines': lines,
+        'shop': ticket.shop,
+        'customer': ticket.customer,
+        'site_settings': settings_,
+        'vat_rate': settings_.tax_rate if settings_ else 15,
+    }
+    return render(request, 'inventory/ticket_receipt.html', context)
+
+
+@login_required
+@require_http_methods(["GET"])
+def ticket_receipt(request, receipt_number):
+    """Printable receipt for a SalesTicket."""
+    ticket = get_object_or_404(
+        SalesTicket.objects.select_related('shop', 'customer', 'cashier'),
+        receipt_number=receipt_number,
+    )
+    return _render_ticket_receipt(request, ticket)
 
 
 def render_invoice_html(receipt_number):
