@@ -7,8 +7,55 @@ from .models import (
     Supplier, ImportOrder, SupplierInvoice, InvoicePayment, ImportExpense, ImportOrderItem,
     UserProfile, Customer,
     SalesInvoice, SalesInvoiceItem,
-    AttributeType, AttributeValue, ProductVariant
+    AttributeType, AttributeValue, ProductVariant,
+    Shop, ShopStock, StockTransfer,
 )
+
+# ==================== MULTI-SHOP (PHASE A1) ====================
+
+@admin.register(Shop)
+class ShopAdmin(admin.ModelAdmin):
+    list_display = ['name', 'code', 'manager', 'phone', 'is_active', 'created_date']
+    list_filter = ['is_active']
+    search_fields = ['name', 'code', 'phone']
+    readonly_fields = ['created_date', 'last_updated']
+    fieldsets = (
+        ('Identity', {'fields': ('name', 'code', 'is_active')}),
+        ('Contact', {'fields': ('address', 'phone', 'manager')}),
+        ('VAT', {'fields': ('vat_number_override',), 'classes': ('collapse',)}),
+        ('Metadata', {'fields': ('created_date', 'last_updated'), 'classes': ('collapse',)}),
+    )
+
+
+@admin.register(ShopStock)
+class ShopStockAdmin(admin.ModelAdmin):
+    list_display = ['shop', 'inventory_item', 'variant', 'quantity', 'reorder_point', 'last_updated']
+    list_filter = ['shop']
+    search_fields = ['inventory_item__name', 'inventory_item__product_code', 'variant__sku']
+    readonly_fields = ['last_updated']
+    autocomplete_fields = ['inventory_item', 'variant']
+
+
+@admin.register(StockTransfer)
+class StockTransferAdmin(admin.ModelAdmin):
+    list_display = ['inventory_item', 'variant', 'quantity', 'from_shop', 'to_shop', 'status', 'transferred_at']
+    list_filter = ['status', 'from_shop', 'to_shop']
+    search_fields = ['inventory_item__name', 'variant__sku', 'notes']
+    readonly_fields = ['created_date', 'status']
+    autocomplete_fields = ['inventory_item', 'variant']
+    actions = ['execute_transfers']
+
+    def execute_transfers(self, request, queryset):
+        executed = 0
+        for t in queryset.filter(status='DRAFT'):
+            try:
+                t.execute()
+                executed += 1
+            except Exception as e:
+                self.message_user(request, f"Transfer #{t.pk} failed: {e}", level='error')
+        self.message_user(request, f"Executed {executed} transfer(s).")
+    execute_transfers.short_description = "Execute selected DRAFT transfers"
+
 
 # ==================== EXISTING MODELS ====================
 
@@ -225,7 +272,7 @@ class UserProfileInline(admin.StackedInline):
     
     fieldsets = (
         ('Role & Permissions', {
-            'fields': ('role',)
+            'fields': ('role', 'default_shop')
         }),
         ('POS Settings', {
             'fields': ('can_make_sales', 'can_process_returns', 'can_apply_discounts', 'max_discount_percent')
@@ -256,7 +303,7 @@ class UserProfileAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('User & Role', {
-            'fields': ('user', 'role')
+            'fields': ('user', 'role', 'default_shop')
         }),
         ('POS Permissions', {
             'fields': ('can_make_sales', 'can_process_returns', 'can_apply_discounts', 'max_discount_percent')

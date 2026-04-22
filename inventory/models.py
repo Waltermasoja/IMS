@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from django.db.models import Sum
 from decimal import Decimal
@@ -213,6 +213,47 @@ def validate_image_size(image):
         raise ValidationError(f'Image file too large (max {max_size_mb}MB)')
 
 
+# ==================== MULTI-SHOP (PHASE A1) ====================
+
+class Shop(models.Model):
+    """
+    A physical retail shop/branch. Stock, sales, cashbook, and financial
+    statements are segregated by shop. Corporate-level entries (e.g. group
+    expenses, inter-shop transfers) leave shop=NULL where the FK is nullable.
+    """
+    name = models.CharField(max_length=100)
+    code = models.CharField(
+        max_length=10, unique=True,
+        help_text="Short code for receipts, SKUs, barcodes (e.g. 'BBY', 'CLO')",
+    )
+    address = models.TextField(blank=True)
+    phone = models.CharField(max_length=50, blank=True)
+    manager = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='managed_shops',
+    )
+    is_active = models.BooleanField(default=True)
+    vat_number_override = models.CharField(
+        max_length=50, blank=True,
+        help_text="Per-shop VAT number if different from SiteSettings (future ZIMRA per-shop registration)",
+    )
+    created_date = models.DateTimeField(auto_now_add=True)
+    last_updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Shop'
+        verbose_name_plural = 'Shops'
+
+    def __str__(self):
+        return self.name
+
+    def save(self, *args, **kwargs):
+        if self.code:
+            self.code = self.code.upper().strip()
+        super().save(*args, **kwargs)
+
+
 class UserProfile(models.Model):
     """Extended user profile for role-based access"""
     USER_ROLES = [
@@ -237,7 +278,14 @@ class UserProfile(models.Model):
     can_manage_inventory = models.BooleanField(default=False)
     can_manage_suppliers = models.BooleanField(default=False)
     can_manage_users = models.BooleanField(default=False)
-    
+
+    # Shop assignment — drives POS shop selector default and scopes stock visibility
+    default_shop = models.ForeignKey(
+        'Shop', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='default_for_users',
+        help_text="The shop this user operates at by default (cashiers pinned to their till's shop)",
+    )
+
     # Metadata
     created_date = models.DateTimeField(auto_now_add=True)
     last_updated = models.DateTimeField(auto_now=True)
@@ -612,6 +660,126 @@ class ProductVariant(models.Model):
                 temp_sku = f"TEMP-{self.product.product_code or 'PROD'}-{timezone.now().timestamp()}"
                 self.sku = temp_sku
         super().save(*args, **kwargs)
+
+
+# ==================== PER-SHOP STOCK (PHASE A1) ====================
+
+class ShopStock(models.Model):
+    """
+    Per-shop quantity on hand for a product (or a specific variant).
+
+    This is the source of truth for stock counts once Phase A3 cuts the
+    write paths over. Until then it co-exists with the legacy
+    Inventory.quantity_in_Stock / ProductVariant.quantity_in_stock fields;
+    nothing writes here automatically in Phase A1.
+
+    Use ShopStock.get_or_create_for(shop, item, variant=None) to avoid
+    leaking UNIQUE-violation paths into callers.
+    """
+    shop = models.ForeignKey('Shop', on_delete=models.PROTECT, related_name='stock_rows')
+    inventory_item = models.ForeignKey('Inventory', on_delete=models.CASCADE, related_name='shop_stock')
+    variant = models.ForeignKey(
+        'ProductVariant', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='shop_stock',
+    )
+    quantity = models.IntegerField(default=0)
+    reorder_point = models.IntegerField(
+        default=0,
+        help_text="Per-shop reorder point; 0 means fall back to product/variant level",
+    )
+    last_updated = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [('shop', 'inventory_item', 'variant')]
+        verbose_name = 'Shop Stock'
+        verbose_name_plural = 'Shop Stock'
+        ordering = ['shop', 'inventory_item']
+
+    def __str__(self):
+        target = self.variant.sku if self.variant else self.inventory_item.name
+        return f"{self.shop.code}: {target} × {self.quantity}"
+
+    @classmethod
+    def get_or_create_for(cls, shop, inventory_item, variant=None):
+        row, _ = cls.objects.get_or_create(
+            shop=shop, inventory_item=inventory_item, variant=variant,
+            defaults={'quantity': 0},
+        )
+        return row
+
+
+class StockTransfer(models.Model):
+    """
+    Move stock from one shop to another.
+
+    A transfer is created as DRAFT and must be executed via execute() to
+    actually move the stock. execute() is atomic: it debits the source
+    ShopStock, credits the destination, writes two StockMovement rows,
+    and flips status to COMPLETED. Idempotent — a COMPLETED transfer
+    will not be re-applied.
+    """
+    STATUS_CHOICES = [
+        ('DRAFT', 'Draft'),
+        ('COMPLETED', 'Completed'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+    from_shop = models.ForeignKey('Shop', on_delete=models.PROTECT, related_name='transfers_out')
+    to_shop = models.ForeignKey('Shop', on_delete=models.PROTECT, related_name='transfers_in')
+    inventory_item = models.ForeignKey('Inventory', on_delete=models.PROTECT)
+    variant = models.ForeignKey('ProductVariant', on_delete=models.PROTECT, null=True, blank=True)
+    quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    transferred_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='stock_transfers',
+    )
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='DRAFT')
+    notes = models.TextField(blank=True)
+    transferred_at = models.DateTimeField(default=timezone.now, db_index=True)
+    created_date = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-transferred_at']
+        verbose_name = 'Stock Transfer'
+        verbose_name_plural = 'Stock Transfers'
+
+    def __str__(self):
+        target = self.variant.sku if self.variant else self.inventory_item.name
+        return f"{target} × {self.quantity}: {self.from_shop.code} → {self.to_shop.code}"
+
+    def clean(self):
+        if self.from_shop_id and self.to_shop_id and self.from_shop_id == self.to_shop_id:
+            raise ValidationError("from_shop and to_shop must be different")
+
+    @transaction.atomic
+    def execute(self):
+        if self.status != 'DRAFT':
+            return
+        source = ShopStock.get_or_create_for(self.from_shop, self.inventory_item, self.variant)
+        if source.quantity < self.quantity:
+            raise ValidationError(
+                f"Insufficient stock at {self.from_shop.code}: "
+                f"have {source.quantity}, need {self.quantity}"
+            )
+        dest = ShopStock.get_or_create_for(self.to_shop, self.inventory_item, self.variant)
+        source.quantity -= self.quantity
+        dest.quantity += self.quantity
+        source.save(update_fields=['quantity', 'last_updated'])
+        dest.save(update_fields=['quantity', 'last_updated'])
+        StockMovement.objects.create(
+            inventory_item=self.inventory_item,
+            movement_type='OUT',
+            quantity=self.quantity,
+            reason=f'Transfer to {self.to_shop.code} (#{self.pk})',
+        )
+        StockMovement.objects.create(
+            inventory_item=self.inventory_item,
+            movement_type='IN',
+            quantity=self.quantity,
+            reason=f'Transfer from {self.from_shop.code} (#{self.pk})',
+        )
+        self.status = 'COMPLETED'
+        self.save(update_fields=['status'])
+
 
 class Sales(models.Model):
     PAYMENT_METHODS = [
