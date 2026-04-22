@@ -42,6 +42,8 @@ urlpatterns = [
     path('api/product-details/<int:pk>/', product_details_ajax, name='product_details_ajax'),
     path('invoice/print/<str:receipt_number>/', invoice_print, name='invoice_print'),
     path('receipt/<str:receipt_number>/', ticket_receipt, name='ticket_receipt'),
+    path('returns/lookup/', ticket_lookup, name='ticket_lookup'),
+    path('returns/ticket/<int:ticket_pk>/process/', ticket_return_process, name='ticket_return_process'),
     path('inventory/update/<int:pk>/', update_inventory, name='update_inventory_ajax'),
     path('pos/', simple_pos, name='pos_interface'),
     # Customers & A/R & Layby

@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+{% block title %}Returns — Lookup Ticket{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-4" x-data="returnApp()">
+  <div class="bg-white rounded-2xl shadow-sm p-5">
+    <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-undo text-orange-500 mr-2"></i>Process Return</h1>
+    <p class="text-sm text-gray-500 mt-1">Look up a receipt by number to start a return.</p>
+  </div>
+
+  <!-- Lookup form -->
+  <form method="get" class="bg-white rounded-2xl shadow-sm p-4 flex gap-2">
+    <input type="text" name="receipt" value="{{ receipt }}" placeholder="Receipt number (e.g. BBY-20260422-0001)"
+           class="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 focus:outline-none font-mono">
+    <button type="submit" class="px-4 py-2 bg-orange-600 text-white text-sm rounded-lg hover:bg-orange-700">
+      <i class="fas fa-search mr-1"></i> Look Up
+    </button>
+  </form>
+
+  {% if receipt and not ticket %}
+  <div class="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
+    <i class="fas fa-exclamation-circle mr-1"></i>No ticket found for <span class="font-mono">{{ receipt }}</span>
+  </div>
+  {% endif %}
+
+  {% if ticket %}
+  <div class="bg-white rounded-2xl shadow-sm p-5">
+    <div class="flex flex-wrap justify-between gap-3 pb-3 border-b border-gray-100">
+      <div>
+        <p class="text-xs text-gray-500">Receipt</p>
+        <p class="text-lg font-bold font-mono text-gray-900">{{ ticket.receipt_number }}</p>
+      </div>
+      <div class="text-right">
+        <p class="text-xs text-gray-500">{{ ticket.shop.name }} · {{ ticket.created_at|date:"Y-m-d H:i" }}</p>
+        <p class="text-sm">
+          <span class="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">{{ ticket.get_terms_display }}</span>
+          <span class="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs">{{ ticket.get_tender_type_display }}</span>
+        </p>
+        <p class="text-xl font-bold text-green-600 mt-1">{{ site_settings.currency_symbol }}{{ ticket.total_incl_vat|floatformat:2 }}</p>
+      </div>
+    </div>
+
+    <h3 class="font-semibold mt-4 mb-2 text-gray-900">Line Items</h3>
+    <table class="w-full text-sm">
+      <thead class="text-gray-500 border-b text-xs uppercase">
+        <tr>
+          <th class="py-2 text-left">Item</th>
+          <th class="py-2 text-right">Sold</th>
+          <th class="py-2 text-right">Unit</th>
+          <th class="py-2 text-right">Return Qty</th>
+          <th class="py-2 text-left">Restockable?</th>
+          <th class="py-2 text-left">Reason</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in lines %}
+        <tr class="border-b border-gray-50" x-data="{ qty: 0, restockable: true, reason: '' }">
+          <td class="py-2">
+            <p class="font-medium">{{ line.inventory_item.name }}</p>
+            <p class="text-xs font-mono text-gray-400">{% if line.variant %}{{ line.variant.sku }}{% else %}{{ line.inventory_item.product_code }}{% endif %}</p>
+          </td>
+          <td class="py-2 text-right">{{ line.quantity }}</td>
+          <td class="py-2 text-right">{{ site_settings.currency_symbol }}{{ line.unit_price_incl_vat|floatformat:2 }}</td>
+          <td class="py-2 text-right">
+            <input type="number" x-model.number="qty" min="0" max="{{ line.quantity }}"
+                   @input="updateItem({{ line.pk }}, qty, restockable, reason)"
+                   class="w-20 px-2 py-1 border rounded text-right">
+          </td>
+          <td class="py-2">
+            <label class="inline-flex items-center text-xs">
+              <input type="checkbox" x-model="restockable" @change="updateItem({{ line.pk }}, qty, restockable, reason)" class="mr-1">
+              Restock
+            </label>
+          </td>
+          <td class="py-2">
+            <input type="text" x-model="reason" @input="updateItem({{ line.pk }}, qty, restockable, reason)"
+                   placeholder="reason" class="w-full px-2 py-1 border rounded text-xs">
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-end gap-3">
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Refund Tender</label>
+        <select x-model="refundTender" class="px-3 py-2 text-sm border rounded-lg">
+          <option value="CASH">Cash</option>
+          <option value="ECOCASH">EcoCash</option>
+          <option value="BANK_TRANSFER">Bank Transfer</option>
+          <option value="CARD">Card</option>
+          <option value="STORE_CREDIT">Store Credit</option>
+          {% if ticket.terms != 'IMMEDIATE' %}<option value="AR_CREDIT">Credit on AR</option>{% endif %}
+        </select>
+      </div>
+      <button @click="submitReturn()" :disabled="submitting || itemCount === 0"
+              class="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-semibold hover:bg-orange-700 disabled:opacity-50">
+        <span x-show="!submitting"><i class="fas fa-undo mr-1"></i>Process Return (<span x-text="itemCount"></span> line<span x-text="itemCount === 1 ? '' : 's'"></span>)</span>
+        <span x-show="submitting">Processing…</span>
+      </button>
+    </div>
+
+    <div x-show="message" class="mt-3 p-3 rounded-lg text-sm"
+         :class="success ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'">
+      <i class="fas mr-1" :class="success ? 'fa-check-circle' : 'fa-exclamation-circle'"></i><span x-text="message"></span>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function returnApp() {
+  return {
+    items: {},
+    refundTender: '{{ ticket.tender_type|default:"CASH" }}',
+    submitting: false,
+    message: '',
+    success: false,
+
+    get itemCount() {
+      return Object.values(this.items).filter(i => i.qty > 0).length;
+    },
+
+    updateItem(lineId, qty, restockable, reason) {
+      this.items[lineId] = { line_id: lineId, qty: qty, is_restockable: restockable, reason: reason };
+    },
+
+    submitReturn() {
+      this.message = '';
+      this.submitting = true;
+      const payload = {
+        refund_tender: this.refundTender,
+        items: Object.values(this.items).filter(i => i.qty > 0),
+      };
+      fetch('{% url "ticket_return_process" ticket.pk %}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': '{{ csrf_token }}',
+        },
+        body: JSON.stringify(payload),
+      })
+        .then(r => r.json())
+        .then(data => {
+          this.submitting = false;
+          this.success = !!data.success;
+          this.message = data.success
+            ? `Processed ${data.count} return line(s). Refund posted.`
+            : (data.error || 'Failed to process return');
+          if (data.success) setTimeout(() => window.location.reload(), 1500);
+        })
+        .catch(err => {
+          this.submitting = false;
+          this.success = false;
+          this.message = 'Network error: ' + err.message;
+        });
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -778,3 +778,158 @@ def post_layby_fulfillment(plan, amount, sale=None):
             JournalLine.objects.create(entry=je, account=cogs_acct, debit=cogs, description='COGS', sale_id=sale.id)
             JournalLine.objects.create(entry=je, account=inventory, credit=cogs, description='Inventory out', sale_id=sale.id)
     je.assert_balanced()
+
+@transaction.atomic
+def post_return_from_ticket(return_obj, user=None):
+    """Reverse GL for a ticket-based return + refund via chosen tender.
+
+    The reversal is proportional to the quantity returned vs quantity sold on
+    that line. Posts:
+      Dr Sales Revenue (excl VAT)
+      Dr Output VAT (if line was taxable)
+      Cr Refund tender account (Cash / EcoCash / Bank / etc.)
+      Dr Inventory (restock if is_restockable)
+      Cr COGS (restock) OR stays written off via Inventory Loss
+    """
+    from inventory.models import ShopStock, StockMovement
+
+    if return_obj.posted_to_gl:
+        return
+
+    line = return_obj.ticket_line
+    if not line:
+        return
+
+    ticket = line.ticket
+    qty_returned = Decimal(return_obj.quantity_returned)
+    qty_sold = Decimal(line.quantity)
+    if qty_sold <= 0 or qty_returned <= 0:
+        return
+
+    ratio = qty_returned / qty_sold
+    return_total_incl = (line.line_total_incl_vat * ratio).quantize(Decimal('0.01'))
+    return_vat = (line.vat_amount * ratio).quantize(Decimal('0.01'))
+    return_excl = return_total_incl - return_vat
+    return_cost = (Decimal(line.unit_cost) * qty_returned).quantize(Decimal('0.01'))
+
+    if not return_obj.refund_amount or return_obj.refund_amount == Decimal('0'):
+        return_obj.refund_amount = return_total_incl
+
+    revenue = require_gl('4000')
+    vat_payable = require_gl('2400') if return_vat > 0 else None
+    cogs_acct = require_gl('5000')
+    inventory_acct = require_gl('1300')
+    inv_loss_acct = require_gl('5100')
+
+    # Refund tender account
+    refund_tender = return_obj.refund_tender
+    if refund_tender in ('CASH', 'ECOCASH', 'BANK_TRANSFER', 'CARD'):
+        tender_acct = get_tender_account(refund_tender)
+    elif refund_tender == 'AR_CREDIT':
+        # Reduce customer AR balance — use AR account
+        tender_acct = require_gl('1200')
+    else:
+        # STORE_CREDIT — treat as customer liability for now, park in 2300 Unearned
+        tender_acct = require_gl('2300')
+
+    je = JournalEntry.objects.create(
+        memo=f'Return vs {ticket.receipt_number} @ {ticket.shop.code}',
+        reference=f'RTN-{ticket.receipt_number}-{return_obj.pk}',
+        created_by=user,
+        shop=ticket.shop,
+    )
+
+    # Dr Revenue (reverse)
+    JournalLine.objects.create(
+        entry=je, account=revenue, debit=return_excl,
+        description=f'Return reversal — {line.inventory_item.name}',
+    )
+    # Dr Output VAT (reverse)
+    if vat_payable and return_vat > 0:
+        JournalLine.objects.create(
+            entry=je, account=vat_payable, debit=return_vat,
+            description='Output VAT reversal',
+        )
+    # Cr Tender (refund paid out)
+    JournalLine.objects.create(
+        entry=je, account=tender_acct, credit=return_total_incl,
+        description=f'{return_obj.get_refund_tender_display()} refund',
+    )
+
+    # Stock: restock or write off
+    if return_obj.is_restockable and return_obj.restock_to_shop_id:
+        # Dr Inventory, Cr COGS
+        if return_cost > 0:
+            JournalLine.objects.create(
+                entry=je, account=inventory_acct, debit=return_cost,
+                description='Inventory restocked on return',
+            )
+            JournalLine.objects.create(
+                entry=je, account=cogs_acct, credit=return_cost,
+                description='COGS reversal',
+            )
+        stock_row = ShopStock.get_or_create_for(
+            return_obj.restock_to_shop, line.inventory_item, line.variant,
+        )
+        stock_row.quantity += int(qty_returned)
+        stock_row.save(update_fields=['quantity', 'last_updated'])
+        StockMovement.objects.create(
+            inventory_item=line.inventory_item,
+            movement_type='IN',
+            quantity=int(qty_returned),
+            reason=f'Return restock {ticket.receipt_number}',
+            shop=return_obj.restock_to_shop,
+        )
+    else:
+        # Goods not restockable — move to Inventory Loss
+        if return_cost > 0:
+            JournalLine.objects.create(
+                entry=je, account=inv_loss_acct, debit=return_cost,
+                description='Unsellable return — loss',
+            )
+            JournalLine.objects.create(
+                entry=je, account=cogs_acct, credit=return_cost,
+                description='COGS reversal (written off)',
+            )
+
+    je.assert_balanced()
+
+    # Customer balance adjustment for CREDIT / LAYBY refunds
+    if refund_tender == 'AR_CREDIT' and ticket.customer_id:
+        ticket.customer.current_balance = (
+            (ticket.customer.current_balance or Decimal('0')) - return_total_incl
+        )
+        ticket.customer.save(update_fields=['current_balance'])
+
+    return_obj.posted_to_gl = True
+    return_obj.save(update_fields=['posted_to_gl', 'refund_amount'])
+
+
+@transaction.atomic
+def post_damaged_goods(damaged, user=None):
+    """Post Dr Inventory Loss (5100) / Cr Inventory (1300) at weighted cost."""
+    unit_cost = damaged.inventory_item.purchase_price or Decimal('0')
+    if damaged.variant and damaged.variant.purchase_price:
+        unit_cost = damaged.variant.purchase_price
+    total_loss = unit_cost * damaged.quantity_damaged
+    if total_loss <= 0:
+        return
+
+    inv_loss = require_gl('5100')
+    inventory = require_gl('1300')
+
+    je = JournalEntry.objects.create(
+        memo=f'Damage @ {damaged.shop.code if damaged.shop else "HQ"} — {damaged.damage_description[:80]}',
+        reference=f'DMG-{damaged.pk}',
+        created_by=user,
+        shop=damaged.shop,
+    )
+    JournalLine.objects.create(
+        entry=je, account=inv_loss, debit=total_loss,
+        description=f'{damaged.quantity_damaged}x {damaged.inventory_item.name}',
+    )
+    JournalLine.objects.create(
+        entry=je, account=inventory, credit=total_loss,
+        description='Inventory written off (damaged)',
+    )
+    je.assert_balanced()

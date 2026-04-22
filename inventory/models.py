@@ -1021,12 +1021,51 @@ class SalesLine(models.Model):
 
 
 class Return(models.Model):
+    """Return of goods from a sale.
+
+    Legacy usage attaches to a Sales row. New multi-shop flow attaches to a
+    SalesLine (which carries shop + VAT context). When ticket_line is set,
+    the save() method reverses GL, refunds via refund_tender, and restocks.
+    """
+    REFUND_TENDER_CHOICES = [
+        ('CASH', 'Cash'),
+        ('ECOCASH', 'EcoCash'),
+        ('BANK_TRANSFER', 'Bank Transfer'),
+        ('CARD', 'Card'),
+        ('STORE_CREDIT', 'Store Credit'),
+        ('AR_CREDIT', 'Credit Note on AR'),
+    ]
+
     inventory_item = models.ForeignKey(Inventory, on_delete=models.PROTECT)
     quantity_returned = models.IntegerField(blank=False, null=False)
     return_date = models.DateField(auto_now_add=True)
     reason = models.TextField()
     receipt_number = models.CharField(max_length=20, blank=True, null=True)
+
+    # Legacy link (old Sales model)
     sale = models.ForeignKey('Sales', on_delete=models.SET_NULL, null=True, blank=True)
+
+    # New ticket-based linkage
+    ticket_line = models.ForeignKey(
+        'SalesLine', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='returns',
+    )
+    refund_amount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0'))
+    refund_tender = models.CharField(max_length=16, choices=REFUND_TENDER_CHOICES, default='CASH')
+    is_restockable = models.BooleanField(
+        default=True,
+        help_text='If False, goods are written off to Inventory Loss instead of restocked.',
+    )
+    restock_to_shop = models.ForeignKey(
+        'Shop', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='returns_restocked',
+    )
+    approved_by = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='returns_approved',
+    )
+    posted_to_gl = models.BooleanField(default=False)
+
     shop = models.ForeignKey(
         'Shop', on_delete=models.PROTECT, null=True, blank=True,
         related_name='returns',
@@ -1035,17 +1074,85 @@ class Return(models.Model):
     def __str__(self) -> str:
         return f'Return of {self.quantity_returned} {self.inventory_item.name}'
 
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+
+        # Auto-fill from ticket_line if present
+        if self.ticket_line and not self.shop:
+            self.shop = self.ticket_line.ticket.shop
+        if self.ticket_line and not self.restock_to_shop and self.is_restockable:
+            self.restock_to_shop = self.ticket_line.ticket.shop
+        if self.ticket_line and not self.receipt_number:
+            self.receipt_number = self.ticket_line.ticket.receipt_number
+
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+
+            if is_new and self.ticket_line and not self.posted_to_gl:
+                try:
+                    from accounting.utils import post_return_from_ticket
+                    post_return_from_ticket(self, user=self.approved_by)
+                except Exception as e:
+                    print(f'[RETURN] Warning: GL posting failed: {e}')
+
+
 class Damaged(models.Model):
     inventory_item = models.ForeignKey('Inventory', on_delete=models.PROTECT)
+    variant = models.ForeignKey(
+        'ProductVariant', on_delete=models.PROTECT, null=True, blank=True,
+        related_name='damaged_records',
+    )
     quantity_damaged = models.PositiveIntegerField()
     damage_description = models.TextField()
     shop = models.ForeignKey(
         'Shop', on_delete=models.PROTECT, null=True, blank=True,
         related_name='damaged_items',
     )
+    recorded_by = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='damaged_records',
+    )
+    created_date = models.DateTimeField(auto_now_add=True)
+    posted_to_gl = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.inventory_item.name} - {self.quantity_damaged} damaged"
+
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+
+            if is_new and self.quantity_damaged > 0 and not self.posted_to_gl:
+                # Drain ShopStock if shop set
+                if self.shop_id:
+                    stock_row = ShopStock.get_or_create_for(self.shop, self.inventory_item, self.variant)
+                    stock_row.quantity = max(0, stock_row.quantity - self.quantity_damaged)
+                    stock_row.save(update_fields=['quantity', 'last_updated'])
+                else:
+                    # Legacy fallback
+                    self.inventory_item.quantity_in_Stock = max(
+                        0, self.inventory_item.quantity_in_Stock - self.quantity_damaged,
+                    )
+                    self.inventory_item.save(update_fields=['quantity_in_Stock'])
+
+                StockMovement.objects.create(
+                    inventory_item=self.inventory_item,
+                    movement_type='OUT',
+                    quantity=self.quantity_damaged,
+                    reason=f'Damage: {self.damage_description[:120]}',
+                    shop=self.shop,
+                )
+
+                # GL: Dr Inventory Loss (5100), Cr Inventory (1300) at cost
+                try:
+                    from accounting.utils import post_damaged_goods
+                    post_damaged_goods(self, user=self.recorded_by)
+                    self.posted_to_gl = True
+                    # Save but avoid re-triggering the if is_new branch
+                    super().save(update_fields=['posted_to_gl'])
+                except Exception as e:
+                    print(f'[DAMAGED] Warning: GL posting failed: {e}')
 
 class StockMovement(models.Model):
     inventory_item = models.ForeignKey(Inventory, on_delete=models.PROTECT)

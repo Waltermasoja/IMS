@@ -2185,6 +2185,76 @@ def simple_pos(request):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# E1 — Returns against a SalesTicket
+# ──────────────────────────────────────────────────────────────────────────────
+
+@login_required
+def ticket_lookup(request):
+    """Look up a ticket by receipt number (for returns)."""
+    receipt = request.GET.get('receipt', '').strip()
+    ticket = None
+    if receipt:
+        ticket = SalesTicket.objects.filter(receipt_number=receipt).select_related(
+            'shop', 'customer', 'cashier',
+        ).first()
+
+    return render(request, 'inventory/ticket_lookup.html', {
+        'receipt': receipt,
+        'ticket': ticket,
+        'lines': ticket.lines.select_related('inventory_item', 'variant').all() if ticket else [],
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def ticket_return_process(request, ticket_pk):
+    """Create Return records for one or more lines of a ticket."""
+    from .models import Return as ReturnModel
+    ticket = get_object_or_404(SalesTicket, pk=ticket_pk)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'})
+
+    refund_tender = (data.get('refund_tender') or ticket.tender_type).upper()
+    items = data.get('items', [])  # [{line_id, qty, is_restockable, reason}]
+    if not items:
+        return JsonResponse({'success': False, 'error': 'No return items supplied'})
+
+    return_ids = []
+    try:
+        with transaction.atomic():
+            for item in items:
+                line = get_object_or_404(SalesLine, pk=item['line_id'], ticket=ticket)
+                qty = int(item.get('qty', 0))
+                if qty <= 0:
+                    continue
+                if qty > line.quantity:
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'Return qty {qty} exceeds sold qty {line.quantity} for line {line.pk}',
+                    })
+
+                is_restockable = bool(item.get('is_restockable', True))
+                ret = ReturnModel(
+                    inventory_item=line.inventory_item,
+                    quantity_returned=qty,
+                    reason=item.get('reason', 'Customer return') or 'Customer return',
+                    ticket_line=line,
+                    refund_tender=refund_tender,
+                    is_restockable=is_restockable,
+                    approved_by=request.user,
+                )
+                ret.save()
+                return_ids.append(ret.pk)
+    except ValueError as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+    return JsonResponse({'success': True, 'return_ids': return_ids, 'count': len(return_ids)})
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # D1 — Daily Z-report / cash-up
 # ──────────────────────────────────────────────────────────────────────────────
 
