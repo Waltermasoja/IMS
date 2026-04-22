@@ -1,2 +1,2 @@
-web: bash start.sh
+web: bash scripts/start.sh
 

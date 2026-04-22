@@ -1,9 +1,16 @@
 """
 Script to create a superuser for production Railway deployment.
-Run this on Railway: railway run python create_production_superuser.py
+Run this on Railway: railway run python scripts/create_production_superuser.py
 """
 
 import os
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
+os.chdir(_ROOT)
+
 import django
 
 # Setup Django

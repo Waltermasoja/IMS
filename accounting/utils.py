@@ -4,8 +4,32 @@ from django.db import transaction
 from django.db.models import F
 from .models import GLAccount, JournalEntry, JournalLine, CashbookEntry, ARInvoice
 
+
+class MissingGLAccountError(Exception):
+    """Required chart-of-accounts code is not present (run init_gl_accounts)."""
+
+
 def get_account(code: str):
     return GLAccount.objects.get(code=code)
+
+
+def require_gl(code: str) -> GLAccount:
+    try:
+        return GLAccount.objects.get(code=code)
+    except GLAccount.DoesNotExist as e:
+        raise MissingGLAccountError(
+            f'GL account {code} is missing. Run: python manage.py init_gl_accounts'
+        ) from e
+
+
+def get_expense_payment_credit_account(payment_method: str) -> GLAccount:
+    """Credit side for expense JE: cash on hand vs operating bank (non-cash methods)."""
+    if payment_method == 'CASH':
+        return require_gl('1000')
+    try:
+        return require_gl('1010')
+    except MissingGLAccountError:
+        return require_gl('1000')
 
 @transaction.atomic
 def post_inventory_receipt(import_order_item, user=None):
@@ -28,11 +52,9 @@ def post_inventory_receipt(import_order_item, user=None):
         return
 
     try:
-        inventory_account = get_account('1300')  # Inventory
-        # Default to Accounts Payable - could be extended to support cash purchases
-        ap_account = get_account('2000')  # Accounts Payable
-    except GLAccount.DoesNotExist:
-        # If chart missing, skip GL posting
+        inventory_account = require_gl('1300')  # Inventory
+        ap_account = require_gl('2000')  # Accounts Payable
+    except MissingGLAccountError:
         return
 
     # Create journal entry
@@ -62,6 +84,7 @@ def post_inventory_receipt(import_order_item, user=None):
         description=f"Payable to {import_order.supplier.name}"
     )
 
+    je.assert_balanced()
     return je
 
 @transaction.atomic
@@ -79,9 +102,9 @@ def post_supplier_payment(invoice_payment, user=None):
         return
 
     try:
-        ap_account = get_account('2000')  # Accounts Payable
-        cash_account = get_account('1000')  # Cash
-    except GLAccount.DoesNotExist:
+        ap_account = require_gl('2000')  # Accounts Payable
+        cash_account = require_gl('1000')  # Cash
+    except MissingGLAccountError:
         return
 
     supplier = invoice_payment.invoice.import_order.supplier
@@ -109,6 +132,7 @@ def post_supplier_payment(invoice_payment, user=None):
         description=f"Supplier payment - {reference}"
     )
 
+    je.assert_balanced()
     return je
 
 @transaction.atomic
@@ -127,27 +151,25 @@ def post_sales_return(return_obj, user=None):
     if quantity_returned <= 0:
         return
 
-    # Calculate amounts
-    unit_price = sale.sale_price or Decimal('0')
+    # Calculate amounts using net (post-discount) unit price to match original posting
+    quantity_sold = sale.quantity_sold or 1
+    net_unit_price = (sale.total_amount / quantity_sold) if quantity_sold else Decimal('0')
     unit_cost = sale.inventory_item.purchase_price or Decimal('0')
 
-    revenue_reversal = unit_price * quantity_returned
+    revenue_reversal = net_unit_price * quantity_returned
     cogs_reversal = unit_cost * quantity_returned
 
-    try:
-        revenue = get_account('4000')     # Sales Revenue
-        cogs_acct = get_account('5000')   # COGS
-        inventory = get_account('1300')   # Inventory
+    revenue = require_gl('4000')     # Sales Revenue
+    cogs_acct = require_gl('5000')   # COGS
+    inventory = require_gl('1300')   # Inventory
 
-        # Determine if cash or credit sale
-        if sale.payment_method == 'CASH':
-            contra_account = get_account('1000')  # Cash
-            contra_desc = "Cash refund"
-        else:  # CREDIT
-            contra_account = get_account('1200')  # AR
-            contra_desc = "AR reduction"
-    except GLAccount.DoesNotExist:
-        return
+    # Determine if cash or credit sale
+    if sale.payment_method == 'CASH':
+        contra_account = require_gl('1000')  # Cash
+        contra_desc = "Cash refund"
+    else:  # CREDIT
+        contra_account = require_gl('1200')  # AR
+        contra_desc = "AR reduction"
 
     je = JournalEntry.objects.create(
         memo=f"Sales return - Sale #{sale.id}",
@@ -194,6 +216,7 @@ def post_sales_return(return_obj, user=None):
         sale.customer.current_balance = (sale.customer.current_balance or Decimal('0')) - revenue_reversal
         sale.customer.save(update_fields=['current_balance'])
 
+    je.assert_balanced()
     return je
 
 @transaction.atomic
@@ -219,10 +242,9 @@ def post_inventory_adjustment(inventory_item, quantity, reason, adjustment_type=
         return
 
     try:
-        inventory_account = get_account('1300')  # Inventory
-        # Use COGS account for inventory write-offs (or create specific loss account)
-        loss_account = get_account('5000')  # COGS - could be a specific loss account
-    except GLAccount.DoesNotExist:
+        inventory_account = require_gl('1300')  # Inventory
+        loss_account = require_gl('5000')  # COGS - could be a specific loss account
+    except MissingGLAccountError:
         return
 
     je = JournalEntry.objects.create(
@@ -249,6 +271,7 @@ def post_inventory_adjustment(inventory_item, quantity, reason, adjustment_type=
         inventory_item=inventory_item
     )
 
+    je.assert_balanced()
     return je
 
 @transaction.atomic
@@ -280,43 +303,34 @@ def post_cash_sale(sale):
     # COGS
     cogs = (sale.inventory_item.purchase_price or Decimal('0')) * (sale.quantity_sold or 0)
 
+    discount_acct = None
     try:
-        cash = get_account('1000')        # Cash
-        revenue = get_account('4000')     # Sales Revenue
-        cogs_acct = get_account('5000')   # COGS
-        inventory = get_account('1300')   # Inventory
-        # Try to get discount account, but don't fail if it doesn't exist
-        try:
-            discount_acct = get_account('4100')  # Sales Discounts (contra-revenue)
-        except GLAccount.DoesNotExist:
-            discount_acct = None
+        discount_acct = get_account('4100')  # Sales Discounts (contra-revenue)
     except GLAccount.DoesNotExist:
-        # If chart missing, skip GL posting but still record cashbook
-        cash = revenue = cogs_acct = inventory = None
+        pass
 
-    if cash and revenue and cogs_acct and inventory and not sale.posted_to_gl:
+    if not sale.posted_to_gl:
+        cash = require_gl('1000')
+        revenue = require_gl('4000')
+        cogs_acct = require_gl('5000')
+        inventory = require_gl('1300')
         je = JournalEntry.objects.create(memo=f"Cash sale {sale.id}", reference=sale.receipt_number or str(sale.id), created_by=sale.recorded_by)
 
-        # Dr Cash (net amount received)
         JournalLine.objects.create(entry=je, account=cash, debit=net_amount, description='Cash received', sale_id=sale.id)
 
-        # Dr Sales Discounts (if discount was given and account exists)
         if discount_amount > 0 and discount_acct:
             JournalLine.objects.create(entry=je, account=discount_acct, debit=discount_amount, description=f'Sales discount ({discount_percent}%)', sale_id=sale.id)
-            # Cr Revenue (gross amount)
             JournalLine.objects.create(entry=je, account=revenue, credit=gross_amount, description='Sales revenue (gross)', sale_id=sale.id)
         else:
-            # No discount - post net amount as revenue
             JournalLine.objects.create(entry=je, account=revenue, credit=net_amount, description='Sales revenue', sale_id=sale.id)
 
-        # Dr COGS, Cr Inventory
         if cogs and cogs > 0:
             JournalLine.objects.create(entry=je, account=cogs_acct, debit=cogs, description='COGS', sale_id=sale.id, inventory_item_id=sale.inventory_item_id)
             JournalLine.objects.create(entry=je, account=inventory, credit=cogs, description='Inventory out', sale_id=sale.id, inventory_item_id=sale.inventory_item_id)
+        je.assert_balanced()
         sale.posted_to_gl = True
         sale.save(update_fields=['posted_to_gl'])
 
-    # Cashbook receipt (always uses net amount - actual cash received)
     if not sale.posted_to_cashbook:
         CashbookEntry.objects.create(
             date=timezone.now().date(),
@@ -360,18 +374,16 @@ def post_credit_sale(sale, customer_invoice: ARInvoice | None = None):
     if customer_invoice is None:
         customer_invoice = ARInvoice.objects.filter(sale_id=sale.id).first()
 
+    discount_acct = None
     try:
-        ar = get_account('1200')          # Accounts Receivable
-        revenue = get_account('4000')     # Sales Revenue
-        cogs_acct = get_account('5000')   # COGS
-        inventory = get_account('1300')   # Inventory
-        # Try to get discount account, but don't fail if it doesn't exist
-        try:
-            discount_acct = get_account('4100')  # Sales Discounts (contra-revenue)
-        except GLAccount.DoesNotExist:
-            discount_acct = None
+        discount_acct = get_account('4100')
     except GLAccount.DoesNotExist:
-        return
+        pass
+
+    ar = require_gl('1200')
+    revenue = require_gl('4000')
+    cogs_acct = require_gl('5000')
+    inventory = require_gl('1300')
 
     je = JournalEntry.objects.create(memo=f"Credit sale {sale.id}", reference=(customer_invoice.invoice_number if customer_invoice else str(sale.id)), created_by=sale.recorded_by)
 
@@ -392,6 +404,7 @@ def post_credit_sale(sale, customer_invoice: ARInvoice | None = None):
         JournalLine.objects.create(entry=je, account=cogs_acct, debit=cogs, description='COGS', sale_id=sale.id, inventory_item_id=sale.inventory_item_id)
         JournalLine.objects.create(entry=je, account=inventory, credit=cogs, description='Inventory out', sale_id=sale.id, inventory_item_id=sale.inventory_item_id)
 
+    je.assert_balanced()
     sale.posted_to_gl = True
     sale.save(update_fields=['posted_to_gl'])
 
@@ -405,22 +418,23 @@ def create_layby_ar_invoice(plan):
     if plan.ar_invoice:
         return plan.ar_invoice
 
-    # Generate invoice number
+    # Generate invoice number — scan all matching numbers to find true max
+    # (lexicographic ORDER BY would mis-sort e.g. 0009 > 0010)
     year = plan.created_date.year
-    last_invoice = ARInvoice.objects.filter(
-        invoice_date__year=year
-    ).order_by('-invoice_number').first()
+    prefix = f"AR-LAYBY-{year}-"
+    existing = ARInvoice.objects.filter(
+        invoice_number__startswith=prefix
+    ).values_list('invoice_number', flat=True)
 
-    if last_invoice and last_invoice.invoice_number.startswith('AR-'):
+    max_num = 0
+    for inv_num in existing:
         try:
-            last_num = int(last_invoice.invoice_number.split('-')[-1])
-            new_num = last_num + 1
+            num = int(inv_num[len(prefix):])
+            max_num = max(max_num, num)
         except (ValueError, IndexError):
-            new_num = 1
-    else:
-        new_num = 1
+            pass
 
-    invoice_number = f"AR-LAYBY-{year}-{new_num:04d}"
+    invoice_number = f"{prefix}{max_num + 1:04d}"
 
     # Create AR invoice
     ar_invoice = ARInvoice.objects.create(
@@ -438,31 +452,28 @@ def create_layby_ar_invoice(plan):
     plan.save(update_fields=['ar_invoice'])
 
     # Post initial AR journal entry: Dr AR, Cr Unearned Revenue
-    try:
-        ar = get_account('1200')
-        unearned = get_account('2300')
-        je = JournalEntry.objects.create(
-            memo=f"Layby plan AR invoice {invoice_number}",
-            reference=invoice_number,
-            created_by=None
-        )
-        JournalLine.objects.create(
-            entry=je,
-            account=ar,
-            debit=plan.total_price,
-            description=f'Layby AR - Plan #{plan.id}',
-            customer=plan.customer
-        )
-        JournalLine.objects.create(
-            entry=je,
-            account=unearned,
-            credit=plan.total_price,
-            description=f'Layby commitment - Plan #{plan.id}'
-        )
-    except GLAccount.DoesNotExist:
-        pass
+    ar = require_gl('1200')
+    unearned = require_gl('2300')
+    je = JournalEntry.objects.create(
+        memo=f"Layby plan AR invoice {invoice_number}",
+        reference=invoice_number,
+        created_by=None
+    )
+    JournalLine.objects.create(
+        entry=je,
+        account=ar,
+        debit=plan.total_price,
+        description=f'Layby AR - Plan #{plan.id}',
+        customer=plan.customer
+    )
+    JournalLine.objects.create(
+        entry=je,
+        account=unearned,
+        credit=plan.total_price,
+        description=f'Layby commitment - Plan #{plan.id}'
+    )
+    je.assert_balanced()
 
-    # Update customer balance
     plan.customer.current_balance = (plan.customer.current_balance or Decimal('0')) + plan.total_price
     plan.customer.save(update_fields=['current_balance'])
 
@@ -471,20 +482,21 @@ def create_layby_ar_invoice(plan):
 # Helper to post layby fulfillment (recognize revenue from unearned)
 @transaction.atomic
 def post_layby_fulfillment(plan, amount, sale=None):
-    try:
-        revenue = get_account('4000')
-        unearned = get_account('2300')
-        cogs_acct = get_account('5000')
-        inventory = get_account('1300')
-    except GLAccount.DoesNotExist:
-        return
+    revenue = require_gl('4000')
+    unearned = require_gl('2300')
+    cogs_acct = require_gl('5000')
+    inventory = require_gl('1300')
     je = JournalEntry.objects.create(memo=f"Layby fulfillment plan#{plan.id}", created_by=None)
-    # Recognize revenue
     JournalLine.objects.create(entry=je, account=unearned, debit=amount, description='Unearned -> Revenue')
     JournalLine.objects.create(entry=je, account=revenue, credit=amount, description='Recognized revenue')
-    # Optional COGS/Inventory if sale provided
     if sale:
-        cogs = (sale.inventory_item.purchase_price or Decimal('0')) * (sale.quantity_sold or 0)
+        cogs_full = (sale.inventory_item.purchase_price or Decimal('0')) * (sale.quantity_sold or 0)
+        total_price = plan.total_price or Decimal('0')
+        if total_price > 0 and amount < total_price:
+            cogs = (cogs_full * amount / total_price).quantize(Decimal('0.01'))
+        else:
+            cogs = cogs_full
         if cogs and cogs > 0:
             JournalLine.objects.create(entry=je, account=cogs_acct, debit=cogs, description='COGS', sale_id=sale.id)
             JournalLine.objects.create(entry=je, account=inventory, credit=cogs, description='Inventory out', sale_id=sale.id)
+    je.assert_balanced()

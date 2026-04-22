@@ -34,14 +34,14 @@ Visit: https://ims-production-45b3.up.railway.app/admin/
 
 **Step 1: Push the script to Railway**
 ```powershell
-git add create_production_superuser.py
+git add scripts/create_production_superuser.py
 git commit -m "Add production superuser script"
 git push
 ```
 
 **Step 2: Run the script on Railway**
 ```powershell
-railway run python create_production_superuser.py
+railway run python scripts/create_production_superuser.py
 ```
 
 **Step 3: Follow the prompts**

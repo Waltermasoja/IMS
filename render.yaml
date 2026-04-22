@@ -9,4 +9,4 @@ services:
     name: ims
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: bash start.sh
+    startCommand: bash scripts/start.sh

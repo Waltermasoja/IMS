@@ -1,9 +1,16 @@
 """
 Verify and fix admin user on Railway production
-Run: railway run python verify_and_fix_admin.py
+Run: railway run python scripts/verify_and_fix_admin.py
 """
 
 import os
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
+os.chdir(_ROOT)
+
 import django
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'inventorySystem.settings')

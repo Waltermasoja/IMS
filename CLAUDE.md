@@ -372,8 +372,8 @@ python manage.py shell
 
 ## Documentation References
 
-See project documentation files for detailed guides:
-- `FIXES_AND_SETUP.md` - Setup instructions and troubleshooting
-- `LAYBY_AND_CREDIT_SALES_ACCOUNTING.md` - Complete accounting flow documentation
-- `IMPORT_ORDER_GUIDE.md` - Import order system guide
-- `INVOICE_SYSTEM_GUIDE.md` - Invoice and AR system guide
+See project documentation files for detailed guides (under `docs/`):
+- `docs/FIXES_AND_SETUP.md` - Setup instructions and troubleshooting
+- `docs/LAYBY_AND_CREDIT_SALES_ACCOUNTING.md` - Complete accounting flow documentation
+- `docs/IMPORT_ORDER_GUIDE.md` - Import order system guide
+- `docs/INVOICE_SYSTEM_GUIDE.md` - Invoice and AR system guide

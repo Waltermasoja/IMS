@@ -10,6 +10,7 @@ from django.dispatch import receiver
 from django_resized import ResizedImageField
 from django.core.exceptions import ValidationError
 from django.core.cache import cache
+from django.core.validators import MinValueValidator
 
 
 # ==================== SITE SETTINGS (SINGLETON) ====================
@@ -618,17 +619,17 @@ class Sales(models.Model):
         ('CREDIT', 'Credit'),
         ('LAYBY', 'Layby'),
     ]
-    inventory_item = models.ForeignKey('Inventory', on_delete=models.CASCADE, related_name='sales_records')
+    inventory_item = models.ForeignKey('Inventory', on_delete=models.PROTECT, related_name='sales_records')
     # Optional variant reference - if product has variants, this tracks which specific variant was sold
     product_variant = models.ForeignKey('ProductVariant', on_delete=models.SET_NULL, null=True, blank=True,
                                         related_name='sales_records',
                                         help_text="Specific variant sold (if product has variants)")
-    quantity_sold = models.IntegerField()
-    sale_price = models.DecimalField(max_digits=10, decimal_places=2)
-    sale_date = models.DateTimeField(default=timezone.now)
+    quantity_sold = models.IntegerField(validators=[MinValueValidator(1)])
+    sale_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
+    sale_date = models.DateTimeField(default=timezone.now, db_index=True)
     discount_applied = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-    total_amount = models.DecimalField(max_digits=10, decimal_places=2)
-    receipt_number = models.CharField(max_length=20, blank=True, null=True)
+    total_amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.00'))])
+    receipt_number = models.CharField(max_length=20, blank=True, null=True, unique=True)
     quantity_returned = models.IntegerField(default=0)
     payment_method = models.CharField(max_length=10, choices=PAYMENT_METHODS, default='CASH')
     recorded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='sales_made')
@@ -661,7 +662,7 @@ class Sales(models.Model):
         return f"Sale of {self.quantity_sold} {self.inventory_item.name}(s) on {self.sale_date.date()}"
 
 class Return(models.Model):
-    inventory_item = models.ForeignKey(Inventory, on_delete=models.CASCADE)
+    inventory_item = models.ForeignKey(Inventory, on_delete=models.PROTECT)
     quantity_returned = models.IntegerField(blank=False, null=False)
     return_date = models.DateField(auto_now_add=True)
     reason = models.TextField()
@@ -672,7 +673,7 @@ class Return(models.Model):
         return f'Return of {self.quantity_returned} {self.inventory_item.name}'
 
 class Damaged(models.Model):
-    inventory_item = models.ForeignKey('Inventory', on_delete=models.CASCADE)
+    inventory_item = models.ForeignKey('Inventory', on_delete=models.PROTECT)
     quantity_damaged = models.PositiveIntegerField()
     damage_description = models.TextField()
    
@@ -683,11 +684,11 @@ class Damaged(models.Model):
 from django.db import models
 
 class StockMovement(models.Model):
-    inventory_item = models.ForeignKey(Inventory, on_delete=models.CASCADE)
+    inventory_item = models.ForeignKey(Inventory, on_delete=models.PROTECT)
     movement_type = models.CharField(max_length=3, choices=[('IN', 'In'), ('OUT', 'Out')])
-    quantity = models.IntegerField(blank=True,null=True)
+    quantity = models.IntegerField(default=0, validators=[MinValueValidator(1)])
     reason = models.CharField(max_length=200,blank=True,null=True)
-    stock_date = models.DateTimeField(auto_now_add=True)
+    stock_date = models.DateTimeField(auto_now_add=True, db_index=True)
 
     def __str__(self):
         return f"{self.movement_type} - {self.quantity} units of {self.inventory_item.name}"

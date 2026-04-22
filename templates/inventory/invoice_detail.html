@@ -1,4 +1,4 @@
-{% extends 'base_modern.html' %}
+{% extends 'base.html' %}
 {% load static %}
 
 {% block title %}Invoice {{ invoice.invoice_number }}{% endblock %}
@@ -12,12 +12,12 @@
         </a>
         <div class="flex gap-2">
             <a href="{% url 'print_invoice' invoice.id %}" target="_blank"
-               class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition">
+               class="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium">
                 <i class="fas fa-print mr-2"></i>Print
             </a>
             {% if invoice.customer and invoice.customer.opt_in_for_emails and invoice.customer.email %}
                 <button onclick="sendInvoiceEmail({{ invoice.id }})"
-                        class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition">
+                        class="px-4 py-2.5 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 shadow-lg transition-all font-medium">
                     <i class="fas fa-envelope mr-2"></i>Send Email
                 </button>
             {% endif %}
@@ -25,7 +25,7 @@
     </div>
 
     <!-- Invoice Card -->
-    <div class="bg-white rounded-lg shadow-lg p-8">
+    <div class="bg-white rounded-2xl shadow-sm p-8">
         <!-- Invoice Header -->
         <div class="border-b-2 border-gray-200 pb-6 mb-6">
             <div class="flex justify-between">

@@ -1,170 +1,135 @@
 {% extends 'base.html' %}
 {% load static %}
 {% block content %}
-<div class="container-fluid">
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <div>
-                    <h3 class="card-title mb-1">Return Inventory</h3>
-                    <p class="text-muted mb-0">{{ inventory.name }}</p>
-                </div>
-                <a href="{% url 'inventory' %}" class="btn btn-outline-primary">
-                    <i class="fas fa-arrow-left me-2"></i>Back to Inventory
-                </a>
-            </div>
+<div class="max-w-5xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">Return Inventory</h1>
+            <p class="text-gray-500 mt-1">{{ inventory.name }}</p>
+        </div>
+        <a href="{% url 'inventory' %}"
+           class="inline-flex items-center px-4 py-2 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium">
+            <i class="fas fa-arrow-left mr-2"></i>Back to Inventory
+        </a>
+    </div>
 
-            <div class="row">
-                <div class="col-md-6">
-                    <form method="POST">
-                        {% csrf_token %}
-                        <div class="mb-3">
-                            <label for="{{ form.receipt_number.id_for_label }}" class="form-label">
-                                Receipt Number
-                            </label>
-                            <input type="text" 
-                                   name="receipt_number" 
-                                   class="form-control" 
-                                   id="{{ form.receipt_number.id_for_label }}" 
-                                   required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="{{ form.quantity_returned.id_for_label }}" class="form-label">
-                                Quantity to Return
-                            </label>
-                            <input type="number" 
-                                   name="quantity_returned" 
-                                   class="form-control" 
-                                   id="{{ form.quantity_returned.id_for_label }}" 
-                                   min="1"
-                                   required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="{{ form.reason.id_for_label }}" class="form-label">
-                                Reason for Return
-                            </label>
-                            <textarea name="reason" 
-                                      class="form-control" 
-                                      id="{{ form.reason.id_for_label }}" 
-                                      rows="3"
-                                      required></textarea>
-                        </div>
-                        <div class="d-flex justify-content-between">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-check me-2"></i>Submit Return
-                            </button>
-                            <a href="{% url 'per_product' inventory.id %}" class="btn btn-outline-secondary">
-                                <i class="fas fa-times me-2"></i>Cancel
-                            </a>
-                        </div>
-                    </form>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Return Form -->
+        <div class="bg-white rounded-2xl shadow-sm p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Return Details</h3>
+            <form method="POST" class="space-y-4">
+                {% csrf_token %}
+                <div>
+                    <label for="{{ form.receipt_number.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1.5">
+                        Receipt Number
+                    </label>
+                    <input type="text"
+                           name="receipt_number"
+                           class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                           id="{{ form.receipt_number.id_for_label }}"
+                           required>
                 </div>
-                <div class="col-md-6">
-                    <!-- Combined Card for Product Details and Recent Sales -->
-                    <div class="card bg-light">
-                        <div class="card-body">
-                            <h5 class="card-title mb-4">Product Information</h5>
-                            
-                            <!-- Product Details Section -->
-                            <div class="mb-4">
-                                <h6 class="border-bottom pb-2">Product Details</h6>
-                                <table class="table table-sm">
-                                    <tr>
-                                        <th class="w-50">Current Stock:</th>
-                                        <td>
-                                            {% if inventory.quantity_in_Stock == 0 %}
-                                            <span class="badge bg-danger">Out of Stock</span>
-                                            {% elif inventory.quantity_in_Stock <= 10 %}
-                                            <span class="badge bg-warning text-dark">Low Stock: {{inventory.quantity_in_Stock}}</span>
-                                            {% else %}
-                                            <span class="badge bg-success">{{ inventory.quantity_in_Stock }} in Stock</span>
-                                            {% endif %}
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <th>Label:</th>
-                                        <td><span class="badge bg-info">{{ inventory.label }}</span></td>
-                                    </tr>
-                                    <tr>
-                                        <th>Size:</th>
-                                        <td>{{ inventory.size }}</td>
-                                    </tr>
-                                    <tr>
-                                        <th>Selling Price:</th>
-                                        <td>${{ inventory.selling_price }}</td>
-                                    </tr>
-                                </table>
-                            </div>
-                            
-                            <!-- Recent Sales Section -->
-                            <div>
-                                <h6 class="border-bottom pb-2">Recent Sales</h6>
-                                {% if recent_sales %}
-                                <div class="table-responsive">
-                                    <table class="table table-sm">
-                                        <thead>
-                                            <tr>
-                                                <th>Receipt #</th>
-                                                <th>Date</th>
-                                                <th>Quantity Sold</th>
-                                                <th>Remaining</th>
-                                                <th>Amount</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {% for sale in recent_sales %}
-                                            <tr>
-                                                <td>{{ sale.receipt_number }}</td>
-                                                <td>{{ sale.sale_date|date:"M d, Y" }}</td>
-                                                <td>{{ sale.quantity_sold }}</td>
-                                                <td>{{ sale.remaining_quantity }}</td>
-                                                <td>${{ sale.total_amount }}</td>
-                                            </tr>
-                                            {% endfor %}
-                                        </tbody>
-                                    </table>
-                                </div>
-                                {% else %}
-                                <p class="text-muted mb-0">No recent sales found.</p>
-                                {% endif %}
-                            </div>
-                        </div>
+                <div>
+                    <label for="{{ form.quantity_returned.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1.5">
+                        Quantity to Return
+                    </label>
+                    <input type="number"
+                           name="quantity_returned"
+                           class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                           id="{{ form.quantity_returned.id_for_label }}"
+                           min="1"
+                           required>
+                </div>
+                <div>
+                    <label for="{{ form.reason.id_for_label }}" class="block text-sm font-medium text-gray-700 mb-1.5">
+                        Reason for Return
+                    </label>
+                    <textarea name="reason"
+                              class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-y"
+                              id="{{ form.reason.id_for_label }}"
+                              rows="3"
+                              required></textarea>
+                </div>
+                <div class="flex items-center gap-3 pt-2">
+                    <button type="submit"
+                            class="px-6 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg hover:shadow-xl transition-all font-medium">
+                        <i class="fas fa-check mr-2"></i>Submit Return
+                    </button>
+                    <a href="{% url 'per_product' inventory.id %}"
+                       class="px-6 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium">
+                        <i class="fas fa-times mr-2"></i>Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Product Information -->
+        <div class="bg-white rounded-2xl shadow-sm p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Product Information</h3>
+
+            <!-- Product Details -->
+            <div class="mb-6">
+                <h4 class="text-sm font-semibold text-gray-600 uppercase tracking-wider pb-2 border-b border-gray-200 mb-3">Product Details</h4>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">Current Stock</span>
+                        {% if inventory.quantity_in_Stock == 0 %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Out of Stock</span>
+                        {% elif inventory.quantity_in_Stock <= 10 %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Low Stock: {{ inventory.quantity_in_Stock }}</span>
+                        {% else %}
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">{{ inventory.quantity_in_Stock }} in Stock</span>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">Label</span>
+                        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{{ inventory.label }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">Size</span>
+                        <span class="text-sm font-medium text-gray-900">{{ inventory.size }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm text-gray-600">Selling Price</span>
+                        <span class="text-sm font-semibold text-gray-900">${{ inventory.selling_price }}</span>
                     </div>
                 </div>
+            </div>
+
+            <!-- Recent Sales -->
+            <div>
+                <h4 class="text-sm font-semibold text-gray-600 uppercase tracking-wider pb-2 border-b border-gray-200 mb-3">Recent Sales</h4>
+                {% if recent_sales %}
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead>
+                            <tr class="border-b border-gray-200">
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Receipt #</th>
+                                <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Date</th>
+                                <th class="px-3 py-2 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Qty</th>
+                                <th class="px-3 py-2 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Remaining</th>
+                                <th class="px-3 py-2 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            {% for sale in recent_sales %}
+                            <tr class="hover:bg-gray-50 transition-colors">
+                                <td class="px-3 py-2 text-sm text-gray-900">{{ sale.receipt_number }}</td>
+                                <td class="px-3 py-2 text-sm text-gray-600">{{ sale.sale_date|date:"M d, Y" }}</td>
+                                <td class="px-3 py-2 text-sm text-right text-gray-900">{{ sale.quantity_sold }}</td>
+                                <td class="px-3 py-2 text-sm text-right text-gray-900">{{ sale.remaining_quantity }}</td>
+                                <td class="px-3 py-2 text-sm text-right font-medium text-gray-900">${{ sale.total_amount }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-sm text-gray-500">No recent sales found.</p>
+                {% endif %}
             </div>
         </div>
     </div>
 </div>
-
-<style>
-    .card {
-        border: none;
-        border-radius: 15px;
-        margin-bottom: 1rem;
-    }
-
-    .table th {
-        background-color: var(--light-blue);
-        color: var(--dark-blue);
-    }
-
-    .form-control:focus {
-        border-color: var(--primary-blue);
-        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
-    }
-
-    .badge {
-        font-weight: 500;
-        padding: 0.5em 0.8em;
-    }
-
-    .border-bottom {
-        border-bottom: 2px solid var(--light-blue) !important;
-        margin-bottom: 1rem;
-    }
-
-    .table-sm td, .table-sm th {
-        padding: 0.5rem;
-    }
-</style>
 {% endblock content %}

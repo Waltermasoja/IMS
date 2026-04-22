@@ -1,124 +1,118 @@
 {% extends 'base.html' %}
 {% block title %}Inventory Valuation{% endblock %}
 {% block content %}
-<div class="container-fluid">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="mb-0">Inventory Valuation & Aging</h3>
-    <div>
-      <a href="{% url 'inventory_valuation_export_csv' %}" class="btn btn-outline-secondary">Export CSV</a>
+<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h1 class="text-2xl font-bold text-gray-900">Inventory Valuation & Aging</h1>
+        <a href="{% url 'inventory_valuation_export_csv' %}"
+           class="inline-flex items-center px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium">
+            <i class="fas fa-download mr-2"></i>Export CSV
+        </a>
     </div>
-  </div>
 
-  <div class="row g-3 mb-3">
-    <div class="col-md-4">
-      <div class="card shadow-sm">
-        <div class="card-body">
-          <div class="text-muted">Stock Value (Cost)</div>
-          <div class="h4">${{ total_value|floatformat:2 }}</div>
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl p-6 text-white shadow-lg">
+            <p class="text-sm font-medium opacity-90 mb-1">Stock Value (Cost)</p>
+            <p class="text-3xl font-bold">${{ total_value|floatformat:2 }}</p>
         </div>
-      </div>
-    </div>
-    <div class="col-md-4">
-      <div class="card shadow-sm">
-        <div class="card-body">
-          <div class="text-muted">Potential Value (Sell)</div>
-          <div class="h4">${{ potential_value|floatformat:2 }}</div>
+        <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl p-6 text-white shadow-lg">
+            <p class="text-sm font-medium opacity-90 mb-1">Potential Value (Sell)</p>
+            <p class="text-3xl font-bold">${{ potential_value|floatformat:2 }}</p>
         </div>
-      </div>
-    </div>
-    <div class="col-md-4">
-      <div class="card shadow-sm">
-        <div class="card-body">
-          <div class="text-muted">Unrealized Margin</div>
-          <div class="h4">${{ margin_value|floatformat:2 }}</div>
+        <div class="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
+            <p class="text-sm font-medium opacity-90 mb-1">Unrealized Margin</p>
+            <p class="text-3xl font-bold">${{ margin_value|floatformat:2 }}</p>
         </div>
-      </div>
     </div>
-  </div>
 
-  <div class="card shadow-sm mb-4">
-    <div class="card-header bg-light fw-semibold">Aging Buckets</div>
-    <div class="table-responsive">
-      <table class="table table-sm mb-0">
-        <thead>
-          <tr>
-            <th>Bucket</th>
-            <th class="text-end">Stock Value</th>
-            <th class="text-end">Items</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for key, bucket in buckets.items %}
-          <tr>
-            <td>{{ bucket.label }}</td>
-            <td class="text-end">${{ bucket.value|floatformat:2 }}</td>
-            <td class="text-end">{{ bucket.items|length }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <!-- Aging Buckets -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-semibold text-gray-900">Aging Buckets</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="bg-gray-50 border-b border-gray-200">
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Bucket</th>
+                        <th class="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Stock Value</th>
+                        <th class="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Items</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for key, bucket in buckets.items %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-6 py-3 text-sm text-gray-900">{{ bucket.label }}</td>
+                        <td class="px-6 py-3 text-sm text-right font-medium text-gray-900">${{ bucket.value|floatformat:2 }}</td>
+                        <td class="px-6 py-3 text-sm text-right text-gray-600">{{ bucket.items|length }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
-  </div>
 
-  <div class="row g-3">
-    <div class="col-md-6">
-      <div class="card shadow-sm">
-        <div class="card-header bg-light fw-semibold">By Category</div>
-        <div class="table-responsive">
-          <table class="table table-sm mb-0">
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th class="text-end">Stock Value</th>
-                <th class="text-end">Potential</th>
-                <th class="text-end">Items</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for r in by_category %}
-              <tr>
-                <td>{{ r.name }}</td>
-                <td class="text-end">${{ r.value|floatformat:2 }}</td>
-                <td class="text-end">${{ r.potential|floatformat:2 }}</td>
-                <td class="text-end">{{ r.count }}</td>
-              </tr>
-              {% empty %}
-              <tr><td colspan="4" class="text-center text-muted py-3">No data</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+    <!-- Category & Supplier -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">By Category</h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="bg-gray-50 border-b border-gray-200">
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Stock Value</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Potential</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Items</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for r in by_category %}
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-6 py-3 text-sm text-gray-900">{{ r.name }}</td>
+                            <td class="px-6 py-3 text-sm text-right font-medium text-gray-900">${{ r.value|floatformat:2 }}</td>
+                            <td class="px-6 py-3 text-sm text-right text-gray-600">${{ r.potential|floatformat:2 }}</td>
+                            <td class="px-6 py-3 text-sm text-right text-gray-600">{{ r.count }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="px-6 py-8 text-center text-gray-500">No data</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
-      </div>
-    </div>
-    <div class="col-md-6">
-      <div class="card shadow-sm">
-        <div class="card-header bg-light fw-semibold">By Supplier</div>
-        <div class="table-responsive">
-          <table class="table table-sm mb-0">
-            <thead>
-              <tr>
-                <th>Supplier</th>
-                <th class="text-end">Stock Value</th>
-                <th class="text-end">Potential</th>
-                <th class="text-end">Items</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for r in by_supplier %}
-              <tr>
-                <td>{{ r.name }}</td>
-                <td class="text-end">${{ r.value|floatformat:2 }}</td>
-                <td class="text-end">${{ r.potential|floatformat:2 }}</td>
-                <td class="text-end">{{ r.count }}</td>
-              </tr>
-              {% empty %}
-              <tr><td colspan="4" class="text-center text-muted py-3">No data</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h3 class="text-lg font-semibold text-gray-900">By Supplier</h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="bg-gray-50 border-b border-gray-200">
+                            <th class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Supplier</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Stock Value</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Potential</th>
+                            <th class="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Items</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for r in by_supplier %}
+                        <tr class="hover:bg-gray-50 transition-colors">
+                            <td class="px-6 py-3 text-sm text-gray-900">{{ r.name }}</td>
+                            <td class="px-6 py-3 text-sm text-right font-medium text-gray-900">${{ r.value|floatformat:2 }}</td>
+                            <td class="px-6 py-3 text-sm text-right text-gray-600">${{ r.potential|floatformat:2 }}</td>
+                            <td class="px-6 py-3 text-sm text-right text-gray-600">{{ r.count }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="px-6 py-8 text-center text-gray-500">No data</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         </div>
-      </div>
     </div>
-  </div>
 </div>
 {% endblock %}

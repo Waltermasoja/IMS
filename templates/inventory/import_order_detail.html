@@ -5,51 +5,9 @@
 
 {% block extra_css %}
 <style>
-    /* Style Django form fields to match Tailwind design */
-    .form-control {
-        width: 100%;
-        padding: 0.625rem 1rem;
-        background-color: white;
-        border: 1px solid #e5e7eb;
-        border-radius: 0.75rem;
-        outline: none;
-        transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .form-control:focus {
-        outline: none;
-        border-color: transparent;
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
-    }
-
-    select.form-control {
-        appearance: none;
-        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-        background-position: right 0.5rem center;
-        background-repeat: no-repeat;
-        background-size: 1.5em 1.5em;
-        padding-right: 2.5rem;
-    }
-
-    input[type="checkbox"].form-control {
-        width: 1.25rem;
-        height: 1.25rem;
-        color: #2563eb;
-        background-color: white;
-        border: 1px solid #d1d5db;
-        border-radius: 0.25rem;
-    }
-
-    input[type="checkbox"].form-control:focus {
-        outline: none;
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
-    }
-
-    /* Progress bar animation */
     .progress-step {
         transition: all 0.3s ease;
     }
-
     .progress-step.active {
         transform: scale(1.1);
     }
@@ -752,7 +710,7 @@
                                            value="1"
                                            {% if form.paid.value %}checked{% endif %}
                                            @change="paid = $event.target.checked"
-                                           class="form-control">
+                                           class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
                                     <span class="ml-2 text-sm font-semibold text-green-700 group-hover:text-green-800">
                                         <i class="fas fa-check-circle mr-1"></i>Mark as Paid
                                     </span>

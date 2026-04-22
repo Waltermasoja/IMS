@@ -1,4 +1,7 @@
+import logging
 from django.shortcuts import redirect, render,get_object_or_404
+
+logger = logging.getLogger(__name__)
 import plotly.utils
 from .models import Inventory, Return, Damaged, StockMovement, Sales, missing_inventory, Inventory_category
 from django.contrib.auth.decorators import login_required
@@ -42,7 +45,8 @@ from django.utils import timezone
 from django.core.cache import cache
 from django.views.decorators.http import condition
 from django.db.models import Sum, Count, F, ExpressionWrapper, DecimalField, Q
-from django.db.models.functions import TruncMonth, Coalesce, ExtractMonth
+from django.db.models.functions import TruncMonth, TruncDay, Coalesce, ExtractMonth
+from django.core.paginator import Paginator
 from django.utils import timezone
 from datetime import timedelta
 from .models import (
@@ -76,6 +80,13 @@ from django.template.loader import render_to_string
 from django.core.mail import send_mail
 from django.http import HttpResponse
 import csv
+import secrets
+
+
+def _pos_receipt_number(prefix: str) -> str:
+    """Unique POS receipt; constrained to Sales.receipt_number max_length=20."""
+    t = timezone.now()
+    return f"{prefix}{t.strftime('%Y%m%d%H%M%S')}{secrets.randbelow(1000):03d}"[:20]
 
 
 @login_required
@@ -115,9 +126,14 @@ def update_inventory(request, pk):
         if data['selling_price'] < data['purchase_price']:
             raise ValueError("Selling price cannot be less than purchase price")
         
-        # Update inventory
+        # Update inventory — only allow known safe fields
+        ALLOWED_FIELDS = {
+            'name', 'purchase_price', 'selling_price', 'quantity_in_Stock',
+            'size', 'on_sale', 'category', 'description', 'reorder_point',
+            'lead_time_days', 'markup_percent',
+        }
         for key, value in data.items():
-            if key != 'csrfmiddlewaretoken':
+            if key in ALLOWED_FIELDS:
                 setattr(inventory, key, value)
         
         inventory.save()
@@ -225,6 +241,9 @@ def make_sale(request, pk):
 
     try:
         with transaction.atomic():
+            # Re-fetch with a row-level lock inside the transaction so concurrent sales
+            # on the same product serialize here rather than racing on stock quantity.
+            inventory = Inventory.objects.select_for_update().get(pk=pk)
             quantity_sold = int(request.POST.get('quantity_sold'))
             sale_price = Decimal(request.POST.get('sale_price'))
             discount = Decimal(request.POST.get('discount_applied', 0))
@@ -278,6 +297,13 @@ def make_sale(request, pk):
                     'error': 'Discount must be between 0 and 100%'
                 })
 
+            # Enforce the user's personal max discount limit
+            if hasattr(request.user, 'profile') and discount > request.user.profile.max_discount_percent:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Discount exceeds your permitted maximum of {request.user.profile.max_discount_percent}%'
+                })
+
             # Calculate total amount
             discounted_price = sale_price * (1 - discount / 100)
             total_amount = discounted_price * quantity_sold
@@ -315,7 +341,9 @@ def make_sale(request, pk):
                 from accounting.models import ARInvoice
                 
                 try:
-                    customer = Customer.objects.get(pk=customer_id)
+                    # select_for_update acquires a row-level lock so concurrent requests
+                    # cannot both read the same balance and both pass the credit check.
+                    customer = Customer.objects.select_for_update().get(pk=customer_id)
                     print(f"[CREDIT] Customer: {customer.id} - {customer.name}")
                 except Customer.DoesNotExist:
                     print(f"[CREDIT][ERROR] Customer {customer_id} not found")
@@ -336,7 +364,7 @@ def make_sale(request, pk):
                 # Create sales record (delivered)
                 from .utils import get_setting
                 receipt_prefix = get_setting('receipt_prefix', 'RCP')
-                receipt_number = f"{receipt_prefix}{timezone.now().strftime('%Y%m%d%H%M%S')}"
+                receipt_number = _pos_receipt_number(receipt_prefix)
                 sale = Sales.objects.create(
                     inventory_item=inventory,
                     product_variant=variant,  # Link to variant if applicable
@@ -355,7 +383,7 @@ def make_sale(request, pk):
                 # Create AR invoice then post accounting
                 from datetime import datetime as dt
                 due_date = dt.strptime(due_date_str, '%Y-%m-%d').date()
-                inv_no = f"AR{timezone.now().strftime('%Y%m%d%H%M%S')}"
+                inv_no = f"AR{timezone.now().strftime('%Y%m%d%H%M%S')}{secrets.randbelow(10000):04d}"
                 ar = ARInvoice.objects.create(
                     customer=customer,
                     invoice_number=inv_no,
@@ -371,13 +399,9 @@ def make_sale(request, pk):
                 customer.save(update_fields=['current_balance'])
                 print(f"[CREDIT] Customer balance updated: {customer.current_balance}")
 
-                # Post Journal: Dr A/R, Cr Sales + COGS/Inventory
-                try:
-                    from accounting.utils import post_credit_sale
-                    post_credit_sale(sale, ar)
-                    print(f"[CREDIT] GL entries posted successfully")
-                except Exception as e:
-                    print(f"[CREDIT][WARN] Failed to post GL entries: {e}")
+                from accounting.utils import post_credit_sale
+                post_credit_sale(sale, ar)
+                print(f"[CREDIT] GL entries posted successfully")
 
                 print('[CREDIT] Completed successfully')
                 return JsonResponse({
@@ -434,7 +458,7 @@ def make_sale(request, pk):
                     try:
                         from .models import Sales as SalesModel
                         layby_prefix = get_setting('layby_prefix', 'LB')
-                        receipt_number = f"{layby_prefix}{timezone.now().strftime('%Y%m%d%H%M%S')}"
+                        receipt_number = _pos_receipt_number(layby_prefix)
                         sale_row = SalesModel.objects.create(
                             inventory_item=inventory,
                             product_variant=variant,  # Link to variant if applicable
@@ -466,9 +490,8 @@ def make_sale(request, pk):
                     return JsonResponse({'success': False, 'error': f'Layby failed: {e}'})
 
             # Default: CASH sale
-            # Generate receipt number
             receipt_prefix = get_setting('receipt_prefix', 'RCP')
-            receipt_number = f"{receipt_prefix}{timezone.now().strftime('%Y%m%d%H%M%S')}"
+            receipt_number = _pos_receipt_number(receipt_prefix)
 
             # Create sales record
             customer_obj = None
@@ -497,12 +520,8 @@ def make_sale(request, pk):
             inventory.last_sale_date = timezone.now()
             inventory.save(update_fields=['last_sale_date'])
 
-            # Accounting postings for cash sale (GL + Cashbook)
-            try:
-                from accounting.utils import post_cash_sale
-                post_cash_sale(sale)
-            except Exception:
-                pass
+            from accounting.utils import post_cash_sale
+            post_cash_sale(sale)
 
             # Get remaining stock (from variant or product)
             remaining_stock = variant.quantity_in_stock if variant else inventory.quantity_in_Stock
@@ -549,22 +568,43 @@ def sales_report_simple(request):
     start = (tz.now() - timedelta(days=30)).date()
     qs = Sales.objects.filter(sale_date__date__gte=start)
 
-    # totals by method
-    methods = ['CASH','CREDIT','LAYBY']
-    totals_by_method = {m: float(qs.filter(payment_method=m).aggregate(total=Sum('total_amount'))['total'] or 0) for m in methods}
+    # Totals by payment method — 3 filters on a pre-filtered queryset
+    methods = ['CASH', 'CREDIT', 'LAYBY']
+    totals_by_method = {
+        m: qs.filter(payment_method=m).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+        for m in methods
+    }
 
-    # daily rows
+    # Single query: group by day + payment_method, then pivot in Python
+    # Replaces the previous 96-query loop (31 days × 3 payment methods × 1 aggregate each)
+    raw = (
+        qs
+        .annotate(day=TruncDay('sale_date'))
+        .values('day', 'payment_method')
+        .annotate(total=Sum('total_amount'))
+        .order_by('day')
+    )
+    # Build a lookup: {date: {method: total}}
+    pivot = {}
+    for row in raw:
+        d = row['day'].date()
+        pivot.setdefault(d, {})
+        pivot[d][row['payment_method']] = row['total'] or Decimal('0')
+
     daily_rows = []
     for i in range(30, -1, -1):
         day = (tz.now() - timedelta(days=i)).date()
-        row = {
+        day_data = pivot.get(day, {})
+        cash = day_data.get('CASH', Decimal('0'))
+        credit = day_data.get('CREDIT', Decimal('0'))
+        layby = day_data.get('LAYBY', Decimal('0'))
+        daily_rows.append({
             'date': day,
-            'cash': float(qs.filter(sale_date__date=day, payment_method='CASH').aggregate(total=Sum('total_amount'))['total'] or 0),
-            'credit': float(qs.filter(sale_date__date=day, payment_method='CREDIT').aggregate(total=Sum('total_amount'))['total'] or 0),
-            'layby': float(qs.filter(sale_date__date=day, payment_method='LAYBY').aggregate(total=Sum('total_amount'))['total'] or 0),
-        }
-        row['total'] = row['cash'] + row['credit'] + row['layby']
-        daily_rows.append(row)
+            'cash': float(cash),
+            'credit': float(credit),
+            'layby': float(layby),
+            'total': float(cash + credit + layby),
+        })
 
     return render(request, 'inventory/sales_report_simple.html', {
         'totals_by_method': totals_by_method,
@@ -574,46 +614,66 @@ def sales_report_simple(request):
 # ===== Simple endpoints to manage Customers, AR, Layby =====
 @login_required
 def ar_list(request):
-    invoices = ARInvoice.objects.select_related('customer').order_by('due_date')
-    total_outstanding = sum([inv.outstanding_amount for inv in invoices])
-    overdue = [inv for inv in invoices if inv.is_overdue]
-    partial = [inv for inv in invoices if inv.status == 'PARTIAL']
-    from django.utils import timezone
-    today = timezone.now().date().isoformat()
+    from accounting.models import ARInvoice
+    from django.db.models import Case, When, BooleanField
+    qs = ARInvoice.objects.select_related('customer').order_by('due_date')
+    # Compute summary stats from the full queryset before paginating
+    today = timezone.now().date()
+    totals = qs.aggregate(
+        total_outstanding=Sum('total_amount'),
+        total_paid=Sum('amount_paid'),
+    )
+    total_outstanding = (totals['total_outstanding'] or 0) - (totals['total_paid'] or 0)
+    overdue_count = qs.filter(due_date__lt=today, status__in=['PENDING', 'PARTIAL']).count()
+    partial_count = qs.filter(status='PARTIAL').count()
+    invoice_count = qs.count()
+    paginator = Paginator(qs, 50)
+    page_obj = paginator.get_page(request.GET.get('page'))
     return render(request, 'inventory/ar_list.html', {
-        'invoices': invoices,
+        'invoices': page_obj,
+        'page_obj': page_obj,
         'total_outstanding': total_outstanding,
-        'overdue_count': len(overdue),
-        'invoice_count': invoices.count(),
-        'partial_count': len(partial),
-        'today': today,
+        'overdue_count': overdue_count,
+        'invoice_count': invoice_count,
+        'partial_count': partial_count,
+        'today': today.isoformat(),
     })
 
 @login_required
 def layby_list(request):
     from accounting.models import LaybyPlan
     plans = LaybyPlan.objects.select_related('customer').order_by('-created_date')
-    total_remaining = sum([(p.remaining or 0) for p in plans])
+    # Compute stats from full queryset before paginating
     active_count = plans.filter(status='ACTIVE').count()
     fulfilled_count = plans.filter(status='FULFILLED').count()
-    from django.utils import timezone
+    total_remaining = plans.filter(status='ACTIVE').aggregate(
+        r=Sum('total_price'), p=Sum('amount_paid')
+    )
+    total_remaining_val = (total_remaining['r'] or 0) - (total_remaining['p'] or 0)
     today = timezone.now().date().isoformat()
+    paginator = Paginator(plans, 50)
+    page_obj = paginator.get_page(request.GET.get('page'))
     return render(request, 'inventory/layby_list.html', {
-        'plans': plans,
-        'total_remaining': total_remaining,
+        'plans': page_obj,
+        'page_obj': page_obj,
+        'total_remaining': total_remaining_val,
         'active_count': active_count,
         'fulfilled_count': fulfilled_count,
         'today': today,
     })
 @login_required
 def customers_list(request):
-    customers = Customer.objects.all().order_by('name')
-    active_count = customers.filter(status='ACTIVE').count()
-    suspended_count = customers.filter(status='SUSPENDED').count()
-    inactive_count = customers.filter(status='INACTIVE').count()
-    total_balance = customers.aggregate(total=Sum('current_balance'))['total'] or 0
+    qs = Customer.objects.all().order_by('name')
+    # Aggregate stats from full set before paginating
+    active_count = qs.filter(status='ACTIVE').count()
+    suspended_count = qs.filter(status='SUSPENDED').count()
+    inactive_count = qs.filter(status='INACTIVE').count()
+    total_balance = qs.aggregate(total=Sum('current_balance'))['total'] or 0
+    paginator = Paginator(qs, 50)
+    page_obj = paginator.get_page(request.GET.get('page'))
     return render(request, 'inventory/customers_list.html', {
-        'customers': customers,
+        'customers': page_obj,
+        'page_obj': page_obj,
         'active_count': active_count,
         'suspended_count': suspended_count,
         'inactive_count': inactive_count,
@@ -693,35 +753,40 @@ def layby_payment_create(request):
 @login_required
 @require_POST
 def layby_fulfill(request, pk):
-    from accounting.models import LaybyPlan
-    from .models import GLAccount, JournalEntry, JournalLine
+    from accounting.models import LaybyPlan, JournalEntry, JournalLine
+    from accounting.utils import require_gl
+
     plan = get_object_or_404(LaybyPlan, pk=pk)
     if plan.status != 'ACTIVE':
         messages.error(request, 'Plan not active')
         return redirect('dashboard')
-    # Recognize revenue: Dr Unearned, Cr Sales for total_price AND Dr COGS, Cr Inventory
     try:
-        unearned = GLAccount.objects.get(code='2300')
-        sales_acct = GLAccount.objects.get(code='4000')
-        cogs_acct = GLAccount.objects.get(code='5000')
-        inventory_acct = GLAccount.objects.get(code='1500')
-        
-        je = JournalEntry.objects.create(memo=f'Layby fulfill plan#{plan.id}')
-        # Revenue recognition
-        JournalLine.objects.create(entry=je, account=unearned, debit=plan.total_price, description='Recognize revenue')
-        JournalLine.objects.create(entry=je, account=sales_acct, credit=plan.total_price, description='Sales revenue')
-        # COGS for all layby items
-        total_cogs = Decimal('0')
-        for item in plan.items.select_related('inventory_item'):
-            cogs_amount = item.inventory_item.purchase_price * item.quantity
-            total_cogs += cogs_amount
-        if total_cogs > 0:
-            JournalLine.objects.create(entry=je, account=cogs_acct, debit=total_cogs, description='Cost of goods sold')
-            JournalLine.objects.create(entry=je, account=inventory_acct, credit=total_cogs, description='Inventory reduction')
-    except GLAccount.DoesNotExist:
-        pass
-    plan.status = 'FULFILLED'
-    plan.save(update_fields=['status'])
+        with transaction.atomic():
+            unearned = require_gl('2300')
+            sales_acct = require_gl('4000')
+            cogs_acct = require_gl('5000')
+            inventory_acct = require_gl('1300')
+
+            je = JournalEntry.objects.create(memo=f'Layby fulfill plan#{plan.id}', created_by=request.user)
+            recognize_amount = plan.amount_paid
+            total_price = plan.total_price or Decimal('0')
+            JournalLine.objects.create(entry=je, account=unearned, debit=recognize_amount, description='Recognize revenue')
+            JournalLine.objects.create(entry=je, account=sales_acct, credit=recognize_amount, description='Sales revenue')
+            total_cogs = Decimal('0')
+            for item in plan.items.select_related('inventory_item'):
+                cogs_amount = (item.inventory_item.purchase_price or Decimal('0')) * (item.quantity or 0)
+                total_cogs += cogs_amount
+            if total_price > 0 and recognize_amount < total_price:
+                total_cogs = (total_cogs * recognize_amount / total_price).quantize(Decimal('0.01'))
+            if total_cogs > 0:
+                JournalLine.objects.create(entry=je, account=cogs_acct, debit=total_cogs, description='Cost of goods sold')
+                JournalLine.objects.create(entry=je, account=inventory_acct, credit=total_cogs, description='Inventory reduction')
+            je.assert_balanced()
+            plan.status = 'FULFILLED'
+            plan.save(update_fields=['status'])
+    except Exception as exc:
+        messages.error(request, str(exc))
+        return redirect('dashboard')
     # Mark related layby sales as completed cash sales for reporting visibility
     try:
         from .models import Sales as SalesModel
@@ -743,33 +808,51 @@ def layby_fulfill(request, pk):
 @login_required
 @require_POST
 def layby_cancel(request, pk):
-    from accounting.models import LaybyPlan
-    from .models import GLAccount, JournalEntry, JournalLine
+    from accounting.models import LaybyPlan, JournalEntry, JournalLine
+    from accounting.utils import MissingGLAccountError, require_gl
+
     plan = get_object_or_404(LaybyPlan, pk=pk)
     fee = Decimal(request.POST.get('cancellation_fee', '0') or '0')
-    # Restock inventory for each item
-    for item in plan.items.select_related('inventory_item'):
-        inv = item.inventory_item
-        inv.quantity_in_Stock += item.quantity
-        inv.save(update_fields=['quantity_in_Stock'])
-        StockMovement.objects.create(inventory_item=inv, movement_type='IN', quantity=item.quantity, reason=f'Layby cancel plan#{plan.id}')
-    # Journal: refund = amount_paid - fee; Dr Unearned Cr Cash (refund); Dr Unearned Cr OtherIncome (fee)
-    refund = max(Decimal('0'), (plan.amount_paid or Decimal('0')) - fee)
     try:
-        unearned = GLAccount.objects.get(code='2300')
-        cash = GLAccount.objects.get(code='1000')
-        je = JournalEntry.objects.create(memo=f'Layby cancel plan#{plan.id}')
-        if refund > 0:
-            JournalLine.objects.create(entry=je, account=unearned, debit=refund, description='Refund customer')
-            JournalLine.objects.create(entry=je, account=cash, credit=refund, description='Cash out')
-        if fee > 0:
-            other_income = GLAccount.objects.get(code='4800')
-            JournalLine.objects.create(entry=je, account=unearned, debit=fee, description='Forfeit fee')
-            JournalLine.objects.create(entry=je, account=other_income, credit=fee, description='Layby forfeit income')
-    except GLAccount.DoesNotExist:
-        pass
-    plan.status = 'CANCELLED'
-    plan.save(update_fields=['status'])
+        with transaction.atomic():
+            for item in plan.items.select_related('inventory_item'):
+                inv = item.inventory_item
+                inv.quantity_in_Stock += item.quantity
+                inv.save(update_fields=['quantity_in_Stock'])
+                StockMovement.objects.create(
+                    inventory_item=inv, movement_type='IN', quantity=item.quantity,
+                    reason=f'Layby cancel plan#{plan.id}',
+                )
+            refund = max(Decimal('0'), (plan.amount_paid or Decimal('0')) - fee)
+            unpaid = (plan.total_price or Decimal('0')) - (plan.amount_paid or Decimal('0'))
+            unearned = require_gl('2300')
+            cash = require_gl('1000')
+            ar = require_gl('1200')
+            je = JournalEntry.objects.create(memo=f'Layby cancel plan#{plan.id}', created_by=request.user)
+            if refund > 0:
+                JournalLine.objects.create(entry=je, account=unearned, debit=refund, description='Refund customer')
+                JournalLine.objects.create(entry=je, account=cash, credit=refund, description='Cash out')
+            if fee > 0:
+                other_income = require_gl('4800')
+                JournalLine.objects.create(entry=je, account=unearned, debit=fee, description='Forfeit fee')
+                JournalLine.objects.create(entry=je, account=other_income, credit=fee, description='Layby forfeit income')
+            if unpaid > 0:
+                JournalLine.objects.create(entry=je, account=unearned, debit=unpaid, description='Release unpaid commitment (clear AR)')
+                JournalLine.objects.create(
+                    entry=je, account=ar, credit=unpaid, description='Clear layby receivable', customer=plan.customer,
+                )
+            je.assert_balanced()
+            if plan.customer:
+                plan.customer.current_balance = (plan.customer.current_balance or Decimal('0')) - unpaid
+                plan.customer.save(update_fields=['current_balance'])
+            if plan.ar_invoice:
+                plan.ar_invoice.status = 'CANCELLED'
+                plan.ar_invoice.save(update_fields=['status', 'last_updated'])
+            plan.status = 'CANCELLED'
+            plan.save(update_fields=['status'])
+    except MissingGLAccountError as exc:
+        messages.error(request, str(exc))
+        return redirect('dashboard')
     messages.success(request, 'Layby cancelled')
     return redirect('dashboard')
 
@@ -853,7 +936,6 @@ def returnInventory(request, pk):
                         receipt_number=receipt_number,
                         sale=sale
                     )
-                    sale.return_record.add(return_instance)
 
                     # Create stock movement record
                     StockMovement.objects.create(
@@ -992,38 +1074,46 @@ def damagedInventory(request, pk):
             quantity_damaged = form.cleaned_data['quantity_damaged']
             damage_description = form.cleaned_data['damage_description']
 
-            # Create a Damaged instance
-            damaged_instance = Damaged(
-                inventory_item=obsolete_inventory,
-                quantity_damaged=quantity_damaged,
-                damage_description=damage_description
-            )
-            damaged_instance.save()
+            with transaction.atomic():
+                # Lock the inventory row to prevent concurrent over-subtraction
+                obsolete_inventory = Inventory.objects.select_for_update().get(pk=obsolete_inventory.pk)
 
-            # Update the inventory
-            obsolete_inventory.quantity_in_Stock -= quantity_damaged
-            obsolete_inventory.save()
+                if quantity_damaged > obsolete_inventory.quantity_in_Stock:
+                    messages.error(request, f"Cannot mark {quantity_damaged} units as damaged — only {obsolete_inventory.quantity_in_Stock} in stock.")
+                    return redirect('damagedInventory', pk=obsolete_inventory.pk)
 
-            # Post GL entry: Dr COGS/Loss, Cr Inventory
-            try:
-                from accounting.utils import post_inventory_adjustment
-                post_inventory_adjustment(
-                    obsolete_inventory,
-                    quantity_damaged,
-                    damage_description or 'Damaged goods',
-                    adjustment_type='DAMAGE',
-                    user=request.user
+                # Create a Damaged instance
+                damaged_instance = Damaged(
+                    inventory_item=obsolete_inventory,
+                    quantity_damaged=quantity_damaged,
+                    damage_description=damage_description
                 )
-            except Exception as e:
-                print(f"[DAMAGE] Warning: GL posting failed: {e}")
+                damaged_instance.save()
 
-            # Create stock movement record
-            StockMovement.objects.create(
-                inventory_item=obsolete_inventory,
-                movement_type='OUT',
-                quantity=quantity_damaged,
-                reason=f'Damaged: {damage_description or "Damaged goods"}'
-            )
+                # Update the inventory
+                obsolete_inventory.quantity_in_Stock -= quantity_damaged
+                obsolete_inventory.save()
+
+                # Post GL entry: Dr COGS/Loss, Cr Inventory
+                try:
+                    from accounting.utils import post_inventory_adjustment
+                    post_inventory_adjustment(
+                        obsolete_inventory,
+                        quantity_damaged,
+                        damage_description or 'Damaged goods',
+                        adjustment_type='DAMAGE',
+                        user=request.user
+                    )
+                except Exception as e:
+                    logger.error('[DAMAGE] GL posting failed for %s: %s', obsolete_inventory.name, e, exc_info=True)
+
+                # Create stock movement record
+                StockMovement.objects.create(
+                    inventory_item=obsolete_inventory,
+                    movement_type='OUT',
+                    quantity=quantity_damaged,
+                    reason=f'Damaged: {damage_description or "Damaged goods"}'
+                )
 
             messages.success(request, f"{quantity_damaged} item(s) of {obsolete_inventory.name} successfully marked as damaged.")
             return redirect('/inventory/')
@@ -1083,6 +1173,7 @@ def login_view(request):
             messages.error(request, 'Invalid username or password.')
     return render(request, 'inventory_system/login.html')
 
+@login_required
 def search(request):
     query = request.GET.get('q', '')
     if query:
@@ -1263,24 +1354,35 @@ def low_stock_report(request):
     """
     from django.utils import timezone as tz
     from datetime import timedelta
-    days = int(request.GET.get('days', 30))
+    days = max(1, min(int(request.GET.get('days', 30)), 365))
     cutoff = tz.now() - timedelta(days=days)
 
-    items = Inventory.objects.select_related('category').all()
+    # Single query: annotate each inventory item with its recent sales and returns
+    # Replaces the previous 2-queries-per-item loop (O(N) → O(1) database round-trips)
+    items = (
+        Inventory.objects
+        .select_related('category')
+        .annotate(
+            recent_sold=Coalesce(
+                Sum('sales_records__quantity_sold', filter=Q(sales_records__sale_date__gte=cutoff)),
+                0,
+            ),
+            recent_returned=Coalesce(
+                Sum('sales_records__quantity_returned', filter=Q(sales_records__sale_date__gte=cutoff)),
+                0,
+            ),
+        )
+    )
 
     report_rows = []
     for item in items:
-        recent_qty = (Sales.objects
-                      .filter(inventory_item=item, sale_date__gte=cutoff)
-                      .aggregate(total=Sum('quantity_sold'))['total'] or 0)
-        returns_qty = (Sales.objects
-                       .filter(inventory_item=item, sale_date__gte=cutoff)
-                       .aggregate(total=Sum('quantity_returned'))['total'] or 0)
-        net_sold = max(0, (recent_qty or 0) - (returns_qty or 0))
+        net_sold = max(0, item.recent_sold - item.recent_returned)
         velocity = float(net_sold) / float(days) if days > 0 else 0.0
         days_of_stock = (float(item.quantity_in_Stock) / velocity) if velocity > 0 else None
-        # Simple recommendation: demand during lead time + safety (reorder_point) - current stock
-        recommended = max(int(round(velocity * (item.lead_time_days or 0))) + (item.reorder_point or 0) - (item.quantity_in_Stock or 0), 0)
+        recommended = max(
+            int(round(velocity * (item.lead_time_days or 0))) + (item.reorder_point or 0) - (item.quantity_in_Stock or 0),
+            0
+        )
         is_low = (item.quantity_in_Stock or 0) <= (item.reorder_point or 0)
         report_rows.append({
             'item': item,
@@ -1400,11 +1502,14 @@ def inventory_valuation_export_csv(request):
         ])
     return response
 
+@login_required
+@require_POST
 def delete_inventory_category(request, pk):
     category = get_object_or_404(Inventory_category, pk=pk)
     category.delete()
     return redirect('inventory_category')
 
+@login_required
 def update_inventory_category(request, pk):
     category = get_object_or_404(Inventory_category, pk=pk)
     if request.method == 'POST':
@@ -1529,9 +1634,14 @@ def inventory_update(request, pk):
                 messages.error(request, "Selling price cannot be less than purchase price")
                 return redirect('inventory_update', pk=pk)
 
-            # Update inventory
+            # Update inventory — only allow known safe fields
+            ALLOWED_FIELDS = {
+                'name', 'purchase_price', 'selling_price', 'quantity_in_Stock',
+                'size', 'on_sale', 'description', 'reorder_point',
+                'lead_time_days', 'markup_percent', 'weight',
+            }
             for key, value in data.items():
-                if key not in ['csrfmiddlewaretoken']:
+                if key in ALLOWED_FIELDS:
                     setattr(inventory, key, value)
 
             # Handle image upload
@@ -2319,7 +2429,7 @@ def stock_movement_export_csv(request):
 @login_required
 def dead_stock_report(request):
     """Report on slow-moving and dead stock items with no sales in X days."""
-    days_threshold = int(request.GET.get('days', 90))
+    days_threshold = max(1, min(int(request.GET.get('days', 90)), 730))
     category_id = request.GET.get('category')
     min_value = Decimal(request.GET.get('min_value', '0') or '0')
 
@@ -2479,7 +2589,7 @@ def inventory_turnover_report(request):
 @login_required
 def stock_forecast_report(request):
     """Predict stockout dates based on sales velocity."""
-    forecast_days = int(request.GET.get('days', 60))
+    forecast_days = max(1, min(int(request.GET.get('days', 60)), 365))
 
     # Calculate velocity over last 30 days
     velocity_window = 30

@@ -1,6 +1,9 @@
 # IMS Template Modernization Script
 # This script replaces old Bootstrap templates with modern Tailwind versions
 
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location (Join-Path $ScriptDir '..')
+
 Write-Host "🚀 IMS Template Modernization Script" -ForegroundColor Cyan
 Write-Host "=====================================" -ForegroundColor Cyan
 Write-Host ""

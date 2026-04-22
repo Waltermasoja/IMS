@@ -1,128 +1,130 @@
 {% extends 'base.html' %}
 {% block title %}Inventory Turnover Report{% endblock %}
 {% block content %}
-<div class="container-fluid">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="mb-0">Inventory Turnover Report</h3>
-    <a href="{% url 'reports_index' %}" class="btn btn-secondary">Back to Reports</a>
-  </div>
-
-  <!-- Filters -->
-  <div class="card shadow-sm mb-3">
-    <div class="card-body">
-      <form method="get" class="row g-3">
-        <div class="col-md-3">
-          {{ form.start_date.label_tag }}
-          {{ form.start_date }}
-        </div>
-        <div class="col-md-3">
-          {{ form.end_date.label_tag }}
-          {{ form.end_date }}
-        </div>
-        <div class="col-md-3">
-          <label>Category</label>
-          <select name="category" class="form-control">
-            <option value="">All Categories</option>
-            {% for cat in categories %}
-            <option value="{{ cat.id }}" {% if selected_category|stringformat:"s" == cat.id|stringformat:"s" %}selected{% endif %}>
-              {{ cat.name }}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="col-md-3 d-flex align-items-end">
-          <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
-        </div>
-      </form>
+<div class="space-y-6">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h1 class="text-2xl font-bold text-gray-900">Inventory Turnover Report</h1>
+        <a href="{% url 'reports_index' %}"
+           class="inline-flex items-center px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors font-medium">
+            <i class="fas fa-arrow-left mr-2"></i>Back to Reports
+        </a>
     </div>
-  </div>
 
-  <!-- Category Summary -->
-  {% if category_summary %}
-  <div class="card shadow-sm mb-3">
-    <div class="card-header bg-light">
-      <h5 class="mb-0">Category Turnover Summary</h5>
-    </div>
-    <div class="card-body">
-      <div class="row">
-        {% for cat_name, data in category_summary.items %}
-        <div class="col-md-3 mb-2">
-          <div class="card">
-            <div class="card-body">
-              <h6>{{ cat_name }}</h6>
-              <p class="mb-0">Avg Turnover: <strong>{{ data.avg_ratio }}</strong></p>
-              <small class="text-muted">{{ data.count }} items</small>
+    <!-- Filters -->
+    <div class="bg-white rounded-2xl shadow-sm p-6">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Start Date</label>
+                {{ form.start_date }}
             </div>
-          </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">End Date</label>
+                {{ form.end_date }}
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Category</label>
+                <select name="category" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors">
+                    <option value="">All Categories</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.id }}" {% if selected_category|stringformat:"s" == cat.id|stringformat:"s" %}selected{% endif %}>
+                        {{ cat.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <button type="submit" class="w-full px-6 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 shadow-lg transition-all font-medium">
+                    <i class="fas fa-filter mr-2"></i>Apply Filters
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Category Summary -->
+    {% if category_summary %}
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-semibold text-gray-900">Category Turnover Summary</h3>
         </div>
-        {% endfor %}
-      </div>
+        <div class="p-6">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {% for cat_name, data in category_summary.items %}
+                <div class="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                    <h4 class="text-sm font-semibold text-gray-900 mb-1">{{ cat_name }}</h4>
+                    <p class="text-sm text-gray-600">Avg Turnover: <span class="font-bold text-gray-900">{{ data.avg_ratio }}</span></p>
+                    <p class="text-xs text-gray-500">{{ data.count }} items</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
     </div>
-  </div>
-  {% endif %}
+    {% endif %}
 
-  <!-- Turnover Table -->
-  <div class="card shadow-sm">
-    <div class="card-header bg-light">
-      <h5 class="mb-0">Product Turnover Analysis ({{ start_date|date:"Y-m-d" }} to {{ end_date|date:"Y-m-d" }})</h5>
+    <!-- Turnover Table -->
+    <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-semibold text-gray-900">Product Turnover Analysis ({{ start_date|date:"Y-m-d" }} to {{ end_date|date:"Y-m-d" }})</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="bg-gray-50 border-b border-gray-200">
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Product</th>
+                        <th class="px-6 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
+                        <th class="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Qty Sold</th>
+                        <th class="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">COGS</th>
+                        <th class="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Avg Inventory Value</th>
+                        <th class="px-6 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Turnover Ratio</th>
+                        <th class="px-6 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Performance</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for data in turnover_data %}
+                    <tr class="hover:bg-gray-50 transition-colors {% if data.classification == 'Poor' %}bg-yellow-50{% elif data.classification == 'Excellent' %}bg-green-50{% endif %}">
+                        <td class="px-6 py-3">
+                            <a href="{% url 'per_product' data.item.id %}" class="text-sm font-medium text-blue-600 hover:text-blue-800">{{ data.item.name }}</a>
+                            <p class="text-xs text-gray-500">{{ data.item.product_code }}</p>
+                        </td>
+                        <td class="px-6 py-3 text-sm text-gray-600">{{ data.item.category.name|default:"-" }}</td>
+                        <td class="px-6 py-3 text-sm text-right text-gray-900">{{ data.qty_sold }}</td>
+                        <td class="px-6 py-3 text-sm text-right text-gray-900">${{ data.cogs|floatformat:2 }}</td>
+                        <td class="px-6 py-3 text-sm text-right text-gray-900">${{ data.avg_inventory_value|floatformat:2 }}</td>
+                        <td class="px-6 py-3 text-sm text-right font-bold text-gray-900">{{ data.turnover_ratio }}</td>
+                        <td class="px-6 py-3 text-center">
+                            {% if data.classification == 'Excellent' %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Excellent</span>
+                            {% elif data.classification == 'Good' %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Good</span>
+                            {% elif data.classification == 'Fair' %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800">Fair</span>
+                            {% else %}
+                                <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Poor</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="px-6 py-12 text-center text-gray-500">No data available for the selected period</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
-    <div class="table-responsive">
-      <table class="table table-striped table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>Product</th>
-            <th>Category</th>
-            <th class="text-end">Qty Sold</th>
-            <th class="text-end">COGS</th>
-            <th class="text-end">Avg Inventory Value</th>
-            <th class="text-end">Turnover Ratio</th>
-            <th class="text-center">Performance</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for data in turnover_data %}
-          <tr {% if data.classification == 'Poor' %}class="table-warning"{% elif data.classification == 'Excellent' %}class="table-success"{% endif %}>
-            <td>
-              <a href="{% url 'per_product' data.item.id %}">{{ data.item.name }}</a><br>
-              <small class="text-muted">{{ data.item.product_code }}</small>
-            </td>
-            <td>{{ data.item.category.name|default:"-" }}</td>
-            <td class="text-end">{{ data.qty_sold }}</td>
-            <td class="text-end">${{ data.cogs|floatformat:2 }}</td>
-            <td class="text-end">${{ data.avg_inventory_value|floatformat:2 }}</td>
-            <td class="text-end"><strong>{{ data.turnover_ratio }}</strong></td>
-            <td class="text-center">
-              {% if data.classification == 'Excellent' %}
-                <span class="badge bg-success">Excellent</span>
-              {% elif data.classification == 'Good' %}
-                <span class="badge bg-primary">Good</span>
-              {% elif data.classification == 'Fair' %}
-                <span class="badge bg-info">Fair</span>
-              {% else %}
-                <span class="badge bg-warning text-dark">Poor</span>
-              {% endif %}
-            </td>
-          </tr>
-          {% empty %}
-          <tr><td colspan="7" class="text-center text-muted py-5">No data available for the selected period</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
 
-  <!-- Info Section -->
-  <div class="mt-3">
-    <div class="alert alert-info">
-      <strong>Understanding Turnover Ratio:</strong>
-      <ul class="mb-0">
-        <li><strong>Turnover Ratio = COGS ÷ Average Inventory Value</strong></li>
-        <li><span class="badge bg-success">Excellent</span> ≥ 4.0 - Very fast-moving inventory</li>
-        <li><span class="badge bg-primary">Good</span> 2.0 - 3.9 - Healthy turnover rate</li>
-        <li><span class="badge bg-info">Fair</span> 1.0 - 1.9 - Moderate turnover, room for improvement</li>
-        <li><span class="badge bg-warning text-dark">Poor</span> < 1.0 - Slow-moving, consider pricing or promotion</li>
-      </ul>
+    <!-- Info Section -->
+    <div class="bg-blue-50 border border-blue-200 rounded-2xl p-6">
+        <div class="flex items-start space-x-3">
+            <i class="fas fa-info-circle text-2xl text-blue-600 flex-shrink-0"></i>
+            <div>
+                <h4 class="text-lg font-semibold text-gray-900 mb-3">Understanding Turnover Ratio</h4>
+                <ul class="space-y-2 text-sm text-gray-700">
+                    <li><strong>Turnover Ratio = COGS / Average Inventory Value</strong></li>
+                    <li><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 mr-1">Excellent</span> >= 4.0 - Very fast-moving inventory</li>
+                    <li><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 mr-1">Good</span> 2.0 - 3.9 - Healthy turnover rate</li>
+                    <li><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-800 mr-1">Fair</span> 1.0 - 1.9 - Moderate turnover, room for improvement</li>
+                    <li><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 mr-1">Poor</span> < 1.0 - Slow-moving, consider pricing or promotion</li>
+                </ul>
+            </div>
+        </div>
     </div>
-  </div>
 </div>
 {% endblock %}

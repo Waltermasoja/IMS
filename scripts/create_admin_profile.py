@@ -1,9 +1,16 @@
 """
 Create UserProfile for admin user on Railway
-Run: railway run python create_admin_profile.py
+Run: railway run python scripts/create_admin_profile.py
 """
 
 import os
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
+os.chdir(_ROOT)
+
 import django
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'inventorySystem.settings')
@@ -81,7 +88,7 @@ try:
 
 except User.DoesNotExist:
     print(f"\n✗ User '{username}' not found!")
-    print(f"Run this first: railway run python verify_and_fix_admin.py")
+    print("Run this first: railway run python scripts/verify_and_fix_admin.py")
 
 except Exception as e:
     print(f"\n✗ Error: {e}")

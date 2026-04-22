@@ -1,8 +1,10 @@
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
-from django.db.models import Sum
+from django.db.models import Sum, F, DecimalField, ExpressionWrapper
 from decimal import Decimal
 from django.contrib.auth.models import User
+from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError
 
 # ==================== GENERAL LEDGER & JOURNAL ENTRIES ====================
 
@@ -28,14 +30,14 @@ class GLAccount(models.Model):
         For ASSET, EXPENSE, and CONTRA_REVENUE accounts: Debit increases, Credit decreases (Debit - Credit)
         For LIABILITY, EQUITY, and INCOME accounts: Credit increases, Debit decreases (Credit - Debit)
         """
-        from accounting.models import JournalLine
-
-        lines = JournalLine.objects.filter(account=self)
-        total_debits = lines.aggregate(total=Sum('debit'))['total'] or Decimal('0.00')
-        total_credits = lines.aggregate(total=Sum('credit'))['total'] or Decimal('0.00')
+        totals = JournalLine.objects.filter(account=self).aggregate(
+            total_debits=Sum('debit'),
+            total_credits=Sum('credit'),
+        )
+        total_debits = totals['total_debits'] or Decimal('0.00')
+        total_credits = totals['total_credits'] or Decimal('0.00')
 
         # Normal debit balance accounts (Assets, Expenses, Contra-Revenue)
-        # Contra-Revenue has a debit balance because it reduces revenue
         if self.type in ['ASSET', 'EXP', 'CONTRA_REV']:
             return total_debits - total_credits
         # Normal credit balance accounts (Liabilities, Equity, Income)
@@ -66,7 +68,15 @@ class JournalEntry(models.Model):
 
     @property
     def is_balanced(self):
-        return self.total_debits == self.total_credits
+        totals = self.lines.aggregate(d=Sum('debit'), c=Sum('credit'))
+        return (totals['d'] or Decimal('0')) == (totals['c'] or Decimal('0'))
+
+    def assert_balanced(self):
+        """Raise ValidationError if debits != credits (call after all lines are saved)."""
+        if not self.is_balanced:
+            raise ValidationError(
+                f'Journal entry is not balanced (debits {self.total_debits} != credits {self.total_credits}).'
+            )
 
 
 class JournalLine(models.Model):
@@ -82,11 +92,14 @@ class JournalLine(models.Model):
     customer = models.ForeignKey('inventory.Customer', on_delete=models.SET_NULL, null=True, blank=True)
 
     def clean(self):
-        from django.core.exceptions import ValidationError
         if self.debit and self.credit:
-            raise ValidationError("A line cannot have both debit and credit")
+            raise ValidationError('A line cannot have both debit and credit')
         if not self.debit and not self.credit:
-            raise ValidationError("Either debit or credit must be provided")
+            raise ValidationError('Either debit or credit must be provided')
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         side = 'Dr' if self.debit and self.debit > 0 else 'Cr'
@@ -106,12 +119,12 @@ class ARInvoice(models.Model):
 
     customer = models.ForeignKey('inventory.Customer', on_delete=models.PROTECT, related_name='invoices')
     invoice_number = models.CharField(max_length=50, unique=True)
-    invoice_date = models.DateField(default=timezone.now)
-    due_date = models.DateField()
+    invoice_date = models.DateField(default=timezone.now, db_index=True)
+    due_date = models.DateField(db_index=True)
 
     total_amount = models.DecimalField(max_digits=15, decimal_places=2)
     amount_paid = models.DecimalField(max_digits=15, decimal_places=2, default=0)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING', db_index=True)
 
     # Optional linkage to a POS sale or order
     sale = models.ForeignKey('inventory.Sales', on_delete=models.SET_NULL, null=True, blank=True, related_name='ar_invoices')
@@ -156,7 +169,7 @@ class ARPayment(models.Model):
 
     invoice = models.ForeignKey(ARInvoice, on_delete=models.CASCADE, related_name='payments')
     payment_date = models.DateField(default=timezone.now)
-    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    amount = models.DecimalField(max_digits=15, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
     method = models.CharField(max_length=10, choices=PAYMENT_METHODS)
     reference = models.CharField(max_length=100, blank=True)
     recorded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True)
@@ -164,41 +177,42 @@ class ARPayment(models.Model):
     created_date = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
+        from accounting.utils import require_gl
 
-        # If this is an AR invoice for a layby plan, also update the layby plan's amount_paid
-        if hasattr(self.invoice, 'layby_plan') and self.invoice.layby_plan:
-            # Calculate total paid including both AR payments and layby payments
-            ar_payments_total = self.invoice.payments.aggregate(total=Sum('amount'))['total'] or 0
-            layby_payments_total = self.invoice.layby_plan.payments.aggregate(total=Sum('amount'))['total'] or 0
-            combined_total = ar_payments_total + layby_payments_total
+        is_new = self.pk is None
+        with transaction.atomic():
+            super().save(*args, **kwargs)
 
-            # Update both invoice and plan
-            self.invoice.amount_paid = combined_total
-            self.invoice.layby_plan.amount_paid = combined_total
-            self.invoice.layby_plan.save(update_fields=['amount_paid'])
-        else:
-            # Regular AR invoice - just sum AR payments
-            total_paid = self.invoice.payments.aggregate(total=Sum('amount'))['total'] or 0
-            self.invoice.amount_paid = total_paid
+            # If this is an AR invoice for a layby plan, also update the layby plan's amount_paid
+            if hasattr(self.invoice, 'layby_plan') and self.invoice.layby_plan:
+                ar_payments_total = self.invoice.payments.aggregate(total=Sum('amount'))['total'] or 0
+                layby_payments_total = self.invoice.layby_plan.payments.aggregate(total=Sum('amount'))['total'] or 0
+                combined_total = ar_payments_total + layby_payments_total
 
-        self.invoice.save(update_fields=['amount_paid'])
-        self.invoice.update_status()
+                self.invoice.amount_paid = combined_total
+                self.invoice.layby_plan.amount_paid = combined_total
+                self.invoice.layby_plan.save(update_fields=['amount_paid'])
+            else:
+                total_paid = self.invoice.payments.aggregate(total=Sum('amount'))['total'] or 0
+                self.invoice.amount_paid = total_paid
 
-        # Post journal: Dr Cash, Cr Accounts Receivable
-        try:
-            cash = GLAccount.objects.get(code='1000')
-            ar = GLAccount.objects.get(code='1200')
+            self.invoice.save(update_fields=['amount_paid'])
+            self.invoice.update_status()
+
+            if not is_new:
+                return
+
+            cash = require_gl('1000')
+            ar = require_gl('1200')
             je = JournalEntry.objects.create(memo=f"AR payment {self.reference}")
             JournalLine.objects.create(entry=je, account=cash, debit=self.amount, description='AR payment')
-            JournalLine.objects.create(entry=je, account=ar, credit=self.amount, description=self.invoice.invoice_number, customer=self.invoice.customer)
-            # Update customer balance
+            JournalLine.objects.create(
+                entry=je, account=ar, credit=self.amount,
+                description=self.invoice.invoice_number, customer=self.invoice.customer
+            )
+            je.assert_balanced()
             self.invoice.customer.current_balance = (self.invoice.customer.current_balance or Decimal('0')) - self.amount
             self.invoice.customer.save(update_fields=['current_balance'])
-        except GLAccount.DoesNotExist:
-            pass
-        # Create cashbook receipt entry
-        try:
             CashbookEntry.objects.create(
                 date=self.payment_date,
                 reference=self.reference or self.invoice.invoice_number,
@@ -208,8 +222,6 @@ class ARPayment(models.Model):
                 category='AR',
                 recorded_by=self.recorded_by,
             )
-        except Exception:
-            pass
 
     def __str__(self):
         return f"Payment {self.amount} on {self.invoice.invoice_number}"
@@ -238,7 +250,11 @@ class LaybyPlan(models.Model):
                                       related_name='layby_plan')
 
     def recompute_totals(self):
-        total = self.items.aggregate(total=Sum('line_total'))['total'] or Decimal('0')
+        line_expr = ExpressionWrapper(
+            F('unit_price') * F('quantity'),
+            output_field=DecimalField(max_digits=15, decimal_places=2),
+        )
+        total = self.items.aggregate(total=Sum(line_expr))['total'] or Decimal('0')
         self.total_price = total
         paid = self.payments.aggregate(total=Sum('amount'))['total'] or Decimal('0')
         self.amount_paid = paid
@@ -269,66 +285,60 @@ class LaybyItem(models.Model):
 class LaybyPayment(models.Model):
     plan = models.ForeignKey(LaybyPlan, on_delete=models.CASCADE, related_name='payments')
     payment_date = models.DateField(default=timezone.now)
-    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
     reference = models.CharField(max_length=100, blank=True)
     recorded_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True)
 
     created_date = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
+        from accounting.utils import create_layby_ar_invoice, require_gl
+
         is_new = self.pk is None
         print(f"[LAYBY][MODEL] Saving LaybyPayment: plan={getattr(self.plan,'id',None)}, amount={self.amount}, reference={self.reference}")
-        super().save(*args, **kwargs)
-        print(f"[LAYBY][MODEL] Saved payment id={self.id}")
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            print(f"[LAYBY][MODEL] Saved payment id={self.id}")
 
-        # Only process accounting on new payments
-        if not is_new:
-            return
+            if not is_new:
+                return
 
-        # Ensure AR invoice exists for this layby plan
-        if not self.plan.ar_invoice:
-            from accounting.utils import create_layby_ar_invoice
-            create_layby_ar_invoice(self.plan)
+            if not self.plan.ar_invoice:
+                create_layby_ar_invoice(self.plan)
 
-        # Calculate total paid including both layby payments and AR payments
-        layby_payments_total = self.plan.payments.aggregate(total=Sum('amount'))['total'] or 0
-        ar_payments_total = 0
-        if self.plan.ar_invoice:
-            ar_payments_total = self.plan.ar_invoice.payments.aggregate(total=Sum('amount'))['total'] or 0
+            layby_payments_total = self.plan.payments.aggregate(total=Sum('amount'))['total'] or 0
+            ar_payments_total = 0
+            if self.plan.ar_invoice:
+                ar_payments_total = self.plan.ar_invoice.payments.aggregate(total=Sum('amount'))['total'] or 0
 
-        combined_total = layby_payments_total + ar_payments_total
-        print(f"[LAYBY][MODEL] Layby payments: ${layby_payments_total}, AR payments: ${ar_payments_total}, Combined: ${combined_total}")
+            combined_total = layby_payments_total + ar_payments_total
+            print(f"[LAYBY][MODEL] Layby payments: ${layby_payments_total}, AR payments: ${ar_payments_total}, Combined: ${combined_total}")
 
-        # Update both plan and invoice amount_paid
-        self.plan.amount_paid = combined_total
-        if self.plan.ar_invoice:
-            self.plan.ar_invoice.amount_paid = combined_total
-            self.plan.ar_invoice.save(update_fields=['amount_paid'])
-            self.plan.ar_invoice.update_status()
+            self.plan.amount_paid = combined_total
+            if self.plan.ar_invoice:
+                self.plan.ar_invoice.amount_paid = combined_total
+                self.plan.ar_invoice.save(update_fields=['amount_paid'])
+                self.plan.ar_invoice.update_status()
 
-        # Auto-fulfill if fully paid
-        if self.plan.amount_paid >= self.plan.total_price and self.plan.status == 'ACTIVE':
-            self.plan.status = 'FULFILLED'
-        self.plan.save()
-        print(f"[LAYBY][MODEL] Plan status={self.plan.status}, amount_paid={self.plan.amount_paid}, total_price={self.plan.total_price}")
+            if self.plan.amount_paid >= self.plan.total_price and self.plan.status == 'ACTIVE':
+                self.plan.status = 'FULFILLED'
+            self.plan.save()
+            print(f"[LAYBY][MODEL] Plan status={self.plan.status}, amount_paid={self.plan.amount_paid}, total_price={self.plan.total_price}")
 
-        # Post journal: Dr Cash, Cr AR (reduces receivable)
-        try:
-            cash = GLAccount.objects.get(code='1000')
-            ar = GLAccount.objects.get(code='1200')
+            cash = require_gl('1000')
+            ar = require_gl('1200')
             je = JournalEntry.objects.create(memo=f"Layby payment - Plan #{self.plan_id}")
             JournalLine.objects.create(entry=je, account=cash, debit=self.amount, description='Layby payment received')
-            JournalLine.objects.create(entry=je, account=ar, credit=self.amount, description=f'Layby payment - {self.plan.ar_invoice.invoice_number}', customer=self.plan.customer)
+            JournalLine.objects.create(
+                entry=je, account=ar, credit=self.amount,
+                description=f'Layby payment - {self.plan.ar_invoice.invoice_number}', customer=self.plan.customer
+            )
             print(f"[LAYBY][MODEL] Journal posted for payment: JE#{je.id}")
+            je.assert_balanced()
 
-            # Update customer balance (reduce by payment amount)
             self.plan.customer.current_balance = (self.plan.customer.current_balance or Decimal('0')) - self.amount
             self.plan.customer.save(update_fields=['current_balance'])
-        except GLAccount.DoesNotExist:
-            print("[LAYBY][MODEL][WARN] GL accounts for cash/AR not found")
 
-        # Create cashbook receipt entry for layby deposit
-        try:
             CashbookEntry.objects.create(
                 date=self.payment_date,
                 reference=self.reference or f"LAYBY-{self.plan_id}",
@@ -339,8 +349,6 @@ class LaybyPayment(models.Model):
                 recorded_by=self.recorded_by,
             )
             print("[LAYBY][MODEL] Cashbook receipt created")
-        except Exception:
-            print("[LAYBY][MODEL][WARN] Failed to create cashbook receipt")
 
     def __str__(self):
         return f"Layby payment {self.amount} for plan #{self.plan_id}"
@@ -349,7 +357,7 @@ class LaybyPayment(models.Model):
 
 class CashbookEntry(models.Model):
     """Daily cash transactions ledger"""
-    date = models.DateField(default=timezone.now)
+    date = models.DateField(default=timezone.now, db_index=True)
     reference = models.CharField(max_length=100, blank=True)
     description = models.CharField(max_length=255, blank=True)
     category = models.CharField(max_length=50, blank=True)
@@ -403,7 +411,7 @@ class Expense(models.Model):
     date = models.DateField(default=timezone.now)
     category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
     description = models.CharField(max_length=255, blank=True)
-    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
     gl_account = models.ForeignKey(GLAccount, on_delete=models.PROTECT, limit_choices_to={'type': 'EXP'})
     payment_method = models.CharField(max_length=10, choices=PAYMENT_METHODS, default='CASH')
     reference = models.CharField(max_length=100, blank=True)
@@ -411,15 +419,21 @@ class Expense(models.Model):
     created_date = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        # Auto-post expense: Dr Expense GL, Cr Cash (1000) and write to cashbook
-        try:
-            cash = GLAccount.objects.get(code='1000')
+        from accounting.utils import get_expense_payment_credit_account
+
+        is_new = self.pk is None
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if not is_new:
+                return
+            credit_acct = get_expense_payment_credit_account(self.payment_method)
             je = JournalEntry.objects.create(memo=f"Expense: {self.category}", reference=self.reference, created_by=self.recorded_by)
-            # Dr Expense, Cr Cash
             JournalLine.objects.create(entry=je, account=self.gl_account, debit=self.amount, description=self.description)
-            JournalLine.objects.create(entry=je, account=cash, credit=self.amount, description='Cash/Bank')
-            # Cashbook payment
+            JournalLine.objects.create(
+                entry=je, account=credit_acct, credit=self.amount,
+                description='Cash/bank payment',
+            )
+            je.assert_balanced()
             CashbookEntry.objects.create(
                 date=self.date,
                 reference=self.reference or f"EXP-{self.id}",
@@ -429,5 +443,3 @@ class Expense(models.Model):
                 payment_amount=self.amount,
                 recorded_by=self.recorded_by,
             )
-        except GLAccount.DoesNotExist:
-            pass

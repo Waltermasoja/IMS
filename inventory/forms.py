@@ -11,6 +11,33 @@ from .utils import get_exchange_rate, get_common_expenses_for_country
 from decimal import Decimal
 
 
+# ==================== TAILWIND CSS CLASSES ====================
+TW_INPUT = 'w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors'
+TW_SELECT = TW_INPUT
+TW_TEXTAREA = TW_INPUT + ' resize-y'
+TW_FILE = 'w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-colors'
+TW_CHECKBOX = 'w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2'
+TW_DATE = TW_INPUT
+
+
+def apply_tailwind(form_instance):
+    """Apply Tailwind CSS classes to all form fields."""
+    for field_name, field in form_instance.fields.items():
+        widget = field.widget
+        if isinstance(widget, forms.CheckboxInput):
+            widget.attrs['class'] = TW_CHECKBOX
+        elif isinstance(widget, forms.FileInput):
+            widget.attrs['class'] = TW_FILE
+        elif isinstance(widget, (forms.Select, forms.RadioSelect)):
+            widget.attrs['class'] = TW_SELECT
+        elif isinstance(widget, forms.Textarea):
+            widget.attrs['class'] = TW_TEXTAREA
+        elif isinstance(widget, forms.CheckboxSelectMultiple):
+            pass  # Don't override checkbox groups
+        else:
+            widget.attrs['class'] = TW_INPUT
+
+
 # ==================== SITE SETTINGS FORM ====================
 
 class SiteSettingsForm(ModelForm):
@@ -26,23 +53,7 @@ class SiteSettingsForm(ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # Apply consistent styling to all fields
-        for field_name, field in self.fields.items():
-            # Base classes for all inputs
-            base_class = 'form-control'
-
-            # Handle different widget types
-            if isinstance(field.widget, forms.CheckboxInput):
-                field.widget.attrs.update({'class': 'form-check-input'})
-            elif isinstance(field.widget, forms.Select):
-                field.widget.attrs.update({'class': f'{base_class} form-select'})
-            elif isinstance(field.widget, forms.FileInput):
-                field.widget.attrs.update({'class': 'form-control'})
-            elif isinstance(field.widget, forms.Textarea):
-                field.widget.attrs.update({'class': base_class, 'rows': 3})
-            else:
-                field.widget.attrs.update({'class': base_class})
+        apply_tailwind(self)
 
         # Group fields by section for template organization
         self.company_fields = [
@@ -90,7 +101,6 @@ class AddInventoryForm(ModelForm):
         queryset=Inventory_category.objects.all(),
         empty_label="Select a category",
         required=False,
-        widget=forms.Select(attrs={'class': 'form-control'})
     )
 
     class Meta:
@@ -114,13 +124,13 @@ class AddInventoryForm(ModelForm):
         ]
         widgets = {
             'image': forms.FileInput(attrs={
-                'class': 'form-control',
                 'accept': 'image/jpeg,image/jpg,image/png,image/webp'
             })
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        apply_tailwind(self)
 
         # Make fields optional
         self.fields['category'].required = False
@@ -168,6 +178,7 @@ class UpdateInventoryForm(ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        apply_tailwind(self)
         self.fields['sale_price'].label = "Sale Price"
         self.fields['quantity_sold'].label = "Quantity to Sell"
         self.fields['discount_applied'].label = "Discount (%)"
@@ -177,18 +188,34 @@ class ReturnInventoryForm(forms.ModelForm):
         model = Return
         fields = ['quantity_returned', 'reason']
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_tailwind(self)
+
 class DamagedInventoryForm(forms.ModelForm):
     class Meta:
         model = Damaged
         fields = ['quantity_damaged', 'damage_description']
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_tailwind(self)
+
 class LoginForm(forms.Form):
     username = forms.CharField()
     password = forms.CharField(widget=forms.PasswordInput)
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_tailwind(self)
+
 class PeriodSummaryForm(forms.Form):
     start_date = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
     end_date = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_tailwind(self)
 
 class DateRangeForm(forms.Form):
     start_date = forms.DateField(required=False, widget=forms.TextInput(attrs={'type': 'date'}))
@@ -196,8 +223,7 @@ class DateRangeForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super(DateRangeForm, self).__init__(*args, **kwargs)
-        for field in self.fields.values():
-            field.widget.attrs.update({'class': 'form-control'})
+        apply_tailwind(self)
 
 class Inventory_categoryForm(ModelForm):
     class Meta:
@@ -206,10 +232,7 @@ class Inventory_categoryForm(ModelForm):
 
     def __init__(self, *args, **kwargs):
         super(Inventory_categoryForm, self).__init__(*args, **kwargs)
-        for field in self.fields.values():
-            field.widget.attrs.update({'class': 'form-control'})
-
-        # Set help text for default_markup
+        apply_tailwind(self)
         self.fields['default_markup'].help_text = 'Default markup percentage for products in this category (e.g., 40 for 40%)'
 
 # ==================== IMPORT ORDER & LANDED COST FORMS ====================
@@ -263,20 +286,9 @@ class SupplierForm(ModelForm):
         ('CNY', 'Chinese Yuan'),
         ('EUR', 'Euro')
     ]
-    country = forms.ChoiceField(
-        choices=COUNTRY_CHOICES,
-        widget=forms.Select(attrs={'class': 'form-control'})
-    )
-
-    payment_terms = forms.ChoiceField(
-        choices=PAYMENT_TERMS_CHOICES,
-        widget=forms.Select(attrs={'class': 'form-control'})
-    )
-
-    currency_preference = forms.ChoiceField(
-        choices=CURRENCY_CHOICES,
-        widget=forms.Select(attrs={'class': 'form-control'})
-    )
+    country = forms.ChoiceField(choices=COUNTRY_CHOICES)
+    payment_terms = forms.ChoiceField(choices=PAYMENT_TERMS_CHOICES)
+    currency_preference = forms.ChoiceField(choices=CURRENCY_CHOICES)
 
     class Meta:
         model = Supplier
@@ -290,8 +302,7 @@ class SupplierForm(ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field in self.fields.values():
-            field.widget.attrs.update({'class': 'form-control'})
+        apply_tailwind(self)
 
 class ImportOrderForm(ModelForm):
     class Meta:
@@ -308,10 +319,7 @@ class ImportOrderForm(ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field in self.fields.values():
-            field.widget.attrs.update({'class': 'form-control'})
-        
-        # Auto-populate exchange rate when currency changes (via JavaScript)
+        apply_tailwind(self)
         self.fields['exchange_rate'].help_text = 'Will auto-populate based on current rates'
 
     def clean(self):
@@ -331,9 +339,7 @@ class ImportOrderItemForm(ModelForm):
         
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for field in self.fields.values():
-            field.widget.attrs.update({'class': 'form-control'})
-        
+        apply_tailwind(self)
         self.fields['markup_percentage'].help_text = 'Leave blank to use category default'
 
 # Create inline formset for import order items
@@ -361,15 +367,11 @@ class ImportExpenseForm(ModelForm):
     def __init__(self, *args, **kwargs):
         import_order = kwargs.pop('import_order', None)
         super().__init__(*args, **kwargs)
-        
-        for field in self.fields.values():
-            field.widget.attrs.update({'class': 'form-control'})
-        
-        # Make date_incurred and receipt_number optional by default
+        apply_tailwind(self)
+
         self.fields['date_incurred'].required = False
         self.fields['receipt_number'].required = False
-        
-        # Pre-populate currency and exchange rate from import order
+
         if import_order:
             self.fields['currency'].initial = import_order.currency
             self.fields['exchange_rate'].initial = import_order.exchange_rate
@@ -408,12 +410,10 @@ ImportExpenseFormSet = inlineformset_factory(
 class SupplierInvoiceForm(ModelForm):
     currency = forms.ChoiceField(
         choices=ImportOrder._meta.get_field('currency').choices,
-        widget=forms.Select(attrs={'class': 'form-control'})
     )
     status = forms.ChoiceField(
         choices=SupplierInvoice.INVOICE_STATUS,
         initial='PENDING',
-        widget=forms.Select(attrs={'class': 'form-control'})
     )
 
     class Meta:
@@ -431,11 +431,8 @@ class SupplierInvoiceForm(ModelForm):
     def __init__(self, *args, **kwargs):
         import_order = kwargs.pop('import_order', None)
         super().__init__(*args, **kwargs)
-        
-        for field in self.fields.values():
-            field.widget.attrs.update({'class': 'form-control'})
-        
-        # Pre-populate from import order
+        apply_tailwind(self)
+
         if import_order:
             self.fields['currency'].initial = import_order.currency
             # Auto-calculate due date based on supplier payment terms
@@ -461,12 +458,8 @@ class InvoicePaymentForm(ModelForm):
     def __init__(self, *args, **kwargs):
         invoice = kwargs.pop('invoice', None)
         super().__init__(*args, **kwargs)
-        
-        # Save invoice on the form for use in clean methods
         self.invoice = invoice
-        
-        for field in self.fields.values():
-            field.widget.attrs.update({'class': 'form-control'})
+        apply_tailwind(self)
         
         # Set max amount to outstanding balance
         if self.invoice:
@@ -488,17 +481,13 @@ class InvoicePaymentForm(ModelForm):
 
 class ExpenseAllocationForm(forms.Form):
     """Form for custom expense allocation"""
-    allocation_method = forms.ChoiceField(
-        choices=ImportOrder.ALLOCATION_METHODS,
-        widget=forms.Select(attrs={'class': 'form-control'})
-    )
-    
+    allocation_method = forms.ChoiceField(choices=ImportOrder.ALLOCATION_METHODS)
+
     def __init__(self, *args, **kwargs):
         import_order = kwargs.pop('import_order', None)
         super().__init__(*args, **kwargs)
-        
+
         if import_order and import_order.allocation_method == 'CUSTOM':
-            # Add percentage fields for each item
             for item in import_order.items.all():
                 field_name = f'item_{item.id}_percentage'
                 self.fields[field_name] = forms.DecimalField(
@@ -507,11 +496,9 @@ class ExpenseAllocationForm(forms.Form):
                     decimal_places=2,
                     min_value=0,
                     max_value=100,
-                    widget=forms.NumberInput(attrs={
-                        'class': 'form-control',
-                        'step': '0.01'
-                    })
+                    widget=forms.NumberInput(attrs={'step': '0.01'})
                 )
+        apply_tailwind(self)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -536,8 +523,12 @@ class BulkInventoryImportForm(forms.Form):
     """Form for bulk importing inventory items to an import order"""
     csv_file = forms.FileField(
         help_text="Upload CSV with columns: name, quantity, unit_cost, weight, category",
-        widget=forms.FileInput(attrs={'class': 'form-control', 'accept': '.csv'})
+        widget=forms.FileInput(attrs={'accept': '.csv'})
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_tailwind(self)
     
     def clean_csv_file(self):
         file = self.cleaned_data.get('csv_file')
@@ -553,18 +544,16 @@ class BulkInventoryImportForm(forms.Form):
 
 class QuickExpenseForm(forms.Form):
     """Quick form to add common expenses based on country"""
-    country = forms.CharField(
-        max_length=100,
-        widget=forms.TextInput(attrs={'class': 'form-control'})
-    )
+    country = forms.CharField(max_length=100)
     goods_value = forms.DecimalField(
         max_digits=15,
         decimal_places=2,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'})
+        widget=forms.NumberInput(attrs={'step': '0.01'})
     )
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        apply_tailwind(self)
         self.fields['country'].help_text = 'Enter supplier country to auto-generate common expenses'
         self.fields['goods_value'].help_text = 'Total value of goods for expense estimation'
 
@@ -580,18 +569,12 @@ class CustomerForm(ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Tailwind-friendly defaults
-        base_cls = 'w-full border rounded-lg px-3 py-2'
-        for f in self.fields.values():
-            existing = f.widget.attrs.get('class', '')
-            f.widget.attrs.update({'class': (existing + ' ' + base_cls).strip()})
+        apply_tailwind(self)
 
-        # Set help text and label for opt_in_for_emails
         self.fields['opt_in_for_emails'].help_text = 'Customer agrees to receive email invoices'
         self.fields['opt_in_for_emails'].label = 'Email opt-in for invoices'
 
-        # Set default credit limit from site settings for new customers
-        if not self.instance.pk:  # Only for new customers
+        if not self.instance.pk:
             try:
                 settings = SiteSettings.get_settings()
                 self.fields['credit_limit'].initial = settings.default_credit_limit
@@ -607,9 +590,7 @@ class QuickCustomerForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for f in self.fields.values():
-            f.widget.attrs.update({'class': 'form-control'})
-
+        apply_tailwind(self)
         self.fields['email'].required = False
         self.fields['phone'].required = False
 
@@ -625,13 +606,11 @@ class ProductWithVariantsForm(ModelForm):
         queryset=Inventory_category.objects.all(),
         empty_label="Select a category",
         required=False,
-        widget=forms.Select(attrs={'class': 'form-control'})
     )
 
-    # Which attribute types will this product use for variants?
     variant_attribute_types = forms.ModelMultipleChoiceField(
         queryset=AttributeType.objects.filter(is_active=True),
-        widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
+        widget=forms.CheckboxSelectMultiple(),
         required=True,
         help_text="Select which attributes this product will have variants for"
     )
@@ -652,7 +631,6 @@ class ProductWithVariantsForm(ModelForm):
         ]
         widgets = {
             'image': forms.FileInput(attrs={
-                'class': 'form-control',
                 'accept': 'image/jpeg,image/jpg,image/png,image/webp'
             }),
             'description': forms.Textarea(attrs={'rows': 3}),
@@ -660,14 +638,8 @@ class ProductWithVariantsForm(ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        apply_tailwind(self)
 
-        # Apply form-control class
-        for field_name, field in self.fields.items():
-            if field_name != 'variant_attribute_types':
-                if not isinstance(field.widget, forms.CheckboxInput):
-                    field.widget.attrs.update({'class': 'form-control'})
-
-        # Help text
         self.fields['product_code'].help_text = 'Leave blank to auto-generate'
         self.fields['purchase_price'].help_text = 'Default cost (can be overridden per variant)'
         self.fields['selling_price'].help_text = 'Default price (can be overridden per variant)'
@@ -704,8 +676,8 @@ class VariantAttributeSelectionForm(forms.Form):
 
                 self.fields[f'attr_{attr_type.id}'] = forms.ModelMultipleChoiceField(
                     queryset=values,
-                    widget=forms.CheckboxSelectMultiple(attrs={'class': 'form-check-input'}),
-                    required=False,  # Individual fields are optional
+                    widget=forms.CheckboxSelectMultiple(),
+                    required=False,
                     label=attr_type.display_name,
                     help_text=f"Select {attr_type.display_name.lower()} options (optional)"
                 )
@@ -745,19 +717,16 @@ class ProductVariantForm(ModelForm):
         model = ProductVariant
         fields = ['sku', 'purchase_price', 'selling_price', 'quantity_in_stock', 'reorder_point', 'is_active']
         widgets = {
-            'sku': forms.TextInput(attrs={'class': 'form-control form-control-sm'}),
-            'purchase_price': forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'step': '0.01'}),
-            'selling_price': forms.NumberInput(attrs={'class': 'form-control form-control-sm', 'step': '0.01'}),
-            'quantity_in_stock': forms.NumberInput(attrs={'class': 'form-control form-control-sm'}),
-            'reorder_point': forms.NumberInput(attrs={'class': 'form-control form-control-sm'}),
-            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'purchase_price': forms.NumberInput(attrs={'step': '0.01'}),
+            'selling_price': forms.NumberInput(attrs={'step': '0.01'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['sku'].required = False  # Auto-generated
-        self.fields['purchase_price'].required = False  # Uses product default
-        self.fields['selling_price'].required = False  # Uses product default
+        apply_tailwind(self)
+        self.fields['sku'].required = False
+        self.fields['purchase_price'].required = False
+        self.fields['selling_price'].required = False
 
 
 class BulkVariantForm(forms.Form):
@@ -765,20 +734,24 @@ class BulkVariantForm(forms.Form):
 
     set_purchase_price = forms.DecimalField(
         max_digits=10, decimal_places=2, required=False,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': 'Set all costs'})
+        widget=forms.NumberInput(attrs={'step': '0.01', 'placeholder': 'Set all costs'})
     )
     set_selling_price = forms.DecimalField(
         max_digits=10, decimal_places=2, required=False,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'placeholder': 'Set all prices'})
+        widget=forms.NumberInput(attrs={'step': '0.01', 'placeholder': 'Set all prices'})
     )
     set_quantity = forms.IntegerField(
         required=False,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Set all stock'})
+        widget=forms.NumberInput(attrs={'placeholder': 'Set all stock'})
     )
     set_reorder_point = forms.IntegerField(
         required=False,
-        widget=forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'Set all reorder points'})
+        widget=forms.NumberInput(attrs={'placeholder': 'Set all reorder points'})
     )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_tailwind(self)
 
 
 class AddAttributeValueForm(forms.ModelForm):
@@ -788,14 +761,14 @@ class AddAttributeValueForm(forms.ModelForm):
         model = AttributeValue
         fields = ['attribute_type', 'value', 'display_value', 'color_code']
         widgets = {
-            'attribute_type': forms.Select(attrs={'class': 'form-control'}),
-            'value': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., 4XL or Burgundy'}),
-            'display_value': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Display name (optional)'}),
-            'color_code': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '#FF0000'}),
+            'value': forms.TextInput(attrs={'placeholder': 'e.g., 4XL or Burgundy'}),
+            'display_value': forms.TextInput(attrs={'placeholder': 'Display name (optional)'}),
+            'color_code': forms.TextInput(attrs={'placeholder': '#FF0000'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        apply_tailwind(self)
         self.fields['display_value'].required = False
         self.fields['color_code'].required = False
         self.fields['color_code'].help_text = 'Hex color code for color swatches (only for Color attribute)'

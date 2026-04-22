@@ -5,12 +5,37 @@ from .models import (
     LaybyPlan, LaybyItem, LaybyPayment, CashbookEntry, BankReconciliation
 )
 
+# ==================== TAILWIND CSS CLASSES ====================
+TW_INPUT = 'w-full px-4 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-gray-900 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors'
+TW_SELECT = TW_INPUT
+TW_TEXTAREA = TW_INPUT + ' resize-y'
+TW_CHECKBOX = 'w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2'
+
+
+def apply_tailwind(form_instance):
+    """Apply Tailwind CSS classes to all form fields."""
+    for field_name, field in form_instance.fields.items():
+        widget = field.widget
+        if isinstance(widget, forms.CheckboxInput):
+            widget.attrs['class'] = TW_CHECKBOX
+        elif isinstance(widget, (forms.Select, forms.RadioSelect)):
+            widget.attrs['class'] = TW_SELECT
+        elif isinstance(widget, forms.Textarea):
+            widget.attrs['class'] = TW_TEXTAREA
+        else:
+            widget.attrs['class'] = TW_INPUT
+
+
 # ==================== GENERAL LEDGER FORMS ====================
 
 class GLAccountForm(ModelForm):
     class Meta:
         model = GLAccount
         fields = ['code', 'name', 'type', 'is_active']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_tailwind(self)
 
 class JournalEntryForm(ModelForm):
     class Meta:
@@ -20,10 +45,18 @@ class JournalEntryForm(ModelForm):
             'entry_date': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_tailwind(self)
+
 class JournalLineForm(ModelForm):
     class Meta:
         model = JournalLine
         fields = ['account', 'description', 'debit', 'credit']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_tailwind(self)
 
 # ==================== ACCOUNTS RECEIVABLE FORMS ====================
 
@@ -38,8 +71,7 @@ class ARInvoiceForm(ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for f in self.fields.values():
-            f.widget.attrs.update({'class': 'form-control'})
+        apply_tailwind(self)
 
 class ARPaymentFormSimple(ModelForm):
     class Meta:
@@ -51,8 +83,7 @@ class ARPaymentFormSimple(ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for f in self.fields.values():
-            f.widget.attrs.update({'class': 'form-control'})
+        apply_tailwind(self)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -60,14 +91,11 @@ class ARPaymentFormSimple(ModelForm):
         amount = cleaned_data.get('amount')
 
         if invoice and amount:
-            # Check for overpayment
             if amount > invoice.outstanding_amount:
                 raise forms.ValidationError(
                     f'Payment amount (${amount}) exceeds outstanding balance (${invoice.outstanding_amount}). '
                     f'Please enter an amount equal to or less than ${invoice.outstanding_amount}.'
                 )
-
-            # Check for zero or negative amount
             if amount <= 0:
                 raise forms.ValidationError('Payment amount must be greater than zero.')
 
@@ -85,8 +113,7 @@ class LaybyPlanForm(ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for f in self.fields.values():
-            f.widget.attrs.update({'class': 'form-control'})
+        apply_tailwind(self)
 
 class LaybyItemForm(ModelForm):
     class Meta:
@@ -95,8 +122,7 @@ class LaybyItemForm(ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for f in self.fields.values():
-            f.widget.attrs.update({'class': 'form-control'})
+        apply_tailwind(self)
 
 class LaybyPaymentFormSimple(ModelForm):
     class Meta:
@@ -108,8 +134,7 @@ class LaybyPaymentFormSimple(ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        for f in self.fields.values():
-            f.widget.attrs.update({'class': 'form-control'})
+        apply_tailwind(self)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -117,17 +142,12 @@ class LaybyPaymentFormSimple(ModelForm):
         amount = cleaned_data.get('amount')
 
         if plan and amount:
-            # Calculate remaining balance
             remaining = plan.total_price - plan.amount_paid
-
-            # Check for overpayment
             if amount > remaining:
                 raise forms.ValidationError(
                     f'Payment amount (${amount}) exceeds remaining balance (${remaining}). '
                     f'Please enter an amount equal to or less than ${remaining}.'
                 )
-
-            # Check for zero or negative amount
             if amount <= 0:
                 raise forms.ValidationError('Payment amount must be greater than zero.')
 
@@ -143,6 +163,10 @@ class CashbookEntryForm(ModelForm):
             'date': forms.DateInput(attrs={'type': 'date'}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_tailwind(self)
+
 class BankReconciliationForm(ModelForm):
     class Meta:
         model = BankReconciliation
@@ -152,6 +176,10 @@ class BankReconciliationForm(ModelForm):
             'notes': forms.Textarea(attrs={'rows': 3}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        apply_tailwind(self)
+
 # ==================== UTILITY FORMS ====================
 
 class DateRangeForm(forms.Form):
@@ -160,5 +188,4 @@ class DateRangeForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super(DateRangeForm, self).__init__(*args, **kwargs)
-        for field in self.fields.values():
-            field.widget.attrs.update({'class': 'form-control'})
+        apply_tailwind(self)

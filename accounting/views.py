@@ -7,6 +7,8 @@ from django.views.decorators.http import require_POST
 from django.utils import timezone
 from django.db.models import Sum, Q
 from django.db.models.functions import TruncMonth
+from django.core.paginator import Paginator
+from django.core.exceptions import ValidationError
 from decimal import Decimal
 import calendar
 
@@ -42,29 +44,34 @@ def layby_fulfill_action(request, plan_id):
                 created_by=request.user
             )
             
-            # Dr Unearned Revenue, Cr Sales Revenue
+            # Dr Unearned Revenue by amount_paid (what was actually deposited & posted)
+            # Cr Sales Revenue by total_price (full sale value)
+            # If amount_paid < total_price, any shortfall is an outstanding balance
+            # already tracked via AR; we only release what was received.
+            recognize_amount = plan.amount_paid
+            total_price = plan.total_price or Decimal('0')
             JournalLine.objects.create(
                 entry=je,
                 account=unearned,
-                debit=plan.total_price,
+                debit=recognize_amount,
                 description='Recognize revenue from layby'
             )
             JournalLine.objects.create(
                 entry=je,
                 account=revenue,
-                credit=plan.total_price,
+                credit=recognize_amount,
                 description='Sales revenue recognized',
                 customer=plan.customer
             )
 
-            # Calculate and post COGS
             total_cogs = Decimal('0')
             for item in plan.items.select_related('inventory_item'):
                 cogs_amount = (item.inventory_item.purchase_price or Decimal('0')) * (item.quantity or 0)
                 total_cogs += cogs_amount
-            
+            if total_price > 0 and recognize_amount < total_price:
+                total_cogs = (total_cogs * recognize_amount / total_price).quantize(Decimal('0.01'))
+
             if total_cogs > 0:
-                # Dr COGS, Cr Inventory
                 JournalLine.objects.create(
                     entry=je,
                     account=cogs_acct,
@@ -77,6 +84,7 @@ def layby_fulfill_action(request, plan_id):
                     credit=total_cogs,
                     description='Inventory reduction'
                 )
+            je.assert_balanced()
         except GLAccount.DoesNotExist:
             messages.warning(request, 'GL accounts not configured - journal entries skipped')
 
@@ -109,43 +117,64 @@ def layby_fulfill_action(request, plan_id):
 @require_POST
 def layby_cancel_action(request, plan_id):
     """Cancel a layby plan: restock and post refund/forfeit fee."""
+    from accounting.utils import MissingGLAccountError, require_gl
+
     plan = get_object_or_404(LaybyPlan, pk=plan_id)
     from inventory.models import StockMovement
     fee = Decimal(request.POST.get('cancellation_fee', '0') or '0')
 
-    for item in plan.items.select_related('inventory_item'):
-        inv = item.inventory_item
-        inv.quantity_in_Stock += item.quantity
-        inv.save(update_fields=['quantity_in_Stock'])
-        StockMovement.objects.create(
-            inventory_item=inv,
-            movement_type='IN',
-            quantity=item.quantity,
-            reason=f'Layby cancel plan#{plan.id}'
-        )
-
-    refund = max(Decimal('0'), (plan.amount_paid or Decimal('0')) - fee)
     try:
-        unearned = GLAccount.objects.get(code='2300')
-        cash = GLAccount.objects.get(code='1000')
-        je = JournalEntry.objects.create(memo=f'Layby cancel plan#{plan.id}')
-        if refund > 0:
-            JournalLine.objects.create(entry=je, account=unearned, debit=refund, description='Refund customer')
-            JournalLine.objects.create(entry=je, account=cash, credit=refund, description='Cash out')
-        if fee > 0:
-            other_income = GLAccount.objects.get(code='4800')
-            JournalLine.objects.create(entry=je, account=unearned, debit=fee, description='Forfeit fee')
-            JournalLine.objects.create(entry=je, account=other_income, credit=fee, description='Layby forfeit income')
-    except GLAccount.DoesNotExist:
-        pass
+        with transaction.atomic():
+            for item in plan.items.select_related('inventory_item'):
+                inv = item.inventory_item
+                inv.quantity_in_Stock += item.quantity
+                inv.save(update_fields=['quantity_in_Stock'])
+                StockMovement.objects.create(
+                    inventory_item=inv,
+                    movement_type='IN',
+                    quantity=item.quantity,
+                    reason=f'Layby cancel plan#{plan.id}'
+                )
 
-    # Reduce customer balance (reverse the AR that was created on plan creation)
-    if plan.customer:
-        plan.customer.current_balance = (plan.customer.current_balance or Decimal('0')) - plan.total_price
-        plan.customer.save(update_fields=['current_balance'])
+            refund = max(Decimal('0'), (plan.amount_paid or Decimal('0')) - fee)
+            unpaid = (plan.total_price or Decimal('0')) - (plan.amount_paid or Decimal('0'))
 
-    plan.status = 'CANCELLED'
-    plan.save(update_fields=['status'])
+            unearned = require_gl('2300')
+            cash = require_gl('1000')
+            ar = require_gl('1200')
+            je = JournalEntry.objects.create(memo=f'Layby cancel plan#{plan.id}', created_by=request.user)
+            if refund > 0:
+                JournalLine.objects.create(entry=je, account=unearned, debit=refund, description='Refund customer')
+                JournalLine.objects.create(entry=je, account=cash, credit=refund, description='Cash out')
+            if fee > 0:
+                other_income = require_gl('4800')
+                JournalLine.objects.create(entry=je, account=unearned, debit=fee, description='Forfeit fee')
+                JournalLine.objects.create(entry=je, account=other_income, credit=fee, description='Layby forfeit income')
+            if unpaid > 0:
+                JournalLine.objects.create(
+                    entry=je, account=unearned, debit=unpaid,
+                    description='Release unpaid commitment (clear AR)',
+                )
+                JournalLine.objects.create(
+                    entry=je, account=ar, credit=unpaid,
+                    description='Clear layby receivable', customer=plan.customer,
+                )
+            je.assert_balanced()
+
+            if plan.customer:
+                plan.customer.current_balance = (plan.customer.current_balance or Decimal('0')) - unpaid
+                plan.customer.save(update_fields=['current_balance'])
+
+            if plan.ar_invoice:
+                plan.ar_invoice.status = 'CANCELLED'
+                plan.ar_invoice.save(update_fields=['status', 'last_updated'])
+
+            plan.status = 'CANCELLED'
+            plan.save(update_fields=['status'])
+    except (MissingGLAccountError, ValidationError) as exc:
+        messages.error(request, str(exc))
+        return redirect('accounting:layby_detail', plan_id=plan.id)
+
     messages.success(request, f'Layby plan #{plan.id} cancelled')
     return redirect('accounting:layby_list')
 from .expense_forms import ExpenseForm
@@ -171,28 +200,31 @@ def cashbook_list(request):
     # Opening balance = sum before start_date
     opening = Decimal('0')
     if start_date:
-        before = CashbookEntry.objects.filter(date__lt=start_date)
-        opening = (before.aggregate(
+        before = CashbookEntry.objects.filter(date__lt=start_date).aggregate(
             r=Sum('receipt_amount'), p=Sum('payment_amount')
-        )['r'] or 0) - (before.aggregate(
-            r=Sum('receipt_amount'), p=Sum('payment_amount')
-        )['p'] or 0)
+        )
+        opening = Decimal(str(before['r'] or 0)) - Decimal(str(before['p'] or 0))
 
     totals = qs.aggregate(r=Sum('receipt_amount'), p=Sum('payment_amount'))
     receipts = totals['r'] or 0
     payments = totals['p'] or 0
     closing = opening + receipts - payments
 
-    # Build running balance rows
+    # Build running balance rows (over full filtered set, then paginate)
     running = opening
-    rows = []
+    all_rows = []
     for e in qs:
         running += (e.receipt_amount or 0) - (e.payment_amount or 0)
-        rows.append({'entry': e, 'running': running})
+        all_rows.append({'entry': e, 'running': running})
+
+    paginator = Paginator(all_rows, 50)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
 
     return render(request, 'accounting/cashbook_list.html', {
         'form': form,
-        'rows': rows,
+        'rows': page_obj,
+        'page_obj': page_obj,
         'opening': opening,
         'receipts': receipts,
         'payments': payments,
@@ -288,9 +320,12 @@ def bank_reconciliation_add(request):
 @login_required
 def ar_invoice_list(request):
     """List all A/R invoices"""
-    invoices = ARInvoice.objects.all().select_related('customer').order_by('-invoice_date')
+    qs = ARInvoice.objects.all().select_related('customer').order_by('-invoice_date')
+    paginator = Paginator(qs, 50)
+    page_obj = paginator.get_page(request.GET.get('page'))
     return render(request, 'accounting/ar_invoice_list.html', {
-        'invoices': invoices
+        'invoices': page_obj,
+        'page_obj': page_obj,
     })
 
 @login_required
@@ -420,8 +455,13 @@ def layby_payment_add(request, plan_id):
 
 @login_required
 def expense_list(request):
-    expenses = Expense.objects.all().order_by('-date', '-id')
-    return render(request, 'accounting/expense_list.html', {'expenses': expenses})
+    qs = Expense.objects.all().order_by('-date', '-id')
+    paginator = Paginator(qs, 50)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    return render(request, 'accounting/expense_list.html', {
+        'expenses': page_obj,
+        'page_obj': page_obj,
+    })
 
 @login_required
 def expense_add(request):
@@ -1015,11 +1055,17 @@ def profit_loss_report(request):
     month_str = request.GET.get('month')
     year_str = request.GET.get('year')
 
+    now = timezone.now()
     if month_str and year_str:
-        month = int(month_str)
-        year = int(year_str)
+        try:
+            month = int(month_str)
+            year = int(year_str)
+            if not (1 <= month <= 12) or not (2000 <= year <= 2100):
+                raise ValueError
+        except (ValueError, TypeError):
+            month = now.month
+            year = now.year
     else:
-        now = timezone.now()
         month = now.month
         year = now.year
 

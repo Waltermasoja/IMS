@@ -13,6 +13,7 @@ class Command(BaseCommand):
         accounts = [
             # Assets
             {'code': '1000', 'name': 'Cash', 'type': 'ASSET'},
+            {'code': '1010', 'name': 'Operating Bank Account', 'type': 'ASSET'},
             {'code': '1200', 'name': 'Accounts Receivable', 'type': 'ASSET'},
             {'code': '1300', 'name': 'Inventory', 'type': 'ASSET'},
             {'code': '1400', 'name': 'Prepaid Expenses', 'type': 'ASSET'},

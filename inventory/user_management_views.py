@@ -285,19 +285,24 @@ def user_permissions_quick_edit(request, user_id):
             permission = data.get('permission')
             value = data.get('value')
 
-            if hasattr(profile, permission):
-                setattr(profile, permission, value)
-                profile.save()
-
-                return JsonResponse({
-                    'success': True,
-                    'message': f'Permission updated'
-                })
-            else:
+            ALLOWED_PERMISSIONS = {
+                'can_make_sales', 'can_process_returns', 'can_apply_discounts',
+                'can_view_reports', 'can_manage_inventory', 'can_manage_suppliers',
+                'can_manage_users',
+            }
+            if permission not in ALLOWED_PERMISSIONS:
                 return JsonResponse({
                     'success': False,
                     'error': 'Invalid permission'
                 })
+
+            setattr(profile, permission, value)
+            profile.save()
+
+            return JsonResponse({
+                'success': True,
+                'message': f'Permission updated'
+            })
 
         except Exception as e:
             return JsonResponse({
