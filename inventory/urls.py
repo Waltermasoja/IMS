@@ -36,6 +36,7 @@ urlpatterns = [
     path('add-category-ajax/', add_category_ajax, name='add_category_ajax'),
     path('inventory_update/<int:pk>/', inventory_update, name='inventory_update'),
     path('api/product-search/', product_search_ajax, name='product_search_ajax'),
+    path('api/checkout-ticket/', checkout_ticket, name='checkout_ticket'),
     path('api/product-details/<int:pk>/', product_details_ajax, name='product_details_ajax'),
     path('invoice/print/<str:receipt_number>/', invoice_print, name='invoice_print'),
     path('inventory/update/<int:pk>/', update_inventory, name='update_inventory_ajax'),

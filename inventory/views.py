@@ -66,6 +66,11 @@ from .models import (
     AttributeType,
     AttributeValue,
     ProductVariant,
+    Shop,
+    ShopStock,
+    SalesTicket,
+    SalesLine,
+    StockMovement,
 )
 from .utils import run_allocation
 import json
@@ -855,6 +860,154 @@ def layby_cancel(request, pk):
         return redirect('dashboard')
     messages.success(request, 'Layby cancelled')
     return redirect('dashboard')
+
+
+@login_required
+@require_http_methods(["POST"])
+def checkout_ticket(request):
+    """Create a SalesTicket from a cart JSON payload and post to GL/cashbook.
+
+    POST body (JSON):
+    {
+        "shop_id": 1,
+        "terms": "IMMEDIATE" | "CREDIT" | "LAYBY",
+        "tender_type": "CASH" | "ECOCASH" | "BANK_TRANSFER" | "CARD",
+        "tender_reference": "ECA123",   // optional, for EcoCash/bank
+        "customer_id": 5,               // required for CREDIT/LAYBY
+        "due_date": "2026-05-15",       // required for CREDIT
+        "initial_deposit": "50.00",     // optional for LAYBY
+        "discount_percent": "10.0",
+        "lines": [
+            {"id": 3, "variant_id": null, "qty": 2, "unit_price": "115.00"},
+            ...
+        ]
+    }
+    """
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'success': False, 'error': 'Invalid JSON body'})
+
+    try:
+        with transaction.atomic():
+            from accounting.utils import post_ticket
+            from accounting.models import LaybyPayment
+
+            shop_id = data.get('shop_id')
+            if not shop_id:
+                return JsonResponse({'success': False, 'error': 'shop_id is required'})
+            shop = get_object_or_404(Shop, pk=shop_id, is_active=True)
+
+            terms = (data.get('terms') or 'IMMEDIATE').upper()
+            if terms not in ('IMMEDIATE', 'CREDIT', 'LAYBY'):
+                return JsonResponse({'success': False, 'error': f'Invalid terms: {terms}'})
+
+            tender_type = (data.get('tender_type') or 'CASH').upper()
+            if tender_type not in ('CASH', 'ECOCASH', 'BANK_TRANSFER', 'CARD'):
+                return JsonResponse({'success': False, 'error': f'Invalid tender_type: {tender_type}'})
+
+            discount_percent = Decimal(str(data.get('discount_percent') or 0))
+            if discount_percent < 0 or discount_percent > 100:
+                return JsonResponse({'success': False, 'error': 'discount_percent must be 0-100'})
+            if (hasattr(request.user, 'profile')
+                    and discount_percent > request.user.profile.max_discount_percent):
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Discount exceeds your limit of {request.user.profile.max_discount_percent}%',
+                })
+
+            customer = None
+            if terms in ('CREDIT', 'LAYBY'):
+                cid = data.get('customer_id')
+                if not cid:
+                    return JsonResponse({'success': False, 'error': 'customer_id required for CREDIT/LAYBY'})
+                customer = get_object_or_404(Customer, pk=cid)
+
+            lines_data = data.get('lines') or []
+            if not lines_data:
+                return JsonResponse({'success': False, 'error': 'Cart is empty'})
+
+            vat_rate = SiteSettings.get_settings().tax_rate or Decimal('0')
+
+            ticket = SalesTicket.objects.create(
+                shop=shop,
+                cashier=request.user,
+                customer=customer,
+                terms=terms,
+                tender_type=tender_type,
+                tender_reference=data.get('tender_reference') or '',
+            )
+
+            for ld in lines_data:
+                inv_id = ld.get('id')
+                variant_id = ld.get('variant_id')
+                qty = int(ld.get('qty', 1))
+                unit_price = Decimal(str(ld.get('unit_price', 0)))
+
+                if qty <= 0:
+                    return JsonResponse({'success': False, 'error': 'Line qty must be > 0'})
+                if unit_price <= 0:
+                    return JsonResponse({'success': False, 'error': 'Line unit_price must be > 0'})
+
+                inv = get_object_or_404(Inventory, pk=inv_id)
+                variant = None
+                if variant_id:
+                    variant = get_object_or_404(ProductVariant, pk=variant_id, product=inv)
+
+                stock_row = ShopStock.get_or_create_for(shop, inv, variant)
+                if stock_row.quantity < qty:
+                    label = variant.sku if variant else inv.name
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'Insufficient stock for {label}: {stock_row.quantity} available',
+                    })
+
+                discount_amount = (unit_price * qty * discount_percent / 100).quantize(Decimal('0.01'))
+
+                line = SalesLine(
+                    ticket=ticket,
+                    inventory_item=inv,
+                    variant=variant,
+                    quantity=qty,
+                    unit_price_incl_vat=unit_price,
+                    discount_amount=discount_amount,
+                    unit_cost=inv.purchase_price or Decimal('0'),
+                )
+                line.compute(vat_rate=vat_rate)
+                line.save()
+
+            ticket.recalc_totals(save=True)
+            post_ticket(ticket, user=request.user)
+
+            if terms == 'LAYBY':
+                initial_deposit = Decimal(str(data.get('initial_deposit') or 0))
+                if initial_deposit > 0:
+                    from accounting.models import LaybyPlan
+                    plan = LaybyPlan.objects.filter(ticket=ticket).first()
+                    if plan:
+                        LaybyPayment.objects.create(
+                            plan=plan,
+                            amount=initial_deposit,
+                            reference=ticket.receipt_number,
+                            recorded_by=request.user,
+                        )
+
+            return JsonResponse({
+                'success': True,
+                'receipt_number': ticket.receipt_number,
+                'total': str(ticket.total_incl_vat),
+                'subtotal_excl': str(ticket.subtotal_excl_vat),
+                'vat': str(ticket.vat_total),
+                'items_count': ticket.lines.count(),
+                'terms': terms,
+                'tender_type': tender_type,
+            })
+
+    except ValueError as exc:
+        return JsonResponse({'success': False, 'error': str(exc)})
+    except Exception as exc:
+        logger.exception('checkout_ticket failed')
+        return JsonResponse({'success': False, 'error': f'Server error: {exc}'})
 
 
 @login_required
@@ -1979,28 +2132,43 @@ def add_invoice_payment(request, pk):
 
 @login_required
 def simple_pos(request):
-    # Check if user has profile, create if not exists
+    from .models import UserProfile
     if not hasattr(request.user, 'profile'):
-        from .models import UserProfile
         UserProfile.objects.create(
             user=request.user,
             role='admin' if request.user.is_staff else 'sales',
-            can_make_sales=True,  # Ensure users can access POS by default
-            can_manage_inventory=request.user.is_staff,  # Admins should have inventory access
+            can_make_sales=True,
+            can_manage_inventory=request.user.is_staff,
         )
-    
-    # Check POS access permission (model property handles admin access automatically)
+
     if not request.user.profile.can_access_pos:
         messages.error(request, 'You do not have permission to access the Point of Sale system.')
         return redirect('dashboard')
-    
-    customers = Customer.objects.all().order_by('name')
+
+    # Resolve current shop: query param > user default > first active shop
+    shops = Shop.objects.filter(is_active=True).order_by('name')
+    current_shop = None
+    shop_id_param = request.GET.get('shop_id') or request.POST.get('shop_id')
+    if shop_id_param:
+        current_shop = shops.filter(pk=shop_id_param).first()
+    if not current_shop and hasattr(request.user.profile, 'default_shop') and request.user.profile.default_shop:
+        current_shop = request.user.profile.default_shop if request.user.profile.default_shop.is_active else None
+    if not current_shop:
+        current_shop = shops.first()
+
+    settings = SiteSettings.get_settings()
+    customers = Customer.objects.filter(status='ACTIVE').order_by('name')
+
     context = {
         'user_role': request.user.profile.role,
         'max_discount': request.user.profile.max_discount_percent,
         'customers': customers,
+        'shops': shops,
+        'current_shop': current_shop,
+        'vat_rate': settings.tax_rate if settings else 15,
+        'currency_symbol': settings.currency_symbol if settings else '$',
     }
-    
+
     return render(request, 'inventory/simple_pos.html', context)
 
 
@@ -2141,14 +2309,23 @@ def sales_report_export_csv(request):
 @login_required
 @require_http_methods(["GET"])
 def product_search_ajax(request):
-    """AJAX endpoint for fast product search by common fields"""
-    query = request.GET.get('q', '').strip()
+    """AJAX endpoint for fast product search by common fields.
 
+    Accepts optional ?shop_id=<pk> to return per-shop stock from ShopStock
+    instead of the global Inventory.quantity_in_Stock field.
+    """
+    query = request.GET.get('q', '').strip()
     if not query:
         return JsonResponse({'products': []})
 
-    # Broaden search: product_code, name, label, category name, and size
-    # Also search in variant SKUs
+    shop = None
+    shop_id = request.GET.get('shop_id')
+    if shop_id:
+        try:
+            shop = Shop.objects.get(pk=shop_id, is_active=True)
+        except Shop.DoesNotExist:
+            pass
+
     products = (
         Inventory.objects.filter(
             Q(product_code__icontains=query)
@@ -2156,7 +2333,7 @@ def product_search_ajax(request):
             | Q(label__icontains=query)
             | Q(size__icontains=query)
             | Q(category__name__icontains=query)
-            | Q(variants__sku__icontains=query)  # Search variant SKUs
+            | Q(variants__sku__icontains=query)
         )
         .select_related('category')
         .prefetch_related('variants__attribute_values__attribute_type')
@@ -2166,8 +2343,14 @@ def product_search_ajax(request):
 
     results = []
     for product in products:
-        # Get thumbnail URL if image exists
         thumbnail_url = product.thumbnail.url if product.thumbnail else None
+
+        if shop:
+            # Per-shop stock from ShopStock join table
+            shop_stock_row = ShopStock.get_or_create_for(shop, product, None)
+            qty_in_stock = int(shop_stock_row.quantity)
+        else:
+            qty_in_stock = product.quantity_in_Stock if not product.has_variants else product.total_stock
 
         product_data = {
             'id': product.id,
@@ -2175,18 +2358,27 @@ def product_search_ajax(request):
             'name': product.name,
             'label': product.label,
             'selling_price': str(product.selling_price),
-            'quantity_in_stock': product.quantity_in_Stock if not product.has_variants else product.total_stock,
-            'total_stock': product.total_stock if product.has_variants else product.quantity_in_Stock,
+            'quantity_in_stock': qty_in_stock,
+            'total_stock': qty_in_stock,
             'category': product.category.name if product.category else 'Uncategorized',
             'display_name': f"{product.product_code} - {product.name}",
             'thumbnail_url': thumbnail_url,
             'has_variants': product.has_variants,
         }
 
-        # Include variant data if product has variants
         if product.has_variants:
             variants_data = []
             for variant in product.variants.filter(is_active=True):
+                if shop:
+                    v_stock_row = ShopStock.get_or_create_for(shop, product, variant)
+                    v_qty = int(v_stock_row.quantity)
+                else:
+                    v_qty = variant.quantity_in_stock
+
+                reorder = getattr(ShopStock.objects.filter(
+                    shop=shop, inventory_item=product, variant=variant
+                ).first(), 'reorder_point', 5) if shop else 5
+
                 attrs = []
                 for attr_val in variant.attribute_values.all():
                     attrs.append({
@@ -2200,8 +2392,8 @@ def product_search_ajax(request):
                     'attributes': attrs,
                     'attribute_string': variant.attribute_string,
                     'selling_price': str(variant.effective_selling_price),
-                    'quantity_in_stock': variant.quantity_in_stock,
-                    'is_low_stock': variant.is_low_stock,
+                    'quantity_in_stock': v_qty,
+                    'is_low_stock': v_qty <= reorder,
                 })
             product_data['variants'] = variants_data
             product_data['variant_count'] = len(variants_data)
