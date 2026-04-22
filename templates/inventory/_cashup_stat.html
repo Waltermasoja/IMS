@@ -1,0 +1,14 @@
+{% comment %}
+  Params: label, value, icon, color (tailwind color name), currency (bool)
+{% endcomment %}
+<div class="bg-white rounded-2xl shadow-sm p-4">
+  <div class="flex items-center gap-3 mb-2">
+    <div class="w-8 h-8 bg-{{ color }}-100 rounded-lg flex items-center justify-center">
+      <i class="fas {{ icon }} text-{{ color }}-600 text-sm"></i>
+    </div>
+    <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">{{ label }}</span>
+  </div>
+  <p class="text-2xl font-bold text-gray-900">
+    {% if currency %}{{ site_settings.currency_symbol }}{{ value|floatformat:2 }}{% else %}{{ value }}{% endif %}
+  </p>
+</div>

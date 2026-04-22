@@ -1807,3 +1807,73 @@ class SalesInvoiceItem(models.Model):
     def __str__(self):
         return f"{self.quantity}x {self.product_name}"
 
+
+# ============================================================
+# Daily Z-Report (cash-up) — one record per shop per trading day
+# ============================================================
+
+class DailyCashUp(models.Model):
+    """Snapshot of a shop's trading activity for one calendar day.
+
+    Created when a manager "closes the day". After closure, the system
+    refuses further SalesTickets for that shop+date combination.
+    """
+    shop = models.ForeignKey(
+        'Shop', on_delete=models.PROTECT, related_name='daily_cashups',
+    )
+    date = models.DateField(db_index=True)
+
+    # Z-number: sequential per shop, never reused.
+    z_number = models.PositiveIntegerField()
+
+    # Aggregated sales metrics
+    ticket_count = models.PositiveIntegerField(default=0)
+    gross_sales = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0'))
+    discount_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0'))
+    vat_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0'))
+    net_sales = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0'))
+
+    # Tender breakdown (cash_total = what should be in drawer)
+    cash_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0'))
+    ecocash_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0'))
+    bank_transfer_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0'))
+    card_total = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0'))
+
+    # Cash count reconciliation
+    counted_cash = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True,
+        help_text='Physical cash counted in the drawer at close',
+    )
+    cash_variance = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True,
+        help_text='counted_cash − cash_total; negative = shortage',
+    )
+
+    # Cashier breakdown stored as JSON: [{cashier_id, name, ticket_count, total}, ...]
+    cashier_summary = models.JSONField(default=list, blank=True)
+
+    notes = models.TextField(blank=True)
+    closed_by = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='daily_cashups_closed',
+    )
+    closed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('shop', 'date')]
+        ordering = ['-date', 'shop']
+        verbose_name = 'Daily Cash-Up'
+        verbose_name_plural = 'Daily Cash-Ups'
+
+    def __str__(self):
+        return f"Z{self.z_number:05d} — {self.shop.code} {self.date}"
+
+    @classmethod
+    def next_z_number(cls, shop):
+        last = cls.objects.filter(shop=shop).aggregate(m=models.Max('z_number'))['m']
+        return (last or 0) + 1
+
+    @classmethod
+    def is_day_closed(cls, shop, date):
+        return cls.objects.filter(shop=shop, date=date).exists()
+

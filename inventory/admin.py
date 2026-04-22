@@ -10,6 +10,7 @@ from .models import (
     AttributeType, AttributeValue, ProductVariant,
     Shop, ShopStock, StockTransfer,
     SalesTicket, SalesLine,
+    DailyCashUp,
 )
 
 # ==================== MULTI-SHOP (PHASE A1) ====================
@@ -485,6 +486,14 @@ class ProductVariantAdmin(admin.ModelAdmin):
         values = obj.attribute_values.select_related('attribute_type').order_by('attribute_type__display_order', 'display_order')
         return ', '.join([f"{v.attribute_type.display_name}: {v.label}" for v in values])
     attribute_values_display.short_description = 'Attributes'
+
+@admin.register(DailyCashUp)
+class DailyCashUpAdmin(admin.ModelAdmin):
+    list_display = ['z_number', 'shop', 'date', 'ticket_count', 'gross_sales', 'cash_total', 'cash_variance', 'closed_by', 'closed_at']
+    list_filter = ['shop', 'date']
+    readonly_fields = ['z_number', 'closed_at', 'cashier_summary']
+    ordering = ['-date', 'shop']
+
 
 # Customize admin site header
 admin.site.site_header = "Inventory Management System"

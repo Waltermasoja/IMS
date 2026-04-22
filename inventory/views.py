@@ -927,6 +927,13 @@ def checkout_ticket(request):
             if not lines_data:
                 return JsonResponse({'success': False, 'error': 'Cart is empty'})
 
+            from .models import DailyCashUp
+            if DailyCashUp.is_day_closed(shop, timezone.localdate()):
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Trading day is already closed for {shop.name}. Open a new day.',
+                })
+
             vat_rate = SiteSettings.get_settings().tax_rate or Decimal('0')
 
             ticket = SalesTicket.objects.create(
@@ -2172,6 +2179,184 @@ def simple_pos(request):
     return render(request, 'inventory/simple_pos.html', context)
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# D1 — Daily Z-report / cash-up
+# ──────────────────────────────────────────────────────────────────────────────
+
+@login_required
+def cashup_preview(request, shop_pk):
+    """Show today's running totals for a shop (before close-of-day).
+
+    Also accepts ?date=YYYY-MM-DD to view a historical closed Z-report.
+    """
+    from .models import DailyCashUp
+    shop = get_object_or_404(Shop, pk=shop_pk, is_active=True)
+
+    date_str = request.GET.get('date')
+    if date_str:
+        try:
+            from datetime import date as date_cls
+            report_date = date_cls.fromisoformat(date_str)
+        except ValueError:
+            report_date = timezone.localdate()
+    else:
+        report_date = timezone.localdate()
+
+    from datetime import timedelta as _td
+    closed_record = DailyCashUp.objects.filter(shop=shop, date=report_date).first()
+    summary = _build_day_summary(shop, report_date)
+
+    immediate_total = sum([
+        summary['cash_total'],
+        summary['ecocash_total'],
+        summary['bank_transfer_total'],
+        summary['card_total'],
+    ])
+    tender_rows = [
+        ('Cash', summary['cash_total'], 'fas fa-money-bill', 'bg-green-500'),
+        ('EcoCash', summary['ecocash_total'], 'fas fa-mobile-alt', 'bg-blue-500'),
+        ('Bank Transfer', summary['bank_transfer_total'], 'fas fa-university', 'bg-indigo-500'),
+        ('Card', summary['card_total'], 'fas fa-credit-card', 'bg-purple-500'),
+    ]
+
+    context = {
+        'shop': shop,
+        'report_date': report_date,
+        'prev_date': report_date - _td(days=1),
+        'next_date': report_date + _td(days=1),
+        'summary': summary,
+        'closed_record': closed_record,
+        'shops': Shop.objects.filter(is_active=True).order_by('name'),
+        'tender_rows': tender_rows,
+        'immediate_total': immediate_total,
+    }
+    return render(request, 'inventory/daily_cashup.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def cashup_close(request, shop_pk):
+    """Close the trading day for a shop. Returns JSON."""
+    from .models import DailyCashUp
+    from django.utils.dateparse import parse_date
+
+    if request.user.profile.role not in ('admin', 'manager'):
+        return JsonResponse({'success': False, 'error': 'Only managers can close the day'})
+
+    shop = get_object_or_404(Shop, pk=shop_pk, is_active=True)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        body = {}
+
+    date_str = body.get('date') or timezone.localdate().isoformat()
+    try:
+        from datetime import date as date_cls
+        report_date = date_cls.fromisoformat(date_str)
+    except ValueError:
+        return JsonResponse({'success': False, 'error': 'Invalid date'})
+
+    if DailyCashUp.is_day_closed(shop, report_date):
+        return JsonResponse({'success': False, 'error': f'{report_date} is already closed for {shop.name}'})
+
+    summary = _build_day_summary(shop, report_date)
+    counted_cash_raw = body.get('counted_cash')
+    counted_cash = Decimal(str(counted_cash_raw)) if counted_cash_raw not in (None, '') else None
+    cash_variance = (counted_cash - summary['cash_total']) if counted_cash is not None else None
+
+    with transaction.atomic():
+        record = DailyCashUp.objects.create(
+            shop=shop,
+            date=report_date,
+            z_number=DailyCashUp.next_z_number(shop),
+            ticket_count=summary['ticket_count'],
+            gross_sales=summary['gross_sales'],
+            discount_total=summary['discount_total'],
+            vat_total=summary['vat_total'],
+            net_sales=summary['net_sales'],
+            cash_total=summary['cash_total'],
+            ecocash_total=summary['ecocash_total'],
+            bank_transfer_total=summary['bank_transfer_total'],
+            card_total=summary['card_total'],
+            counted_cash=counted_cash,
+            cash_variance=cash_variance,
+            cashier_summary=summary['cashier_summary'],
+            notes=body.get('notes', ''),
+            closed_by=request.user,
+        )
+
+    return JsonResponse({
+        'success': True,
+        'z_number': record.z_number,
+        'z_label': str(record),
+        'redirect_url': f'/inventory/cashup/{shop_pk}/?date={report_date}',
+    })
+
+
+def _build_day_summary(shop, report_date):
+    """Aggregate SalesTickets for shop+date into a summary dict."""
+    tickets = (
+        SalesTicket.objects
+        .filter(shop=shop, created_at__date=report_date, voided=False)
+        .select_related('cashier')
+    )
+
+    from django.db.models import Sum as _Sum
+
+    agg = tickets.aggregate(
+        gross=_Sum('total_incl_vat'),
+        vat=_Sum('vat_total'),
+        discount=_Sum('discount_total'),
+    )
+    gross_sales = agg['gross'] or Decimal('0')
+    vat_total = agg['vat'] or Decimal('0')
+    discount_total = agg['discount'] or Decimal('0')
+    net_sales = gross_sales - discount_total
+
+    # Tender breakdown — only IMMEDIATE tickets move cash on day of sale
+    immediate = tickets.filter(terms='IMMEDIATE')
+    tender_agg = {}
+    for tender in ('CASH', 'ECOCASH', 'BANK_TRANSFER', 'CARD'):
+        tender_agg[tender] = (
+            immediate.filter(tender_type=tender)
+            .aggregate(t=_Sum('total_incl_vat'))['t'] or Decimal('0')
+        )
+
+    # Cashier breakdown
+    from collections import defaultdict
+    cashier_map = defaultdict(lambda: {'ticket_count': 0, 'total': Decimal('0')})
+    for t in tickets:
+        key = t.cashier_id or 0
+        label = (t.cashier.get_full_name() or t.cashier.username) if t.cashier else 'Unknown'
+        cashier_map[key]['name'] = label
+        cashier_map[key]['cashier_id'] = key
+        cashier_map[key]['ticket_count'] += 1
+        cashier_map[key]['total'] += t.total_incl_vat or Decimal('0')
+
+    cashier_summary = [
+        {
+            'cashier_id': v['cashier_id'],
+            'name': v['name'],
+            'ticket_count': v['ticket_count'],
+            'total': str(v['total']),
+        }
+        for v in cashier_map.values()
+    ]
+
+    return {
+        'ticket_count': tickets.count(),
+        'gross_sales': gross_sales,
+        'vat_total': vat_total,
+        'discount_total': discount_total,
+        'net_sales': net_sales,
+        'cash_total': tender_agg['CASH'],
+        'ecocash_total': tender_agg['ECOCASH'],
+        'bank_transfer_total': tender_agg['BANK_TRANSFER'],
+        'card_total': tender_agg['CARD'],
+        'cashier_summary': cashier_summary,
+        'tickets': tickets,
+    }
 
 
 @login_required
