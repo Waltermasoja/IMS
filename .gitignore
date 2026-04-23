@@ -10,14 +10,19 @@ build/
 *.egg
 .venv/
 venv/
+imsvenv/
 ENV/
 
 # Django
 *.log
 db.sqlite3
 db.sqlite3-journal
+old_db.sqlite3
 /staticfiles/
 /media/
+
+# Spurious files
+nul
 
 # Node.js
 node_modules/
