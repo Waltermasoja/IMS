@@ -71,6 +71,7 @@ from .models import (
     SalesTicket,
     SalesLine,
     StockMovement,
+    StockingTrip,
 )
 from .utils import run_allocation
 import json
@@ -2182,6 +2183,55 @@ def simple_pos(request):
     }
 
     return render(request, 'inventory/simple_pos.html', context)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# F1-F2 — Stocking trips + trip P&L
+# ──────────────────────────────────────────────────────────────────────────────
+
+@login_required
+def stocking_trips_list(request):
+    trips = StockingTrip.objects.all().order_by('-start_date')
+    return render(request, 'inventory/stocking_trips_list.html', {'trips': trips})
+
+
+@login_required
+def stocking_trip_detail(request, pk):
+    trip = get_object_or_404(StockingTrip, pk=pk)
+    orders = ImportOrder.objects.filter(stocking_trip=trip).select_related('supplier')
+    pnl = trip.trip_pnl_summary()
+    # Per-shop split via ImportOrderItem.destination_shop
+    from django.db.models import Sum as _Sum
+    dest_rows = (
+        ImportOrderItem.objects
+        .filter(import_order__stocking_trip=trip)
+        .values('destination_shop__code', 'destination_shop__name')
+        .annotate(
+            qty=_Sum('quantity'),
+            value=_Sum(F('unit_cost') * F('quantity'), output_field=DecimalField(max_digits=14, decimal_places=2)),
+        )
+        .order_by('destination_shop__code')
+    )
+    return render(request, 'inventory/stocking_trip_detail.html', {
+        'trip': trip,
+        'orders': orders,
+        'pnl': pnl,
+        'dest_rows': dest_rows,
+    })
+
+
+@login_required
+def stocking_trip_create(request):
+    if request.method == 'POST':
+        trip = StockingTrip.objects.create(
+            destination=request.POST.get('destination', ''),
+            start_date=request.POST.get('start_date') or timezone.localdate(),
+            end_date=request.POST.get('end_date') or None,
+            notes=request.POST.get('notes', ''),
+            traveller=request.user,
+        )
+        return redirect('stocking_trip_detail', pk=trip.pk)
+    return render(request, 'inventory/stocking_trip_form.html', {})
 
 
 # ──────────────────────────────────────────────────────────────────────────────

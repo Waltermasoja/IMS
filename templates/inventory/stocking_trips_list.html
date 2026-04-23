@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block title %}Stocking Trips{% endblock %}
+{% block content %}
+<div class="space-y-4 max-w-5xl mx-auto">
+  <div class="bg-white rounded-2xl shadow-sm p-5 flex flex-wrap items-center justify-between gap-3">
+    <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-plane text-blue-500 mr-2"></i>Stocking Trips</h1>
+    <a href="{% url 'stocking_trip_create' %}" class="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
+      <i class="fas fa-plus mr-1"></i> New Trip
+    </a>
+  </div>
+
+  {% if trips %}
+  <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+    <table class="w-full text-sm">
+      <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+        <tr>
+          <th class="text-left py-3 px-4">Trip</th>
+          <th class="text-left py-3 px-4">Destination</th>
+          <th class="text-left py-3 px-4">Dates</th>
+          <th class="text-left py-3 px-4">Status</th>
+          <th class="text-right py-3 px-4">Orders</th>
+          <th class="text-right py-3 px-4">Travel (USD)</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for trip in trips %}
+        <tr class="border-t border-gray-100 hover:bg-gray-50">
+          <td class="py-3 px-4 font-mono font-semibold text-blue-700">{{ trip.trip_number }}</td>
+          <td class="py-3 px-4">{{ trip.destination }}</td>
+          <td class="py-3 px-4 text-gray-600">{{ trip.start_date }} → {{ trip.end_date|default:"open" }}</td>
+          <td class="py-3 px-4">
+            <span class="px-2 py-0.5 text-xs rounded-full
+              {% if trip.status == 'COMPLETED' %}bg-green-100 text-green-700
+              {% elif trip.status == 'IN_PROGRESS' %}bg-amber-100 text-amber-700
+              {% elif trip.status == 'CANCELLED' %}bg-red-100 text-red-700
+              {% else %}bg-gray-100 text-gray-700{% endif %}">{{ trip.get_status_display }}</span>
+          </td>
+          <td class="py-3 px-4 text-right">{{ trip.import_orders.count }}</td>
+          <td class="py-3 px-4 text-right">${{ trip.total_travel_expenses_usd|floatformat:2 }}</td>
+          <td class="py-3 px-4 text-right">
+            <a href="{% url 'stocking_trip_detail' trip.pk %}" class="text-blue-600 hover:underline">View →</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="bg-white rounded-2xl shadow-sm p-10 text-center text-gray-400">
+    <i class="fas fa-plane text-5xl mb-3"></i>
+    <p>No stocking trips recorded yet.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

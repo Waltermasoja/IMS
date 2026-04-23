@@ -46,6 +46,9 @@ urlpatterns = [
     path('returns/ticket/<int:ticket_pk>/process/', ticket_return_process, name='ticket_return_process'),
     path('labels/print/', label_print, name='label_print'),
     path('labels/barcode/<str:code>.svg', barcode_svg, name='barcode_svg'),
+    path('trips/', stocking_trips_list, name='stocking_trips_list'),
+    path('trips/new/', stocking_trip_create, name='stocking_trip_create'),
+    path('trips/<int:pk>/', stocking_trip_detail, name='stocking_trip_detail'),
     path('inventory/update/<int:pk>/', update_inventory, name='update_inventory_ajax'),
     path('pos/', simple_pos, name='pos_interface'),
     # Customers & A/R & Layby

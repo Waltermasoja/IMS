@@ -1301,6 +1301,11 @@ class ImportOrder(models.Model):
     order_number = models.CharField(max_length=50, unique=True, editable=False)
     supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT, related_name='import_orders')
     reference_number = models.CharField(max_length=100, blank=True, help_text="Supplier's order reference")
+    stocking_trip = models.ForeignKey(
+        'StockingTrip', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='import_orders',
+        help_text='Optional — groups orders made on a single buying trip.',
+    )
     
     # Dates
     order_date = models.DateField(default=timezone.now)
@@ -2009,4 +2014,107 @@ class DailyCashUp(models.Model):
     @classmethod
     def is_day_closed(cls, shop, date):
         return cls.objects.filter(shop=shop, date=date).exists()
+
+
+# ============================================================
+# F1 — Stocking trips
+# ============================================================
+
+class StockingTrip(models.Model):
+    """A buying trip abroad that produces one or more ImportOrders.
+
+    Trip-level expenses (travel, accommodation, agent fees) allocate across
+    all orders on the trip. Per-order ImportExpense rows (shipping, customs)
+    stay on the order they belong to.
+    """
+    STATUS_CHOICES = [
+        ('PLANNED', 'Planned'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('COMPLETED', 'Completed'),
+        ('CANCELLED', 'Cancelled'),
+    ]
+
+    trip_number = models.CharField(max_length=32, unique=True, blank=True)
+    destination = models.CharField(max_length=100, help_text='Country or region, e.g. "China — Guangzhou"')
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='PLANNED')
+
+    # Pre-allocation trip-level expenses (USD)
+    total_travel_expenses_usd = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal('0'),
+        help_text='Flights, accommodation, meals, agent fees. Allocated across orders by value.',
+    )
+
+    traveller = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='stocking_trips',
+    )
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-start_date']
+        verbose_name = 'Stocking Trip'
+        verbose_name_plural = 'Stocking Trips'
+
+    def __str__(self):
+        return f"{self.trip_number or 'Trip'} — {self.destination} {self.start_date}"
+
+    def save(self, *args, **kwargs):
+        if not self.trip_number:
+            year = (self.start_date or timezone.localdate()).year
+            prefix = f'TRIP-{year}-'
+            max_seq = 0
+            for n in StockingTrip.objects.filter(trip_number__startswith=prefix).values_list('trip_number', flat=True):
+                try:
+                    max_seq = max(max_seq, int(n[len(prefix):]))
+                except (ValueError, IndexError):
+                    continue
+            self.trip_number = f'{prefix}{max_seq + 1:03d}'
+        super().save(*args, **kwargs)
+
+    @property
+    def orders(self):
+        return self.import_orders.all() if hasattr(self, 'import_orders') else ImportOrder.objects.filter(stocking_trip=self)
+
+    def aggregate_value(self):
+        """Sum purchase value (USD) across all orders on this trip."""
+        total = Decimal('0')
+        for o in ImportOrder.objects.filter(stocking_trip=self):
+            for item in o.items.all():
+                total += (Decimal(item.unit_cost or 0) * (item.quantity or 0))
+        return total
+
+    def trip_pnl_summary(self):
+        """Return dict: {cost, revenue, margin, sell_through_pct} across all trip items sold so far."""
+        orders = ImportOrder.objects.filter(stocking_trip=self)
+        total_cost = Decimal('0')
+        total_revenue = Decimal('0')
+        total_qty_in = 0
+        total_qty_sold = 0
+        for order in orders:
+            for item in order.items.all():
+                if not item.inventory_item:
+                    continue
+                received = item.quantity_received or item.quantity or 0
+                landed = Decimal(item.landed_cost_per_unit or item.unit_cost or 0)
+                total_cost += landed * received
+                total_qty_in += received
+                sold = SalesLine.objects.filter(inventory_item=item.inventory_item).aggregate(
+                    q=models.Sum('quantity'), r=models.Sum('line_total_incl_vat'),
+                )
+                total_qty_sold += sold['q'] or 0
+                total_revenue += sold['r'] or Decimal('0')
+        margin = total_revenue - total_cost
+        sell_through = (Decimal(total_qty_sold) / Decimal(total_qty_in) * 100) if total_qty_in else Decimal('0')
+        return {
+            'total_cost': total_cost,
+            'total_revenue': total_revenue,
+            'margin': margin,
+            'qty_received': total_qty_in,
+            'qty_sold': total_qty_sold,
+            'sell_through_pct': sell_through,
+        }
 

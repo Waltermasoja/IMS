@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+{% block title %}{{ trip.trip_number }} — {{ trip.destination }}{% endblock %}
+{% block content %}
+<div class="space-y-4 max-w-5xl mx-auto">
+
+  <div class="bg-white rounded-2xl shadow-sm p-5">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">{{ trip.trip_number }}</h1>
+        <p class="text-sm text-gray-500 mt-1">{{ trip.destination }} · {{ trip.start_date }} → {{ trip.end_date|default:"open" }}</p>
+        {% if trip.notes %}<p class="text-sm text-gray-600 mt-2">{{ trip.notes }}</p>{% endif %}
+      </div>
+      <span class="px-2 py-1 text-xs rounded-full
+        {% if trip.status == 'COMPLETED' %}bg-green-100 text-green-700
+        {% elif trip.status == 'IN_PROGRESS' %}bg-amber-100 text-amber-700
+        {% elif trip.status == 'CANCELLED' %}bg-red-100 text-red-700
+        {% else %}bg-gray-100 text-gray-700{% endif %}">{{ trip.get_status_display }}</span>
+    </div>
+  </div>
+
+  <!-- P&L summary -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="bg-white rounded-2xl shadow-sm p-4">
+      <p class="text-xs text-gray-500 uppercase">Total Cost (Landed)</p>
+      <p class="text-2xl font-bold text-gray-900">${{ pnl.total_cost|floatformat:2 }}</p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm p-4">
+      <p class="text-xs text-gray-500 uppercase">Revenue to Date</p>
+      <p class="text-2xl font-bold text-green-600">${{ pnl.total_revenue|floatformat:2 }}</p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm p-4">
+      <p class="text-xs text-gray-500 uppercase">Margin</p>
+      <p class="text-2xl font-bold {% if pnl.margin < 0 %}text-red-600{% else %}text-green-600{% endif %}">${{ pnl.margin|floatformat:2 }}</p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm p-4">
+      <p class="text-xs text-gray-500 uppercase">Sell-through</p>
+      <p class="text-2xl font-bold text-indigo-600">{{ pnl.sell_through_pct|floatformat:1 }}%</p>
+      <p class="text-xs text-gray-400 mt-1">{{ pnl.qty_sold }} / {{ pnl.qty_received }} units</p>
+    </div>
+  </div>
+
+  <!-- Per-shop destination split -->
+  {% if dest_rows %}
+  <div class="bg-white rounded-2xl shadow-sm p-5">
+    <h2 class="text-base font-semibold text-gray-900 mb-3"><i class="fas fa-store text-green-500 mr-2"></i>Destination Split</h2>
+    <table class="w-full text-sm">
+      <thead class="text-gray-500 border-b text-xs uppercase">
+        <tr><th class="text-left py-2">Shop</th><th class="text-right py-2">Qty</th><th class="text-right py-2">Value (supplier currency)</th></tr>
+      </thead>
+      <tbody>
+        {% for row in dest_rows %}
+        <tr class="border-b border-gray-50">
+          <td class="py-2 font-medium">{{ row.destination_shop__name|default:"Unrouted" }}</td>
+          <td class="py-2 text-right">{{ row.qty|default:0 }}</td>
+          <td class="py-2 text-right">${{ row.value|default:0|floatformat:2 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Orders -->
+  <div class="bg-white rounded-2xl shadow-sm p-5">
+    <h2 class="text-base font-semibold text-gray-900 mb-3"><i class="fas fa-truck text-blue-500 mr-2"></i>Import Orders on this Trip</h2>
+    {% if orders %}
+    <table class="w-full text-sm">
+      <thead class="text-gray-500 border-b text-xs uppercase">
+        <tr>
+          <th class="text-left py-2">Order #</th>
+          <th class="text-left py-2">Supplier</th>
+          <th class="text-left py-2">Order Date</th>
+          <th class="text-left py-2">Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for order in orders %}
+        <tr class="border-b border-gray-50 hover:bg-gray-50">
+          <td class="py-2 font-mono text-blue-700">{{ order.order_number }}</td>
+          <td class="py-2">{{ order.supplier.name }}</td>
+          <td class="py-2">{{ order.order_date }}</td>
+          <td class="py-2"><span class="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded">{{ order.get_status_display }}</span></td>
+          <td class="py-2 text-right"><a href="{% url 'import_order_detail' order.pk %}" class="text-blue-600 hover:underline">View →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="text-sm text-gray-400 text-center py-6">No orders linked to this trip yet.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

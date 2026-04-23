@@ -11,6 +11,7 @@ from .models import (
     Shop, ShopStock, StockTransfer,
     SalesTicket, SalesLine,
     DailyCashUp,
+    StockingTrip,
 )
 
 # ==================== MULTI-SHOP (PHASE A1) ====================
@@ -486,6 +487,14 @@ class ProductVariantAdmin(admin.ModelAdmin):
         values = obj.attribute_values.select_related('attribute_type').order_by('attribute_type__display_order', 'display_order')
         return ', '.join([f"{v.attribute_type.display_name}: {v.label}" for v in values])
     attribute_values_display.short_description = 'Attributes'
+
+@admin.register(StockingTrip)
+class StockingTripAdmin(admin.ModelAdmin):
+    list_display = ['trip_number', 'destination', 'start_date', 'end_date', 'status', 'traveller']
+    list_filter = ['status']
+    search_fields = ['trip_number', 'destination']
+    readonly_fields = ['trip_number', 'created_at', 'updated_at']
+
 
 @admin.register(DailyCashUp)
 class DailyCashUpAdmin(admin.ModelAdmin):
