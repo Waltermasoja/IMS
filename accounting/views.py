@@ -319,13 +319,31 @@ def bank_reconciliation_add(request):
 
 @login_required
 def ar_invoice_list(request):
-    """List all A/R invoices"""
+    """List all A/R invoices with header metric aggregates."""
+    from datetime import date as date_cls
+    from django.db.models import Count, Sum, F, DecimalField, Q
+    from django.db.models.functions import Coalesce
+
     qs = ARInvoice.objects.all().select_related('customer').order_by('-invoice_date')
+
+    # Header metrics — single aggregate query over the unfiltered qs.
+    today = date_cls.today()
+    zero = Coalesce(Sum('total_amount') - Sum('amount_paid'),
+                    Decimal('0'), output_field=DecimalField(max_digits=14, decimal_places=2))
+    metrics = qs.aggregate(
+        total_count=Count('id'),
+        paid_count=Count('id', filter=Q(status='PAID')),
+        outstanding_count=Count('id', filter=~Q(status='PAID')),
+        overdue_count=Count('id', filter=Q(status='OVERDUE') | Q(due_date__lt=today, status__in=['PENDING', 'PARTIAL'])),
+        outstanding_total=zero,
+    )
+
     paginator = Paginator(qs, 50)
     page_obj = paginator.get_page(request.GET.get('page'))
     return render(request, 'accounting/ar_invoice_list.html', {
         'invoices': page_obj,
         'page_obj': page_obj,
+        'metrics': metrics,
     })
 
 @login_required

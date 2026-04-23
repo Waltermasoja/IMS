@@ -1,77 +1,73 @@
 {% extends 'base.html' %}
 {% block title %}Customers{% endblock %}
 {% block content %}
-<div class="space-y-6">
-  <!-- Header + Stats -->
-  <div class="bg-white rounded-2xl shadow-sm p-6">
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-2xl font-bold text-gray-900">Customers</h1>
-        <p class="text-gray-500 text-sm">Manage customer profiles and credit limits</p>
-      </div>
-      <div class="flex items-center gap-3">
-        <a href="{% url 'customer_create' %}" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-          <i class="fas fa-plus mr-2"></i> Add Customer
-        </a>
-      </div>
-    </div>
+{% url 'customer_create' as customer_create_url %}
+<div class="space-y-4" x-data="{ query: '' }">
+  <!-- Header -->
+  {% include 'ui/page_header_start.html' with title="Customers" subtitle="Manage customer profiles and credit limits" icon="fas fa-users text-primary-500" %}
+    {% include 'ui/button.html' with label="Add Customer" href=customer_create_url variant="primary" icon="fas fa-plus" %}
+  {% include 'ui/page_header_end.html' %}
 
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-      <div class="border rounded-xl p-4 text-center">
-        <div class="text-xs uppercase text-gray-500">Active</div>
-        <div class="text-xl font-semibold text-gray-900">{{ active_count }}</div>
-      </div>
-      <div class="border rounded-xl p-4 text-center">
-        <div class="text-xs uppercase text-gray-500">Suspended</div>
-        <div class="text-xl font-semibold text-amber-700">{{ suspended_count }}</div>
-      </div>
-      <div class="border rounded-xl p-4 text-center">
-        <div class="text-xs uppercase text-gray-500">Inactive</div>
-        <div class="text-xl font-semibold text-gray-900">{{ inactive_count }}</div>
-      </div>
-      <div class="border rounded-xl p-4 text-center">
-        <div class="text-xs uppercase text-gray-500">A/R Balance</div>
-        <div class="text-xl font-semibold text-green-700">${{ total_balance }}</div>
-      </div>
-    </div>
+  <!-- Stats -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    {% include 'ui/stat_card.html' with label="Active" value=active_count icon="fas fa-user-check" color="success" %}
+    {% include 'ui/stat_card.html' with label="Suspended" value=suspended_count icon="fas fa-user-clock" color="warning" %}
+    {% include 'ui/stat_card.html' with label="Inactive" value=inactive_count icon="fas fa-user-slash" color="gray" %}
+    {% include 'ui/stat_card.html' with label="A/R Balance" value=total_balance icon="fas fa-file-invoice-dollar" color="finance" currency=True %}
+  </div>
+
+  <!-- Search -->
+  <div class="relative">
+    <input type="text" x-model="query" placeholder="Search by name, phone, or email…"
+           class="w-full px-4 py-2.5 pl-10 text-sm bg-white border border-gray-200 rounded-btn
+                  focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent shadow-card">
+    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+    <span x-show="query" class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+      <span x-text="$refs.tbody ? Array.from($refs.tbody.querySelectorAll('tr')).filter(r => r.style.display !== 'none').length : 0"></span> match<span x-text="$refs.tbody && Array.from($refs.tbody.querySelectorAll('tr')).filter(r => r.style.display !== 'none').length === 1 ? '' : 'es'"></span>
+    </span>
   </div>
 
   <!-- Table -->
-  <div class="bg-white rounded-2xl shadow-sm p-6">
+  <div class="bg-white rounded-card shadow-card p-5">
     {% if customers %}
     <div class="overflow-x-auto">
       <table class="min-w-full text-sm">
         <thead>
-          <tr class="text-left text-gray-500 border-b">
+          <tr class="text-left text-gray-500 border-b text-xs uppercase tracking-wide">
             <th class="py-3 pr-4">Name</th>
             <th class="py-3 pr-4">Phone</th>
             <th class="py-3 pr-4">Email</th>
-            <th class="py-3 pr-4">Credit Limit</th>
-            <th class="py-3 pr-4">Balance</th>
+            <th class="py-3 pr-4 text-right">Credit Limit</th>
+            <th class="py-3 pr-4 text-right">Balance</th>
             <th class="py-3 pr-4">Status</th>
-            <th class="py-3 pr-4">Actions</th>
+            <th class="py-3 pr-4"></th>
           </tr>
         </thead>
-        <tbody class="divide-y">
+        <tbody class="divide-y" x-ref="tbody">
           {% for customer in customers %}
-          <tr class="align-top">
-            <td class="py-3 pr-4 font-semibold">{{ customer.name }}</td>
-            <td class="py-3 pr-4">{{ customer.phone|default:"-" }}</td>
-            <td class="py-3 pr-4">{{ customer.email|default:"-" }}</td>
-            <td class="py-3 pr-4">${{ customer.credit_limit }}</td>
-            <td class="py-3 pr-4 {% if customer.current_balance > 0 %}text-amber-700{% endif %}">${{ customer.current_balance }}</td>
-            <td class="py-3 pr-4">
-              <span class="px-2 py-1 rounded text-xs
-                {% if customer.status == 'ACTIVE' %} bg-green-50 text-green-700
-                {% elif customer.status == 'SUSPENDED' %} bg-amber-50 text-amber-700
-                {% else %} bg-gray-100 text-gray-700 {% endif %}">
-                {{ customer.get_status_display }}
-              </span>
+          <tr class="align-middle"
+              data-search="{{ customer.name|lower }} {{ customer.phone|lower }} {{ customer.email|lower }}"
+              :style="query && !'{{ customer.name|lower|escapejs }} {{ customer.phone|lower|escapejs }} {{ customer.email|lower|escapejs }}'.includes(query.toLowerCase()) ? 'display:none' : ''">
+            <td class="py-3 pr-4 font-semibold text-gray-900">{{ customer.name }}</td>
+            <td class="py-3 pr-4 text-gray-600">{{ customer.phone|default:"—" }}</td>
+            <td class="py-3 pr-4 text-gray-600">{{ customer.email|default:"—" }}</td>
+            <td class="py-3 pr-4 text-right">{{ site_settings.currency_symbol|default:"$" }}{{ customer.credit_limit|default:0|floatformat:2 }}</td>
+            <td class="py-3 pr-4 text-right {% if customer.current_balance > 0 %}text-warning-700 font-semibold{% endif %}">
+              {{ site_settings.currency_symbol|default:"$" }}{{ customer.current_balance|default:0|floatformat:2 }}
             </td>
             <td class="py-3 pr-4">
-              <div class="flex gap-2">
-                <a href="{% url 'customer_update' customer.pk %}" class="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50">Edit</a>
-                <a href="{% url 'accounting:customer_statement' customer.pk %}" class="px-3 py-1.5 border border-blue-500 text-blue-600 rounded-lg text-sm hover:bg-blue-50">Statement</a>
+              {% if customer.status == 'ACTIVE' %}
+                {% include 'ui/badge.html' with label=customer.get_status_display color="success" %}
+              {% elif customer.status == 'SUSPENDED' %}
+                {% include 'ui/badge.html' with label=customer.get_status_display color="warning" %}
+              {% else %}
+                {% include 'ui/badge.html' with label=customer.get_status_display color="gray" %}
+              {% endif %}
+            </td>
+            <td class="py-3 pr-4">
+              <div class="flex gap-2 justify-end">
+                <a href="{% url 'customer_update' customer.pk %}" class="px-3 py-1.5 border border-gray-200 rounded-btn text-xs font-medium hover:bg-gray-50 transition-colors">Edit</a>
+                <a href="{% url 'accounting:customer_statement' customer.pk %}" class="px-3 py-1.5 border border-primary-500 text-primary-600 rounded-btn text-xs font-medium hover:bg-primary-50 transition-colors">Statement</a>
               </div>
             </td>
           </tr>
@@ -80,13 +76,7 @@
       </table>
     </div>
     {% else %}
-      <div class="text-center py-16">
-        <div class="mx-auto w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center mb-4">
-          <i class="fas fa-user-friends text-indigo-600 text-2xl"></i>
-        </div>
-        <h3 class="text-lg font-semibold text-gray-900">No customers yet</h3>
-        <p class="text-gray-500">Create a customer to enable credit sales and layby plans.</p>
-      </div>
+      {% include 'ui/empty_state.html' with icon="fas fa-user-friends" title="No customers yet" subtitle="Create a customer to enable credit sales and layby plans." cta_label="Add first customer" cta_href=customer_create_url cta_icon="fas fa-plus" %}
     {% endif %}
   </div>
 </div>
