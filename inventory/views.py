@@ -99,16 +99,26 @@ def _pos_receipt_number(prefix: str) -> str:
 def inventory_list(request):
     inventories = Inventory.objects.all()
     categories = Inventory_category.objects.all()
-    
+
     # Renamed annotations to avoid conflicts with model properties
     inventories = inventories.annotate(
-        total_sales_amount=Sum('sales_records__total_amount'),  # Changed from sales_amount
-        latest_sale_date=Max('sales_records__sale_date')       # Changed from latest_sale
+        total_sales_amount=Sum('sales_records__total_amount'),
+        latest_sale_date=Max('sales_records__sale_date'),
     )
-    
+
+    # ?filter= drills in from dashboard stat cards into the same list view.
+    filter_ = request.GET.get('filter')
+    if filter_ == 'low_stock':
+        from .utils import get_setting
+        threshold = get_setting('low_stock_threshold', 10)
+        inventories = inventories.filter(quantity_in_Stock__gt=0, quantity_in_Stock__lte=threshold)
+    elif filter_ == 'out_of_stock':
+        inventories = inventories.filter(quantity_in_Stock=0)
+
     context = {
         'inventories': inventories,
         'categories': categories,
+        'active_filter': filter_,
     }
     return render(request, 'inventory/inventory_list.html', context)
 
@@ -2258,25 +2268,57 @@ def barcode_svg(request, code):
 
 @login_required
 def label_print(request):
-    """Print a sheet of product labels. Accepts ?ids=1,2,3&count=2."""
+    """Print a sheet of product / variant labels.
+
+    Accepts ?ids=1,2,3&count=2 for parent products
+    and   ?variant_ids=4,5&count=1 for specific variants.
+    Both params can be combined in a single request.
+    """
     ids = request.GET.get('ids', '')
+    variant_ids = request.GET.get('variant_ids', '')
     count = int(request.GET.get('count', '1') or '1')
     count = max(1, min(count, 100))
 
-    products = []
+    settings = SiteSettings.get_settings()
+    currency_symbol = settings.currency_symbol if settings else '$'
+
+    labels = []
+
     if ids:
         pks = [int(p) for p in ids.split(',') if p.strip().isdigit()]
         products = Inventory.objects.filter(pk__in=pks).order_by('product_code')
+        for p in products:
+            for _ in range(count):
+                labels.append({
+                    'name': p.name,
+                    'code': p.barcode or p.product_code,
+                    'product_code': p.product_code,
+                    'sku': None,
+                    'variant_attributes': '',
+                    'price': p.selling_price,
+                    'currency_symbol': currency_symbol,
+                })
 
-    labels = []
-    for p in products:
-        for _ in range(count):
-            labels.append({
-                'name': p.name,
-                'code': p.barcode or p.product_code,
-                'product_code': p.product_code,
-                'price': p.selling_price,
-            })
+    if variant_ids:
+        vpks = [int(p) for p in variant_ids.split(',') if p.strip().isdigit()]
+        variants = (
+            ProductVariant.objects
+            .filter(pk__in=vpks)
+            .select_related('product')
+            .prefetch_related('attribute_values__attribute_type')
+            .order_by('sku')
+        )
+        for v in variants:
+            for _ in range(count):
+                labels.append({
+                    'name': v.product.name,
+                    'code': v.barcode or v.sku,
+                    'product_code': v.product.product_code,
+                    'sku': v.sku,
+                    'variant_attributes': v.attribute_string,
+                    'price': v.effective_selling_price,
+                    'currency_symbol': currency_symbol,
+                })
 
     return render(request, 'inventory/label_print.html', {
         'labels': labels,
