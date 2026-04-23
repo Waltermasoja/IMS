@@ -56,4 +56,13 @@ urlpatterns = [
     # VAT Return
     path('reports/vat/', views.vat_report, name='vat_report'),
     path('reports/vat/export/', views.vat_report_export_csv, name='vat_report_export_csv'),
+
+    # EcoCash / Bank reconciliation (D2)
+    path('reconciliation/ecocash/', views.ecocash_reconciliation, name='ecocash_reconciliation'),
+
+    # Accountant exports (D3)
+    path('exports/', views.accountant_exports_index, name='accountant_exports'),
+    path('exports/gl-detail.xlsx', views.export_gl_detail_xlsx, name='export_gl_detail_xlsx'),
+    path('exports/trial-balance.xlsx', views.export_trial_balance_xlsx, name='export_trial_balance_xlsx'),
+    path('exports/sales-tickets.xlsx', views.export_sales_tickets_xlsx, name='export_sales_tickets_xlsx'),
 ]

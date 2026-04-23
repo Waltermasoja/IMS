@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Accountant Exports{% endblock %}
+{% block content %}
+<div class="space-y-4 max-w-4xl mx-auto">
+  <div class="bg-white rounded-2xl shadow-sm p-5">
+    <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-file-excel text-green-600 mr-2"></i>Accountant Exports</h1>
+    <p class="text-sm text-gray-500 mt-1">Excel downloads for period handover to the accountant.</p>
+  </div>
+
+  <form method="get" class="bg-white rounded-2xl shadow-sm p-5 space-y-4">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">From</label>
+        <input type="date" name="start_date" id="start_date"
+               class="w-full px-3 py-2 text-sm border rounded-lg">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">To</label>
+        <input type="date" name="end_date" id="end_date"
+               class="w-full px-3 py-2 text-sm border rounded-lg">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Shop</label>
+        <select name="shop_id" id="shop_id" class="w-full px-3 py-2 text-sm border rounded-lg">
+          <option value="">All shops (consolidated)</option>
+          {% for shop in shops %}
+          <option value="{{ shop.pk }}">{{ shop.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </form>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="bg-white rounded-2xl shadow-sm p-5">
+      <h3 class="font-semibold text-gray-900">GL Detail</h3>
+      <p class="text-sm text-gray-500 mt-1 mb-3">Journal lines by period — Date, Reference, Account, Debit, Credit.</p>
+      <a id="link-gl" href="#" class="inline-block px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+        <i class="fas fa-download mr-1"></i> Download XLSX
+      </a>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm p-5">
+      <h3 class="font-semibold text-gray-900">Trial Balance</h3>
+      <p class="text-sm text-gray-500 mt-1 mb-3">Balances by account as of the end date (ignores start).</p>
+      <a id="link-tb" href="#" class="inline-block px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+        <i class="fas fa-download mr-1"></i> Download XLSX
+      </a>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm p-5">
+      <h3 class="font-semibold text-gray-900">Sales Tickets</h3>
+      <p class="text-sm text-gray-500 mt-1 mb-3">Per-ticket sales with VAT split and tender reference.</p>
+      <a id="link-sales" href="#" class="inline-block px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+        <i class="fas fa-download mr-1"></i> Download XLSX
+      </a>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-sm p-5">
+      <h3 class="font-semibold text-gray-900">VAT Return Data</h3>
+      <p class="text-sm text-gray-500 mt-1 mb-3">Line-level CSV of all tickets for the period.</p>
+      <a id="link-vat" href="#" class="inline-block px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+        <i class="fas fa-download mr-1"></i> Download CSV
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+  function updateLinks() {
+    const start = document.getElementById('start_date').value;
+    const end = document.getElementById('end_date').value;
+    const shop = document.getElementById('shop_id').value;
+    const qs = new URLSearchParams();
+    if (start) qs.set('start_date', start);
+    if (end) qs.set('end_date', end);
+    if (shop) qs.set('shop_id', shop);
+    const q = qs.toString() ? '?' + qs.toString() : '';
+    document.getElementById('link-gl').href   = '{% url "accounting:export_gl_detail_xlsx" %}' + q;
+    document.getElementById('link-tb').href   = '{% url "accounting:export_trial_balance_xlsx" %}' + (end ? ('?as_of=' + end + (shop ? '&shop_id=' + shop : '')) : '');
+    document.getElementById('link-sales').href = '{% url "accounting:export_sales_tickets_xlsx" %}' + q;
+    document.getElementById('link-vat').href   = '{% url "accounting:vat_report_export_csv" %}' + q;
+  }
+  ['start_date', 'end_date', 'shop_id'].forEach(id => {
+    document.getElementById(id).addEventListener('change', updateLinks);
+  });
+  updateLinks();
+</script>
+{% endblock %}

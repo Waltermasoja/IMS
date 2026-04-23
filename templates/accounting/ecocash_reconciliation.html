@@ -1,0 +1,93 @@
+{% extends 'base.html' %}
+{% block title %}EcoCash / Bank Reconciliation{% endblock %}
+{% block content %}
+<div class="space-y-4 max-w-5xl mx-auto">
+  <div class="bg-white rounded-2xl shadow-sm p-5">
+    <h1 class="text-2xl font-bold text-gray-900"><i class="fas fa-mobile-alt text-blue-500 mr-2"></i>EcoCash / Bank Reconciliation</h1>
+    <p class="text-sm text-gray-500 mt-1">Upload an EcoCash agent statement or bank CSV. Tickets auto-match by <span class="font-mono">tender_reference</span> + amount.</p>
+  </div>
+
+  <form method="post" enctype="multipart/form-data" class="bg-white rounded-2xl shadow-sm p-5 space-y-3">
+    {% csrf_token %}
+    <label class="block text-sm font-medium text-gray-700">Statement CSV</label>
+    <input type="file" name="statement" accept=".csv" required
+           class="block w-full text-sm border border-gray-200 rounded-lg cursor-pointer file:mr-3 file:py-2 file:px-4 file:rounded-l-lg file:border-0 file:bg-blue-600 file:text-white file:font-semibold hover:file:bg-blue-700">
+    <p class="text-xs text-gray-500">Expected columns: <span class="font-mono">reference, amount, date</span> (or common variants: TransID / Txn ID / Value / Txn Date).</p>
+    <button type="submit" class="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700">
+      <i class="fas fa-upload mr-1"></i> Upload & Match
+    </button>
+  </form>
+
+  {% if has_upload %}
+  <div class="grid grid-cols-3 gap-4">
+    <div class="bg-white rounded-2xl shadow-sm p-4">
+      <p class="text-xs text-gray-500 uppercase">Rows Uploaded</p>
+      <p class="text-2xl font-bold">{{ uploaded_rows }}</p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm p-4">
+      <p class="text-xs text-gray-500 uppercase">Matched</p>
+      <p class="text-2xl font-bold text-green-600">{{ matched|length }}</p>
+    </div>
+    <div class="bg-white rounded-2xl shadow-sm p-4">
+      <p class="text-xs text-gray-500 uppercase">Unmatched</p>
+      <p class="text-2xl font-bold text-red-600">{{ unmatched|length }}</p>
+    </div>
+  </div>
+
+  {% if matched %}
+  <div class="bg-white rounded-2xl shadow-sm p-5">
+    <h2 class="text-base font-semibold text-gray-900 mb-3"><i class="fas fa-check-circle text-green-500 mr-2"></i>Matched ({{ matched|length }})</h2>
+    <table class="w-full text-sm">
+      <thead class="text-gray-500 border-b text-xs uppercase">
+        <tr>
+          <th class="text-left py-2">Reference</th>
+          <th class="text-right py-2">Amount</th>
+          <th class="text-left py-2">Date</th>
+          <th class="text-left py-2">Matched Ticket</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in matched %}
+        <tr class="border-b border-gray-50">
+          <td class="py-2 font-mono text-xs">{{ row.reference }}</td>
+          <td class="py-2 text-right font-semibold">${{ row.amount|floatformat:2 }}</td>
+          <td class="py-2 text-gray-600">{{ row.date }}</td>
+          <td class="py-2 font-mono text-blue-700">{{ row.ticket.receipt_number }} ({{ row.ticket.shop.code }})</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if unmatched %}
+  <div class="bg-white rounded-2xl shadow-sm p-5">
+    <h2 class="text-base font-semibold text-gray-900 mb-3"><i class="fas fa-exclamation-circle text-red-500 mr-2"></i>Unmatched ({{ unmatched|length }})</h2>
+    <table class="w-full text-sm">
+      <thead class="text-gray-500 border-b text-xs uppercase">
+        <tr>
+          <th class="text-left py-2">Reference</th>
+          <th class="text-right py-2">Amount</th>
+          <th class="text-left py-2">Date</th>
+          <th class="text-left py-2">Note</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in unmatched %}
+        <tr class="border-b border-gray-50">
+          <td class="py-2 font-mono text-xs">{{ row.reference|default:"—" }}</td>
+          <td class="py-2 text-right">${{ row.amount|floatformat:2 }}</td>
+          <td class="py-2 text-gray-600">{{ row.date }}</td>
+          <td class="py-2 text-red-600 text-xs">
+            {% if row.ticket and row.mismatch_amount %}Ticket found but amount mismatch: ticket ${{ row.ticket.total_incl_vat|floatformat:2 }}
+            {% else %}No ticket found with this reference{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}

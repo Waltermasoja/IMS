@@ -260,6 +260,7 @@ class UserProfile(models.Model):
         ('admin', 'Administrator'),
         ('manager', 'Manager'),
         ('sales', 'Sales Associate'),
+        ('accountant', 'Accountant (Read-only)'),
         ('viewer', 'Viewer Only'),
     ]
     

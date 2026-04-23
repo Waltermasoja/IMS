@@ -1920,3 +1920,246 @@ def vat_report_export_csv(request):
             t.subtotal_excl_vat, t.vat_total, t.total_incl_vat,
         ])
     return response
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# D2 — EcoCash / Bank reconciliation (CSV import + auto-match by reference)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@login_required
+def ecocash_reconciliation(request):
+    """Upload an EcoCash or bank statement CSV, auto-match to SalesTickets by
+    tender_reference + amount, and show matched / unmatched rows.
+
+    Expected CSV columns (flexible header matching): reference, amount, date.
+    """
+    import csv
+    from inventory.models import SalesTicket
+    from datetime import date as date_cls
+
+    matched = []
+    unmatched = []
+    uploaded_rows = 0
+
+    if request.method == 'POST' and request.FILES.get('statement'):
+        decoded = request.FILES['statement'].read().decode('utf-8', errors='ignore').splitlines()
+        reader = csv.DictReader(decoded)
+        for raw in reader:
+            uploaded_rows += 1
+            # Flexible header resolution
+            ref = (raw.get('reference') or raw.get('Reference') or raw.get('TransID') or raw.get('Txn ID') or '').strip()
+            amt_str = (raw.get('amount') or raw.get('Amount') or raw.get('Value') or '0').replace(',', '').strip()
+            date_str = (raw.get('date') or raw.get('Date') or raw.get('Txn Date') or '').strip()
+
+            try:
+                amt = Decimal(amt_str) if amt_str else Decimal('0')
+            except Exception:
+                amt = Decimal('0')
+
+            row = {'reference': ref, 'amount': amt, 'date': date_str, 'raw': raw}
+
+            # Match: find ticket with matching tender_reference + close amount
+            ticket = None
+            if ref:
+                ticket = SalesTicket.objects.filter(
+                    tender_reference__iexact=ref,
+                    tender_type__in=['ECOCASH', 'BANK_TRANSFER'],
+                ).first()
+            if ticket and abs(ticket.total_incl_vat - amt) <= Decimal('0.05'):
+                row['ticket'] = ticket
+                matched.append(row)
+            else:
+                if ticket:
+                    row['ticket'] = ticket
+                    row['mismatch_amount'] = True
+                unmatched.append(row)
+
+    return render(request, 'accounting/ecocash_reconciliation.html', {
+        'matched': matched,
+        'unmatched': unmatched,
+        'uploaded_rows': uploaded_rows,
+        'has_upload': request.method == 'POST',
+    })
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# D3 — Accountant exports (Excel / CSV)
+# ──────────────────────────────────────────────────────────────────────────────
+
+@login_required
+def accountant_exports_index(request):
+    """Landing page for accountant exports."""
+    from inventory.models import Shop
+    return render(request, 'accounting/accountant_exports.html', {
+        'shops': Shop.objects.filter(is_active=True).order_by('name'),
+    })
+
+
+@login_required
+def export_gl_detail_xlsx(request):
+    """Excel export of JournalLine rows for a given period + optional shop."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from datetime import date as date_cls
+
+    start_str = request.GET.get('start_date')
+    end_str = request.GET.get('end_date')
+    shop_id = request.GET.get('shop_id') or None
+
+    today = timezone.localdate()
+    try:
+        start_date = date_cls.fromisoformat(start_str) if start_str else today.replace(day=1)
+        end_date = date_cls.fromisoformat(end_str) if end_str else today
+    except ValueError:
+        start_date, end_date = today.replace(day=1), today
+
+    lines = JournalLine.objects.select_related('entry', 'account', 'entry__shop').filter(
+        entry__posted_at__date__gte=start_date,
+        entry__posted_at__date__lte=end_date,
+    ).order_by('entry__posted_at', 'entry_id', 'id')
+    if shop_id:
+        lines = lines.filter(entry__shop_id=shop_id)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'GL Detail'
+    headers = ['Date', 'JE#', 'Reference', 'Shop', 'Account', 'Account Name', 'Description', 'Debit', 'Credit']
+    ws.append(headers)
+    for c in ws[1]:
+        c.font = Font(bold=True)
+
+    for l in lines:
+        ws.append([
+            l.entry.posted_at.date().isoformat(),
+            l.entry.id,
+            l.entry.reference or '',
+            l.entry.shop.code if l.entry.shop else '',
+            l.account.code,
+            l.account.name,
+            l.description or l.entry.memo or '',
+            float(l.debit or 0),
+            float(l.credit or 0),
+        ])
+
+    # Widths
+    widths = [12, 8, 18, 8, 10, 30, 40, 12, 12]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="gl_detail_{start_date}_{end_date}.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def export_trial_balance_xlsx(request):
+    """Excel export of trial balance as of a date, optionally per shop."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from datetime import date as date_cls
+
+    as_of_str = request.GET.get('as_of')
+    today = timezone.localdate()
+    try:
+        as_of = date_cls.fromisoformat(as_of_str) if as_of_str else today
+    except ValueError:
+        as_of = today
+    shop_id = request.GET.get('shop_id') or None
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Trial Balance'
+    ws.append(['Code', 'Account', 'Type', 'Debit', 'Credit'])
+    for c in ws[1]:
+        c.font = Font(bold=True)
+
+    total_dr = Decimal('0')
+    total_cr = Decimal('0')
+    for acc in GLAccount.objects.filter(is_active=True).order_by('code'):
+        line_qs = JournalLine.objects.filter(
+            account=acc, entry__posted_at__date__lte=as_of,
+        )
+        if shop_id:
+            line_qs = line_qs.filter(entry__shop_id=shop_id)
+        agg = line_qs.aggregate(d=Sum('debit'), c=Sum('credit'))
+        dr = Decimal(agg['d'] or 0)
+        cr = Decimal(agg['c'] or 0)
+        bal = dr - cr
+        if acc.type in ('ASSET', 'EXP'):
+            ws.append([acc.code, acc.name, acc.get_type_display(), float(max(bal, Decimal('0'))), float(max(-bal, Decimal('0')))])
+        else:
+            ws.append([acc.code, acc.name, acc.get_type_display(), float(max(-bal, Decimal('0'))), float(max(bal, Decimal('0')))])
+        total_dr += Decimal(ws.cell(ws.max_row, 4).value)
+        total_cr += Decimal(ws.cell(ws.max_row, 5).value)
+
+    ws.append(['', 'TOTAL', '', float(total_dr), float(total_cr)])
+    for c in ws[ws.max_row]:
+        c.font = Font(bold=True)
+
+    for i, w in enumerate([10, 35, 12, 14, 14], 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="trial_balance_{as_of}.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def export_sales_tickets_xlsx(request):
+    """Excel export of all SalesTickets (with VAT split) for accountant."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from inventory.models import SalesTicket
+    from datetime import date as date_cls
+
+    start_str = request.GET.get('start_date')
+    end_str = request.GET.get('end_date')
+    shop_id = request.GET.get('shop_id') or None
+    today = timezone.localdate()
+    try:
+        start_date = date_cls.fromisoformat(start_str) if start_str else today.replace(day=1)
+        end_date = date_cls.fromisoformat(end_str) if end_str else today
+    except ValueError:
+        start_date, end_date = today.replace(day=1), today
+
+    qs = SalesTicket.objects.filter(
+        created_at__date__gte=start_date,
+        created_at__date__lte=end_date,
+        voided=False,
+    ).select_related('shop', 'customer', 'cashier')
+    if shop_id:
+        qs = qs.filter(shop_id=shop_id)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Sales'
+    ws.append(['Receipt', 'Date', 'Shop', 'Cashier', 'Customer', 'Terms', 'Tender', 'Reference',
+               'Subtotal (excl VAT)', 'VAT', 'Discount', 'Total (incl VAT)'])
+    for c in ws[1]:
+        c.font = Font(bold=True)
+
+    for t in qs.order_by('created_at'):
+        ws.append([
+            t.receipt_number,
+            t.created_at.date().isoformat(),
+            t.shop.code,
+            (t.cashier.get_full_name() if t.cashier else '') or (t.cashier.username if t.cashier else ''),
+            t.customer.name if t.customer else '',
+            t.terms,
+            t.tender_type,
+            t.tender_reference or '',
+            float(t.subtotal_excl_vat or 0),
+            float(t.vat_total or 0),
+            float(t.discount_total or 0),
+            float(t.total_incl_vat or 0),
+        ])
+
+    for i, w in enumerate([22, 12, 8, 18, 22, 12, 14, 16, 14, 10, 10, 14], 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="sales_tickets_{start_date}_{end_date}.xlsx"'
+    wb.save(response)
+    return response
