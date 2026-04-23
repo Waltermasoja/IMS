@@ -79,8 +79,8 @@
             </div>
         </div>
 
-        <!-- Table -->
-        <div class="overflow-x-auto">
+        <!-- Desktop table (md:+) -->
+        <div class="hidden md:block overflow-x-auto">
             <table class="w-full">
                 <thead>
                     <tr class="bg-gray-50 border-b border-gray-200">
@@ -220,25 +220,86 @@
                             </div>
                         </td>
                     </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="9" class="px-6 py-16 text-center">
-                            <i class="fas fa-box-open text-gray-300 text-6xl mb-4"></i>
-                            <h3 class="text-xl font-semibold text-gray-900 mb-2">No products found</h3>
-                            <p class="text-gray-500 mb-6">Get started by adding your first product</p>
-                            {% if user.profile.can_manage_inventory or user.profile.role == 'manager' or user.profile.is_admin %}
-                            <a href="{% url 'add_inventory' %}" 
-                               class="inline-flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                                <i class="fas fa-plus"></i>
-                                <span>Add Product</span>
-                            </a>
-                            {% endif %}
-                        </td>
-                    </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
+
+        <!-- Mobile card stack (<md) -->
+        <div class="md:hidden p-3 space-y-2">
+            {% for inventory in inventories %}
+            <div x-data="{ expanded: false }" class="bg-white rounded-btn border border-gray-100 p-3 shadow-card">
+                <div class="flex gap-3 items-start">
+                    <!-- Thumbnail -->
+                    <div class="flex-shrink-0">
+                        {% if inventory.thumbnail %}
+                            <img src="{{ inventory.thumbnail.url }}" alt="{{ inventory.name }}" loading="lazy" class="w-14 h-14 object-cover rounded-btn">
+                        {% else %}
+                            <div class="w-14 h-14 bg-gray-100 rounded-btn flex items-center justify-center"><i class="fas fa-box text-gray-400"></i></div>
+                        {% endif %}
+                    </div>
+                    <!-- Core info -->
+                    <a href="{% url 'per_product' inventory.id %}" class="flex-1 min-w-0 block">
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <p class="font-semibold text-gray-900 truncate">{{ inventory.name }}</p>
+                            {% if inventory.has_variants %}{% include 'ui/badge.html' with label=inventory.variant_count|stringformat:"s"|add:" variants" color="primary" size="sm" icon="fas fa-layer-group" %}{% endif %}
+                        </div>
+                        <p class="text-xs text-primary-600 font-mono truncate">{{ inventory.product_code }}</p>
+                    </a>
+                    <!-- Stock + price stack -->
+                    <div class="flex-shrink-0 text-right">
+                        {% with qty=inventory.total_stock %}
+                        {% if inventory.has_variants %}
+                            {% if qty == 0 %}<span class="px-2 py-0.5 bg-danger-50 text-danger-600 text-xs font-semibold rounded-pill">Out</span>
+                            {% elif qty <= 10 %}<span class="px-2 py-0.5 bg-warning-50 text-warning-700 text-xs font-semibold rounded-pill">Low {{ qty }}</span>
+                            {% else %}<span class="px-2 py-0.5 bg-success-50 text-success-700 text-xs font-semibold rounded-pill">{{ qty }}</span>{% endif %}
+                        {% else %}
+                            {% if inventory.quantity_in_Stock == 0 %}<span class="px-2 py-0.5 bg-danger-50 text-danger-600 text-xs font-semibold rounded-pill">Out</span>
+                            {% elif inventory.quantity_in_Stock <= 10 %}<span class="px-2 py-0.5 bg-warning-50 text-warning-700 text-xs font-semibold rounded-pill">Low {{ inventory.quantity_in_Stock }}</span>
+                            {% else %}<span class="px-2 py-0.5 bg-success-50 text-success-700 text-xs font-semibold rounded-pill">{{ inventory.quantity_in_Stock }}</span>{% endif %}
+                        {% endif %}
+                        {% endwith %}
+                        <p class="mt-1 font-bold text-gray-900 text-sm">${{ inventory.selling_price }}</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between mt-2">
+                    <button type="button" @click="expanded = !expanded" class="text-xs text-primary-600 font-medium flex items-center gap-1">
+                        <span x-text="expanded ? 'Hide details' : 'Details'"></span>
+                        <i class="fas fa-chevron-down text-[10px] transition-transform" :class="expanded ? 'rotate-180' : ''"></i>
+                    </button>
+                    <div class="flex gap-1">
+                        {% if not inventory.has_variants %}
+                        <button onclick="openSaleModal({{ inventory.id }}, '{{ inventory.name|escapejs }}', {{ inventory.selling_price }}, {{ inventory.quantity_in_Stock }})"
+                                class="p-2 text-success-600 hover:bg-success-50 rounded-btn" title="Make Sale"><i class="fas fa-dollar-sign text-xs"></i></button>
+                        {% endif %}
+                        <a href="{% url 'inventory_update' inventory.id %}" class="p-2 text-gray-600 hover:bg-gray-50 rounded-btn" title="Edit"><i class="fas fa-edit text-xs"></i></a>
+                    </div>
+                </div>
+
+                <div x-show="expanded" class="mt-2 pt-2 border-t border-gray-100 space-y-1 text-xs" style="display:none">
+                    <div class="flex justify-between"><span class="text-gray-500">Category</span><span>{{ inventory.category.name|default:"Uncategorized" }}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Sales</span><span class="font-semibold text-success-600">${% if inventory.total_sales_amount %}{{ inventory.total_sales_amount|floatformat:2 }}{% else %}0.00{% endif %}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Last sale</span><span>{% if inventory.latest_sale_date %}{{ inventory.latest_sale_date|date:"M d, Y" }}{% else %}—{% endif %}</span></div>
+                    {% if inventory.label %}<div class="flex justify-between"><span class="text-gray-500">Label</span><span>{{ inventory.label }}</span></div>{% endif %}
+                    <div class="pt-2 flex gap-2 flex-wrap">
+                        <a href="{% url 'per_product' inventory.id %}" class="flex-1 text-center py-2 border border-primary-500 text-primary-600 rounded-btn text-xs font-medium">Details</a>
+                        {% if inventory.has_variants %}
+                        <a href="{% url 'product_variants_list' inventory.id %}" class="flex-1 text-center py-2 border border-finance-500 text-finance-600 rounded-btn text-xs font-medium">Variants</a>
+                        {% endif %}
+                        <a href="{% url 'stock_movement_summary' inventory.id %}" class="flex-1 text-center py-2 border border-info-500 text-info-600 rounded-btn text-xs font-medium">Stock</a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if not inventories %}
+        <div class="py-12">
+            {% url 'add_inventory' as add_inv_url %}
+            {% include 'ui/empty_state.html' with icon="fas fa-box-open" title="No products found" subtitle="Get started by adding your first product." cta_label="Add Product" cta_href=add_inv_url cta_icon="fas fa-plus" %}
+        </div>
+        {% endif %}
     </div>
 </div>
 

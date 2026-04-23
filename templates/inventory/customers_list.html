@@ -27,35 +27,35 @@
     </span>
   </div>
 
-  <!-- Table -->
-  <div class="bg-white rounded-card shadow-card p-5">
-    {% if customers %}
+  {% if customers %}
+
+  <!-- Desktop table (md:+) -->
+  <div class="hidden md:block bg-white rounded-card shadow-card overflow-hidden">
     <div class="overflow-x-auto">
       <table class="min-w-full text-sm">
         <thead>
-          <tr class="text-left text-gray-500 border-b text-xs uppercase tracking-wide">
-            <th class="py-3 pr-4">Name</th>
-            <th class="py-3 pr-4">Phone</th>
-            <th class="py-3 pr-4">Email</th>
-            <th class="py-3 pr-4 text-right">Credit Limit</th>
-            <th class="py-3 pr-4 text-right">Balance</th>
-            <th class="py-3 pr-4">Status</th>
-            <th class="py-3 pr-4"></th>
+          <tr class="text-left text-gray-500 border-b text-xs uppercase tracking-wide bg-gray-50">
+            <th class="px-4 py-3">Name</th>
+            <th class="px-4 py-3">Phone</th>
+            <th class="px-4 py-3">Email</th>
+            <th class="px-4 py-3 text-right">Credit Limit</th>
+            <th class="px-4 py-3 text-right">Balance</th>
+            <th class="px-4 py-3">Status</th>
+            <th class="px-4 py-3"></th>
           </tr>
         </thead>
-        <tbody class="divide-y" x-ref="tbody">
+        <tbody class="divide-y divide-gray-100" x-ref="tbody">
           {% for customer in customers %}
-          <tr class="align-middle"
-              data-search="{{ customer.name|lower }} {{ customer.phone|lower }} {{ customer.email|lower }}"
+          <tr class="align-middle hover:bg-gray-50"
               :style="query && !'{{ customer.name|lower|escapejs }} {{ customer.phone|lower|escapejs }} {{ customer.email|lower|escapejs }}'.includes(query.toLowerCase()) ? 'display:none' : ''">
-            <td class="py-3 pr-4 font-semibold text-gray-900">{{ customer.name }}</td>
-            <td class="py-3 pr-4 text-gray-600">{{ customer.phone|default:"—" }}</td>
-            <td class="py-3 pr-4 text-gray-600">{{ customer.email|default:"—" }}</td>
-            <td class="py-3 pr-4 text-right">{{ site_settings.currency_symbol|default:"$" }}{{ customer.credit_limit|default:0|floatformat:2 }}</td>
-            <td class="py-3 pr-4 text-right {% if customer.current_balance > 0 %}text-warning-700 font-semibold{% endif %}">
+            <td class="px-4 py-3 font-semibold text-gray-900">{{ customer.name }}</td>
+            <td class="px-4 py-3 text-gray-600">{{ customer.phone|default:"—" }}</td>
+            <td class="px-4 py-3 text-gray-600">{{ customer.email|default:"—" }}</td>
+            <td class="px-4 py-3 text-right">{{ site_settings.currency_symbol|default:"$" }}{{ customer.credit_limit|default:0|floatformat:2 }}</td>
+            <td class="px-4 py-3 text-right {% if customer.current_balance > 0 %}text-warning-700 font-semibold{% endif %}">
               {{ site_settings.currency_symbol|default:"$" }}{{ customer.current_balance|default:0|floatformat:2 }}
             </td>
-            <td class="py-3 pr-4">
+            <td class="px-4 py-3">
               {% if customer.status == 'ACTIVE' %}
                 {% include 'ui/badge.html' with label=customer.get_status_display color="success" %}
               {% elif customer.status == 'SUSPENDED' %}
@@ -64,7 +64,7 @@
                 {% include 'ui/badge.html' with label=customer.get_status_display color="gray" %}
               {% endif %}
             </td>
-            <td class="py-3 pr-4">
+            <td class="px-4 py-3">
               <div class="flex gap-2 justify-end">
                 <a href="{% url 'customer_update' customer.pk %}" class="px-3 py-1.5 border border-gray-200 rounded-btn text-xs font-medium hover:bg-gray-50 transition-colors">Edit</a>
                 <a href="{% url 'accounting:customer_statement' customer.pk %}" class="px-3 py-1.5 border border-primary-500 text-primary-600 rounded-btn text-xs font-medium hover:bg-primary-50 transition-colors">Statement</a>
@@ -75,9 +75,50 @@
         </tbody>
       </table>
     </div>
-    {% else %}
-      {% include 'ui/empty_state.html' with icon="fas fa-user-friends" title="No customers yet" subtitle="Create a customer to enable credit sales and layby plans." cta_label="Add first customer" cta_href=customer_create_url cta_icon="fas fa-plus" %}
-    {% endif %}
   </div>
+
+  <!-- Mobile card stack (<md) -->
+  <div class="md:hidden space-y-2">
+    {% for customer in customers %}
+    <div x-data="{ expanded: false }"
+         class="bg-white rounded-btn shadow-card p-3"
+         :style="query && !'{{ customer.name|lower|escapejs }} {{ customer.phone|lower|escapejs }} {{ customer.email|lower|escapejs }}'.includes(query.toLowerCase()) ? 'display:none' : ''">
+      <div class="flex justify-between items-start gap-2">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <p class="font-semibold text-gray-900 truncate">{{ customer.name }}</p>
+            {% if customer.status == 'ACTIVE' %}{% include 'ui/badge.html' with label=customer.get_status_display color="success" size="sm" %}
+            {% elif customer.status == 'SUSPENDED' %}{% include 'ui/badge.html' with label=customer.get_status_display color="warning" size="sm" %}
+            {% else %}{% include 'ui/badge.html' with label=customer.get_status_display color="gray" size="sm" %}{% endif %}
+          </div>
+          <p class="text-xs text-gray-500 mt-0.5 truncate">{{ customer.phone|default:customer.email|default:"—" }}</p>
+        </div>
+        {% if customer.current_balance > 0 %}
+        <div class="flex-shrink-0 text-right">
+          <p class="text-xs text-gray-500">Balance</p>
+          <p class="text-sm font-semibold text-warning-700">{{ site_settings.currency_symbol|default:"$" }}{{ customer.current_balance|floatformat:2 }}</p>
+        </div>
+        {% endif %}
+      </div>
+      <button type="button" @click="expanded = !expanded"
+              class="mt-2 text-xs text-primary-600 font-medium flex items-center gap-1">
+        <span x-text="expanded ? 'Hide details' : 'Details'"></span>
+        <i class="fas fa-chevron-down text-[10px] transition-transform" :class="expanded ? 'rotate-180' : ''"></i>
+      </button>
+      <div x-show="expanded" class="mt-2 pt-2 border-t border-gray-100 space-y-1.5 text-xs" style="display:none">
+        {% if customer.email %}<div class="flex justify-between gap-2"><span class="text-gray-500">Email</span><span class="text-gray-900 truncate ml-2">{{ customer.email }}</span></div>{% endif %}
+        <div class="flex justify-between gap-2"><span class="text-gray-500">Credit Limit</span><span class="text-gray-900 font-medium">{{ site_settings.currency_symbol|default:"$" }}{{ customer.credit_limit|default:0|floatformat:2 }}</span></div>
+        <div class="pt-2 flex gap-2">
+          <a href="{% url 'customer_update' customer.pk %}" class="flex-1 text-center py-2 border border-gray-200 rounded-btn text-xs font-medium hover:bg-gray-50">Edit</a>
+          <a href="{% url 'accounting:customer_statement' customer.pk %}" class="flex-1 text-center py-2 border border-primary-500 text-primary-600 rounded-btn text-xs font-medium hover:bg-primary-50">Statement</a>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% else %}
+    {% include 'ui/empty_state.html' with icon="fas fa-user-friends" title="No customers yet" subtitle="Create a customer to enable credit sales and layby plans." cta_label="Add first customer" cta_href=customer_create_url cta_icon="fas fa-plus" %}
+  {% endif %}
 </div>
 {% endblock %}
