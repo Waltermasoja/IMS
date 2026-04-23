@@ -8,5 +8,9 @@ services:
   - type: web
     name: ims
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    # npm ci triggers postinstall -> build:tailwind:prod so output.css is
+    # always rebuilt from the current tailwind.config.js on deploy. Without
+    # this, utility classes added since the last committed output.css
+    # would silently fail to render in production.
+    buildCommand: pip install -r requirements.txt && npm ci
     startCommand: bash scripts/start.sh
