@@ -1,0 +1,27 @@
+{% comment %}
+Card opener. Pair with ui/card_end.html.
+
+Args:
+  title        (optional) — shown in card header row
+  icon         (optional) — icon class for title
+  subtitle     (optional) — helper text below title
+  padding      sm | md | lg (default md → p-5)
+  action_html  (optional) — |safe HTML for a right-aligned action slot
+                 (use only for simple fragments; for complex use, write the
+                 header inline and skip the title/action args)
+  extra_class  extra classes on the card root
+{% endcomment %}
+<div class="bg-white rounded-card shadow-card {{ extra_class }}">
+  {% if title %}
+  <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+    <div>
+      <h2 class="text-section-title text-gray-900">
+        {% if icon %}<i class="{{ icon }} mr-2"></i>{% endif %}
+        {{ title }}
+      </h2>
+      {% if subtitle %}<p class="text-xs text-gray-500 mt-0.5">{{ subtitle }}</p>{% endif %}
+    </div>
+    {% if action_html %}<div class="flex items-center gap-2">{{ action_html|safe }}</div>{% endif %}
+  </div>
+  {% endif %}
+  <div class="{% if padding == 'sm' %}p-3{% elif padding == 'lg' %}p-6{% else %}p-5{% endif %}">

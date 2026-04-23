@@ -1,0 +1,61 @@
+{% comment %}
+Alpine-driven modal shell. Pair with ui/modal_end.html.
+
+The wrapping component must declare a boolean state var (default "open");
+pass its name in `state`. Example:
+
+  <div x-data="{ open: false }">
+    <button @click="open = true">Open</button>
+    {% include 'ui/modal_start.html' with state="open" title="Confirm" %}
+      <p>Are you sure?</p>
+    {% include 'ui/modal_end.html' %}
+  </div>
+
+Args:
+  state     Alpine variable name controlling visibility (default "open")
+  title     (optional) — shown in header row
+  icon      (optional) — Font Awesome class
+  size      sm | md | lg | xl (default md)
+  dismissible (default True) — set to False to hide the X and block backdrop-close
+{% endcomment %}
+<div x-show="{{ state|default:'open' }}"
+     x-transition:enter="transition ease-out duration-200"
+     x-transition:enter-start="opacity-0"
+     x-transition:enter-end="opacity-100"
+     x-transition:leave="transition ease-in duration-150"
+     x-transition:leave-start="opacity-100"
+     x-transition:leave-end="opacity-0"
+     class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+     style="display:none"
+     {% if dismissible|default_if_none:True %}
+     @keydown.escape.window="{{ state|default:'open' }} = false"
+     @click.self="{{ state|default:'open' }} = false"
+     {% endif %}>
+  <div x-show="{{ state|default:'open' }}"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 scale-95"
+       x-transition:enter-end="opacity-100 scale-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 scale-100"
+       x-transition:leave-end="opacity-0 scale-95"
+       class="bg-white rounded-card shadow-overlay w-full
+         {% if size == 'sm' %}max-w-sm
+         {% elif size == 'lg' %}max-w-2xl
+         {% elif size == 'xl' %}max-w-4xl
+         {% else %}max-w-lg{% endif %} max-h-[90vh] overflow-hidden flex flex-col">
+
+    {% if title %}
+    <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+      <h3 class="text-section-title text-gray-900">
+        {% if icon %}<i class="{{ icon }} mr-2"></i>{% endif %}
+        {{ title }}
+      </h3>
+      {% if dismissible|default_if_none:True %}
+      <button type="button" @click="{{ state|default:'open' }} = false" class="p-1 text-gray-400 hover:text-gray-600 transition-colors">
+        <i class="fas fa-times"></i>
+      </button>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="p-5 overflow-y-auto flex-1">

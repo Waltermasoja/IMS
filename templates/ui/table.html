@@ -1,0 +1,91 @@
+{% comment %}
+Responsive table — renders <table> on md:+ and a card stack below.
+
+Args:
+  headers  list of dicts: { label, align ("left"|"right"|"center"), class }
+           On desktop these become <th>. On mobile they drive the details
+           section via row.details (see below).
+
+  rows     list of dicts:
+             cells        → list of cell-content strings (rendered |safe),
+                            one per header. Shown in desktop table.
+             title        → primary text for the mobile card (string/safe HTML)
+             subtitle     → secondary text for the mobile card (optional)
+             details      → list of {label, value} for the mobile "Details"
+                            expand section (optional; pairs not shown in
+                            the card header).
+             href         → (optional) makes the row clickable
+             actions      → (optional) pre-rendered HTML for a right-
+                            aligned actions cell (desktop and mobile).
+
+  empty_title, empty_subtitle, empty_icon, empty_cta_label, empty_cta_href
+           → forwarded to ui/empty_state.html when rows is empty.
+{% endcomment %}
+
+{% if rows %}
+<!-- Desktop table (md:+) -->
+<div class="hidden md:block overflow-x-auto bg-white rounded-card shadow-card">
+  <table class="w-full text-sm">
+    <thead class="bg-gray-50 border-b border-gray-100">
+      <tr>
+        {% for h in headers %}
+        <th class="px-4 py-3 text-{{ h.align|default:'left' }} text-xs font-medium text-gray-500 uppercase tracking-wide {{ h.class }}">{{ h.label }}</th>
+        {% endfor %}
+        {% if rows.0.actions %}<th class="px-4 py-3"></th>{% endif %}
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for row in rows %}
+      <tr class="hover:bg-gray-50 transition-colors {% if row.href %}cursor-pointer{% endif %}"
+          {% if row.href %}onclick="window.location='{{ row.href }}'"{% endif %}>
+        {% for cell in row.cells %}
+        <td class="px-4 py-3 text-gray-900 align-middle">{{ cell|safe }}</td>
+        {% endfor %}
+        {% if row.actions %}
+        <td class="px-4 py-3 text-right" onclick="event.stopPropagation()">{{ row.actions|safe }}</td>
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Mobile card stack (<md) -->
+<div class="md:hidden space-y-2">
+  {% for row in rows %}
+  <div x-data="{ expanded: false }"
+       class="bg-white rounded-btn shadow-card p-3 {% if row.href %}hover:shadow-elevated transition-shadow{% endif %}">
+    <div class="flex items-start justify-between gap-2">
+      <a {% if row.href %}href="{{ row.href }}"{% endif %} class="flex-1 min-w-0 block">
+        <p class="font-semibold text-gray-900 truncate">{{ row.title|safe }}</p>
+        {% if row.subtitle %}
+        <p class="text-xs text-gray-500 truncate mt-0.5">{{ row.subtitle|safe }}</p>
+        {% endif %}
+      </a>
+      {% if row.actions %}
+      <div class="flex-shrink-0 ml-2" onclick="event.stopPropagation()">{{ row.actions|safe }}</div>
+      {% endif %}
+    </div>
+
+    {% if row.details %}
+    <button type="button" @click="expanded = !expanded"
+            class="mt-2 text-xs text-primary-600 font-medium flex items-center gap-1">
+      <span x-text="expanded ? 'Hide details' : 'Details'"></span>
+      <i class="fas fa-chevron-down text-[10px] transition-transform" :class="expanded ? 'rotate-180' : ''"></i>
+    </button>
+    <div x-show="expanded" class="mt-2 pt-2 border-t border-gray-100 space-y-1.5 text-xs" style="display:none">
+      {% for d in row.details %}
+      <div class="flex justify-between gap-2">
+        <span class="text-gray-500">{{ d.label }}</span>
+        <span class="font-medium text-gray-900 text-right">{{ d.value|safe }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+  {% include 'ui/empty_state.html' with title=empty_title subtitle=empty_subtitle icon=empty_icon cta_label=empty_cta_label cta_href=empty_cta_href %}
+{% endif %}

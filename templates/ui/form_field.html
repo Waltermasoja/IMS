@@ -1,0 +1,47 @@
+{% comment %}
+Form field stack — label + input + help + error.
+
+Args:
+  field      a Django form field (BoundField). Takes priority if passed.
+  label      string — label text (fallback if field not passed)
+  name       input name (fallback)
+  value      input value (fallback)
+  type       input type (fallback; default "text")
+  placeholder
+  required   (truthy) — marks required indicator
+  help       helper text shown under input
+  error      error string (overrides field.errors if both set)
+  extra_class extra classes for the input
+{% endcomment %}
+<div class="space-y-1">
+  {% if field %}
+    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700">
+      {{ field.label }}
+      {% if field.field.required %}<span class="text-danger-500 ml-0.5">*</span>{% endif %}
+    </label>
+    {{ field }}
+    {% if field.help_text or help %}<p class="text-xs text-gray-500">{{ field.help_text|default:help }}</p>{% endif %}
+    {% if field.errors %}
+      <p class="text-xs text-danger-600"><i class="fas fa-exclamation-circle mr-1"></i>{{ field.errors.0 }}</p>
+    {% elif error %}
+      <p class="text-xs text-danger-600"><i class="fas fa-exclamation-circle mr-1"></i>{{ error }}</p>
+    {% endif %}
+  {% else %}
+    {% if label %}
+    <label {% if name %}for="id_{{ name }}"{% endif %} class="block text-sm font-medium text-gray-700">
+      {{ label }}
+      {% if required %}<span class="text-danger-500 ml-0.5">*</span>{% endif %}
+    </label>
+    {% endif %}
+    <input type="{{ type|default:'text' }}"
+           {% if name %}name="{{ name }}" id="id_{{ name }}"{% endif %}
+           {% if value is not None %}value="{{ value }}"{% endif %}
+           {% if placeholder %}placeholder="{{ placeholder }}"{% endif %}
+           {% if required %}required{% endif %}
+           class="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-btn
+                  focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+                  placeholder:text-gray-400 {{ extra_class }}">
+    {% if help %}<p class="text-xs text-gray-500">{{ help }}</p>{% endif %}
+    {% if error %}<p class="text-xs text-danger-600"><i class="fas fa-exclamation-circle mr-1"></i>{{ error }}</p>{% endif %}
+  {% endif %}
+</div>

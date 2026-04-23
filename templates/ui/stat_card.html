@@ -1,0 +1,37 @@
+{% comment %}
+Stat card — KPI metric block with label + big value.
+
+Args:
+  label     string — caption above value
+  value     string/number — big value
+  icon      (optional) — Font Awesome class
+  color     primary | success | danger | warning | info | finance | gray (default primary)
+  subtitle  (optional) — small helper text below the value
+  href      (optional) — makes the whole card a clickable link
+  currency  (optional truthy) — prefixes value with site currency symbol
+{% endcomment %}
+{% if href %}<a href="{{ href }}"{% else %}<div{% endif %}
+  class="block bg-white rounded-card shadow-card p-4
+    {% if href %}hover:shadow-elevated hover:-translate-y-0.5 transition-all cursor-pointer{% endif %}">
+
+  <div class="flex items-center gap-3 mb-2">
+    {% if icon %}
+    <div class="w-8 h-8 flex items-center justify-center rounded-btn
+      {% if color == 'success' %}bg-success-100 text-success-600
+      {% elif color == 'danger' %}bg-danger-100 text-danger-600
+      {% elif color == 'warning' %}bg-warning-100 text-warning-600
+      {% elif color == 'info' %}bg-info-100 text-info-600
+      {% elif color == 'finance' %}bg-finance-100 text-finance-600
+      {% elif color == 'gray' %}bg-gray-100 text-gray-600
+      {% else %}bg-primary-100 text-primary-600{% endif %}">
+      <i class="{{ icon }} text-sm"></i>
+    </div>
+    {% endif %}
+    <span class="text-xs font-medium text-gray-500 uppercase tracking-wide">{{ label }}</span>
+  </div>
+
+  <p class="text-stat-value text-gray-900">
+    {% if currency %}{{ site_settings.currency_symbol|default:'$' }}{% endif %}{{ value }}
+  </p>
+  {% if subtitle %}<p class="text-xs text-gray-400 mt-1">{{ subtitle }}</p>{% endif %}
+</{% if href %}a{% else %}div{% endif %}>

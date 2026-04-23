@@ -1,0 +1,33 @@
+{% comment %}
+Button partial.
+
+Args:
+  label       string — visible text
+  href        (optional) — renders as <a>. If absent, renders as <button>.
+  variant     primary | success | danger | warning | secondary | ghost (default primary)
+  size        sm | md | lg (default md)
+  icon        (optional) — Font Awesome class e.g. "fas fa-plus"
+  type        (optional) — button type attr (submit/button/reset). Default button.
+  extra_class (optional) — extra utility classes to tack on.
+  disabled    (optional truthy) — disables the button
+  id          (optional) — element id
+{% endcomment %}
+{% if variant == 'secondary' %}{% with color_cls='bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200' %}{% endwith %}{% endif %}
+<{% if href %}a href="{{ href }}"{% else %}button type="{{ type|default:'button' }}"{% endif %}
+  {% if id %}id="{{ id }}"{% endif %}
+  {% if disabled %}disabled{% endif %}
+  class="inline-flex items-center justify-center gap-1.5 font-semibold transition-colors rounded-btn
+    {% if size == 'sm' %}px-3 py-1.5 text-xs
+    {% elif size == 'lg' %}px-5 py-3 text-base
+    {% else %}px-4 py-2 text-sm{% endif %}
+    {% if variant == 'success' %}bg-success-600 text-white hover:bg-success-700
+    {% elif variant == 'danger' %}bg-danger-600 text-white hover:bg-danger-700
+    {% elif variant == 'warning' %}bg-warning-500 text-white hover:bg-warning-600
+    {% elif variant == 'secondary' %}bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200
+    {% elif variant == 'ghost' %}bg-transparent text-gray-600 hover:bg-gray-100
+    {% else %}bg-primary-600 text-white hover:bg-primary-700{% endif %}
+    disabled:opacity-50 disabled:cursor-not-allowed
+    {{ extra_class }}">
+  {% if icon %}<i class="{{ icon }}"></i>{% endif %}
+  <span>{{ label }}</span>
+</{% if href %}a{% else %}button{% endif %}>

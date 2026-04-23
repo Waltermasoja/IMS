@@ -1,0 +1,21 @@
+{% comment %}
+Badge (coloured pill) partial.
+
+Args:
+  label   string — visible text
+  color   primary | success | danger | warning | info | finance | gray (default gray)
+  icon    (optional) — Font Awesome class
+  size    sm | md (default md)
+{% endcomment %}
+<span class="inline-flex items-center gap-1 font-medium rounded-pill
+  {% if size == 'sm' %}px-1.5 py-0.5 text-xs{% else %}px-2 py-0.5 text-xs{% endif %}
+  {% if color == 'primary' %}bg-primary-100 text-primary-700
+  {% elif color == 'success' %}bg-success-100 text-success-700
+  {% elif color == 'danger' %}bg-danger-100 text-danger-700
+  {% elif color == 'warning' %}bg-warning-100 text-warning-700
+  {% elif color == 'info' %}bg-info-100 text-info-700
+  {% elif color == 'finance' %}bg-finance-100 text-finance-700
+  {% else %}bg-gray-100 text-gray-700{% endif %}">
+  {% if icon %}<i class="{{ icon }} text-xs"></i>{% endif %}
+  {{ label }}
+</span>

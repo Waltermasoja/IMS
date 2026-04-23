@@ -1,0 +1,23 @@
+{% comment %}
+Page header. Pair with ui/page_header_end.html.
+Opens a card with title + subtitle and a right-aligned slot for actions.
+
+Args:
+  title        string
+  subtitle     (optional)
+  icon         (optional) — icon class for title
+  breadcrumb   (optional) — list of {label, href}. Renders above title.
+
+Body: right-aligned action area. Put buttons / filters / shop-selector here.
+{% endcomment %}
+<div class="bg-white rounded-card shadow-card p-5 mb-4">
+  {% if breadcrumb %}{% include 'ui/breadcrumb.html' with items=breadcrumb %}{% endif %}
+  <div class="flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h1 class="text-page-title text-gray-900">
+        {% if icon %}<i class="{{ icon }} mr-2"></i>{% endif %}
+        {{ title }}
+      </h1>
+      {% if subtitle %}<p class="text-sm text-gray-500 mt-1">{{ subtitle }}</p>{% endif %}
+    </div>
+    <div class="flex flex-wrap items-center gap-2">

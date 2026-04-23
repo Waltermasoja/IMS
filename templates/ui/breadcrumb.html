@@ -1,0 +1,16 @@
+{% comment %}
+Breadcrumb trail.
+
+Args:
+  items   list of {label, href}. Last item is rendered as current (no link).
+{% endcomment %}
+<nav class="flex items-center text-sm text-gray-500 mb-3" aria-label="Breadcrumb">
+  {% for item in items %}
+  {% if forloop.last %}
+    <span class="text-gray-900 font-medium">{{ item.label }}</span>
+  {% else %}
+    <a href="{{ item.href }}" class="hover:text-primary-600 transition-colors">{{ item.label }}</a>
+    <i class="fas fa-chevron-right text-xs mx-2 text-gray-300"></i>
+  {% endif %}
+  {% endfor %}
+</nav>
