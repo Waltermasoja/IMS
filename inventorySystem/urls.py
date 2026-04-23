@@ -17,17 +17,29 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.shortcuts import redirect
-from inventory.views import login_view, logout_view
-from django.contrib.auth import views as auth_views
-from django.conf import settings
+from django.http import HttpResponse, FileResponse
+from django.views.decorators.cache import cache_control
 from django.conf.urls.static import static
+from django.conf import settings
+import os
+
+from inventory.views import login_view, logout_view
 
 def redirect_to_login(request):
     return redirect('login')
 
+@cache_control(max_age=0)
+def service_worker(request):
+    """Serve sw.js from root scope with Service-Worker-Allowed header."""
+    path_ = os.path.join(settings.BASE_DIR, 'static', 'sw.js')
+    resp = FileResponse(open(path_, 'rb'), content_type='application/javascript')
+    resp['Service-Worker-Allowed'] = '/'
+    return resp
+
 urlpatterns = [
     path('', redirect_to_login, name='root'),
     path('admin/', admin.site.urls),
+    path('sw.js', service_worker, name='service_worker'),
     path('inventory/', include('inventory.urls')),
     path('accounting/', include('accounting.urls')),
     path('login/', login_view, name='login'),

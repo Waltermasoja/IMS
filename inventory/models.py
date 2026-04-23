@@ -394,6 +394,10 @@ class Inventory(models.Model):
     # VAT
     is_vat_exempt = models.BooleanField(default=False, help_text="Zero-rated for VAT (e.g. basic foodstuffs)")
 
+    # Barcode (auto-generated if blank on create)
+    barcode = models.CharField(max_length=32, unique=True, blank=True, null=True, db_index=True,
+                               help_text='Code-128 barcode. Auto-generated from product_code on first save.')
+
     # Stock control fields
     reorder_point = models.IntegerField(default=0, help_text="Minimum stock level before reordering")
     lead_time_days = models.IntegerField(default=0, help_text="Supplier lead time in days")
@@ -495,6 +499,9 @@ class Inventory(models.Model):
         # Auto-generate product code if not provided
         if not self.product_code:
             self.product_code = self.generate_product_code()
+        if not self.barcode:
+            # Code-128 compatible: reuse product_code (alphanumeric + dashes). Uppercase.
+            self.barcode = (self.product_code or '').upper().replace(' ', '')[:32] or None
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -589,6 +596,10 @@ class ProductVariant(models.Model):
     is_vat_exempt = models.BooleanField(null=True, blank=True,
                                         help_text="Override product VAT status. Leave blank to inherit.")
 
+    # Barcode (auto-generated from SKU if blank)
+    barcode = models.CharField(max_length=32, unique=True, blank=True, null=True, db_index=True,
+                               help_text='Code-128 barcode. Auto-generated from SKU on first save.')
+
     # Status
     is_active = models.BooleanField(default=True)
 
@@ -672,6 +683,8 @@ class ProductVariant(models.Model):
                 # Temporary SKU, will be updated after M2M is set
                 temp_sku = f"TEMP-{self.product.product_code or 'PROD'}-{timezone.now().timestamp()}"
                 self.sku = temp_sku
+        if not self.barcode:
+            self.barcode = (self.sku or '').upper().replace(' ', '')[:32] or None
         super().save(*args, **kwargs)
 
 

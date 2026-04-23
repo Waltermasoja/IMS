@@ -33,3 +33,5 @@ typing_extensions==4.12.2
 tzdata==2024.1
 urllib3==2.2.1
 whitenoise==6.8.2
+python-barcode==0.16.1
+weasyprint==62.3  # For PDF exports (D3)

@@ -15,11 +15,17 @@
     <!-- Font Awesome (local) -->
     <link rel="stylesheet" href="{% static 'css/fontawesome/all.min.css' %}">
 
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    <!-- PWA -->
+    <link rel="manifest" href="{% static 'manifest.json' %}">
+    <meta name="theme-color" content="#16a34a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="IMS Pro">
+    <link rel="apple-touch-icon" href="{% static 'images/icon-192.png' %}">
 
+    <style>
         body {
-            font-family: 'Inter', sans-serif;
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, sans-serif;
         }
 
         /* Custom scrollbar */
@@ -981,6 +987,17 @@
                 // Ignore errors
             }
         })();
+    </script>
+
+    <!-- PWA service worker registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function (err) {
+            console.warn('SW registration failed', err);
+          });
+        });
+      }
     </script>
 </body>
 </html>

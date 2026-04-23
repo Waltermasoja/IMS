@@ -2185,6 +2185,56 @@ def simple_pos(request):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# B3 — Barcode label printing
+# ──────────────────────────────────────────────────────────────────────────────
+
+@login_required
+def barcode_svg(request, code):
+    """Return a Code-128 SVG for the given code string."""
+    from django.http import HttpResponse
+    try:
+        import barcode as pybarcode
+        from barcode.writer import SVGWriter
+        import io
+    except ImportError:
+        return HttpResponse('python-barcode not installed', status=500)
+
+    buf = io.BytesIO()
+    writer = SVGWriter()
+    code128 = pybarcode.get('code128', str(code), writer=writer)
+    code128.write(buf, options={'module_height': 10.0, 'font_size': 8, 'text_distance': 3.0})
+    return HttpResponse(buf.getvalue(), content_type='image/svg+xml')
+
+
+@login_required
+def label_print(request):
+    """Print a sheet of product labels. Accepts ?ids=1,2,3&count=2."""
+    ids = request.GET.get('ids', '')
+    count = int(request.GET.get('count', '1') or '1')
+    count = max(1, min(count, 100))
+
+    products = []
+    if ids:
+        pks = [int(p) for p in ids.split(',') if p.strip().isdigit()]
+        products = Inventory.objects.filter(pk__in=pks).order_by('product_code')
+
+    labels = []
+    for p in products:
+        for _ in range(count):
+            labels.append({
+                'name': p.name,
+                'code': p.barcode or p.product_code,
+                'product_code': p.product_code,
+                'price': p.selling_price,
+            })
+
+    return render(request, 'inventory/label_print.html', {
+        'labels': labels,
+        'count_per_product': count,
+    })
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # E1 — Returns against a SalesTicket
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -2589,11 +2639,13 @@ def product_search_ajax(request):
     products = (
         Inventory.objects.filter(
             Q(product_code__icontains=query)
+            | Q(barcode__iexact=query)
             | Q(name__icontains=query)
             | Q(label__icontains=query)
             | Q(size__icontains=query)
             | Q(category__name__icontains=query)
             | Q(variants__sku__icontains=query)
+            | Q(variants__barcode__iexact=query)
         )
         .select_related('category')
         .prefetch_related('variants__attribute_values__attribute_type')

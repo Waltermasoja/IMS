@@ -1,0 +1,40 @@
+{
+  "name": "IMS Pro — Inventory & POS",
+  "short_name": "IMS Pro",
+  "description": "Multi-shop POS, inventory and accounting for Zimbabwean retail.",
+  "start_url": "/inventory/pos/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f9fafb",
+  "theme_color": "#16a34a",
+  "icons": [
+    {
+      "src": "/static/images/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/images/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Point of Sale",
+      "short_name": "POS",
+      "url": "/inventory/pos/",
+      "description": "Ring up a sale"
+    },
+    {
+      "name": "Daily Cash-Up",
+      "short_name": "Cash-Up",
+      "url": "/inventory/pos/",
+      "description": "Close the trading day"
+    }
+  ],
+  "categories": ["business", "productivity", "finance"]
+}
