@@ -232,6 +232,7 @@ LOGIN_REDIRECT_URL = 'inventory'
 LOGIN_URL = 'login'
 
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+WHITENOISE_MANIFEST_STRICT = False
 
 # Production security settings — enabled when DEBUG is False
 if not DEBUG:
