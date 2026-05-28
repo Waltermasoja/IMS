@@ -1,0 +1,89 @@
+<!-- Supplier Invoices -->
+<div class="bg-white rounded-card shadow-card overflow-hidden">
+    <div class="bg-success-50 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="text-base font-bold text-gray-900">
+            <i class="fas fa-file-invoice-dollar text-success-600 mr-1.5"></i>Supplier Invoices ({{ invoices.count }})
+        </h2>
+        {% if order.payment_status == 'PAID' %}
+            {% include 'ui/badge.html' with label="Fully Paid" color="success" icon="fas fa-check-circle" %}
+        {% elif order.payment_status == 'PARTIAL' %}
+            {% include 'ui/badge.html' with label="Partially Paid" color="warning" icon="fas fa-clock" %}
+        {% elif order.payment_status == 'UNPAID' %}
+            {% include 'ui/badge.html' with label="Unpaid" color="danger" icon="fas fa-exclamation-circle" %}
+        {% else %}
+            {% include 'ui/badge.html' with label="No Invoice" color="gray" icon="fas fa-file" %}
+        {% endif %}
+    </div>
+    <div class="p-6">
+        {% if invoices %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                        <th class="px-4 py-3 text-left">Invoice #</th>
+                        <th class="px-4 py-3 text-right">Amount</th>
+                        <th class="px-4 py-3 text-right">Paid</th>
+                        <th class="px-4 py-3 text-center">Status</th>
+                        <th class="px-4 py-3 text-left">Due Date</th>
+                        <th class="px-4 py-3"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for inv in invoices %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-3 font-semibold text-gray-900">{{ inv.invoice_number }}</td>
+                        <td class="px-4 py-3 text-right font-medium">${{ inv.total_amount|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-right font-medium text-success-600">${{ inv.amount_paid|floatformat:2 }}</td>
+                        <td class="px-4 py-3 text-center">
+                            {% if inv.status == 'PAID' %}{% include 'ui/badge.html' with label=inv.get_status_display color="success" icon="fas fa-check-circle" %}
+                            {% elif inv.status == 'PARTIAL' %}{% include 'ui/badge.html' with label=inv.get_status_display color="primary" icon="fas fa-clock" %}
+                            {% elif inv.status == 'OVERDUE' %}{% include 'ui/badge.html' with label=inv.get_status_display color="danger" icon="fas fa-exclamation-circle" %}
+                            {% else %}{% include 'ui/badge.html' with label=inv.get_status_display color="gray" icon="fas fa-file-invoice" %}{% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-gray-700">
+                            {% if inv.due_date %}{{ inv.due_date|date:"M d, Y" }}{% else %}<span class="text-gray-400">Not set</span>{% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-right">
+                            <a href="{% url 'add_invoice_payment' inv.id %}"
+                               class="inline-flex items-center gap-1 px-3 py-1.5 bg-primary-50 text-primary-600 rounded-btn hover:bg-primary-100 transition-colors text-xs font-medium">
+                                <i class="fas fa-money-bill-wave"></i>Record Payment
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        {% include 'ui/empty_state.html' with icon="fas fa-file-invoice" title="No invoices yet" subtitle="Add a supplier invoice to track payments." cta_label="Add Invoice" cta_href=add_invoice_url cta_icon="fas fa-plus" %}
+        {% endif %}
+    </div>
+</div>
+
+<!-- Workflow guide -->
+<div class="bg-primary-50 border border-primary-100 rounded-card p-5">
+    <div class="flex items-start gap-4">
+        <i class="fas fa-lightbulb text-xl text-primary-600 flex-shrink-0 mt-0.5"></i>
+        <div class="flex-1">
+            <h4 class="text-sm font-bold text-gray-900 mb-3">Import Order Workflow</h4>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-gray-600">
+                <div>
+                    <p class="font-semibold text-gray-800 mb-0.5"><span class="text-primary-600 mr-1">1.</span>Add Products</p>
+                    <p>Specify all products you're importing with quantities and unit costs.</p>
+                </div>
+                <div>
+                    <p class="font-semibold text-gray-800 mb-0.5"><span class="text-primary-600 mr-1">2.</span>Add Expenses</p>
+                    <p>Add shipping, customs duties, insurance, clearing fees, etc.</p>
+                </div>
+                <div>
+                    <p class="font-semibold text-gray-800 mb-0.5"><span class="text-primary-600 mr-1">3.</span>Allocate Costs</p>
+                    <p>Distribute expenses across products using <strong>{{ order.get_allocation_method_display }}</strong> method.</p>
+                </div>
+                <div>
+                    <p class="font-semibold text-gray-800 mb-0.5"><span class="text-primary-600 mr-1">4.</span>Receive Goods</p>
+                    <p>Mark as received to update stock levels with calculated landed costs.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

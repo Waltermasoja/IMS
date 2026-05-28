@@ -1,0 +1,179 @@
+<div class="bg-white rounded-card shadow-card overflow-hidden">
+    <div class="bg-warning-50 px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-3">
+        <div>
+            <h2 class="text-base font-bold text-gray-900">
+                <i class="fas fa-receipt text-warning-600 mr-1.5"></i>Import Expenses ({{ order.expenses.count }})
+                {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' or order.status == 'CANCELLED' %}
+                <i class="fas fa-lock text-gray-400 ml-1.5 text-sm"></i>
+                {% endif %}
+            </h2>
+            <p class="text-xs text-gray-500 mt-0.5">
+                {% if order.status == 'CANCELLED' %}
+                    <i class="fas fa-info-circle text-danger-500 mr-1"></i>Editing disabled — order cancelled
+                {% elif order.status == 'RECEIVED' or order.status == 'COMPLETED' %}
+                    <i class="fas fa-info-circle text-warning-500 mr-1"></i>Editing disabled — goods received
+                {% else %}
+                    Shipping, duties, insurance, and other costs
+                {% endif %}
+            </p>
+        </div>
+        <span class="text-xs text-gray-400 flex-shrink-0"><i class="fas fa-circle-2 mr-1"></i>Step 2</span>
+    </div>
+
+    <form method="post" class="p-6"
+          {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}onsubmit="return false;"{% endif %}>
+        {% csrf_token %}
+        {{ expenses_formset.management_form }}
+
+        {% if expenses_formset.non_form_errors %}
+        <div class="mb-4 p-4 bg-danger-50 border border-danger-200 rounded-btn text-sm text-danger-700">
+            <i class="fas fa-exclamation-circle mr-2"></i>
+            {% for error in expenses_formset.non_form_errors %}{{ error }}{% endfor %}
+        </div>
+        {% endif %}
+
+        <div id="expenses-container" class="space-y-3
+             {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' %}pointer-events-none{% endif %}">
+            {% for form in expenses_formset %}
+            <div class="formset-row p-4 rounded-btn border-2
+                        {% if order.status == 'RECEIVED' or order.status == 'COMPLETED' or order.status == 'CANCELLED' %}
+                            border-gray-200 bg-gray-50 opacity-60
+                        {% else %}
+                            border-warning-100 bg-warning-50 hover:border-warning-300
+                        {% endif %} transition-all"
+                 x-data="{ paid: {% if form.paid.value %}true{% else %}false{% endif %} }">
+                <div class="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                        <label for="{{ form.expense_type.id_for_label }}" class="block text-xs font-semibold text-gray-600 mb-1">
+                            <i class="fas fa-tag text-finance-600 mr-1"></i>Type
+                        </label>
+                        {{ form.expense_type }}
+                        {% if form.expense_type.errors %}
+                        <p class="mt-1 text-xs text-danger-600"><i class="fas fa-exclamation-circle mr-1"></i>{{ form.expense_type.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.amount.id_for_label }}" class="block text-xs font-semibold text-gray-600 mb-1">
+                            <i class="fas fa-dollar-sign text-warning-600 mr-1"></i>Amount
+                        </label>
+                        {{ form.amount }}
+                        {% if form.amount.errors %}
+                        <p class="mt-1 text-xs text-danger-600"><i class="fas fa-exclamation-circle mr-1"></i>{{ form.amount.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-3 mb-3">
+                    <div>
+                        <label for="{{ form.description.id_for_label }}" class="block text-xs font-semibold text-gray-600 mb-1">
+                            <i class="fas fa-file-alt text-primary-600 mr-1"></i>Description
+                        </label>
+                        {{ form.description }}
+                        {% if form.description.errors %}
+                        <p class="mt-1 text-xs text-danger-600"><i class="fas fa-exclamation-circle mr-1"></i>{{ form.description.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.currency.id_for_label }}" class="block text-xs font-semibold text-gray-600 mb-1">
+                            <i class="fas fa-globe text-success-600 mr-1"></i>Currency
+                        </label>
+                        {{ form.currency }}
+                        {% if form.currency.errors %}
+                        <p class="mt-1 text-xs text-danger-600"><i class="fas fa-exclamation-circle mr-1"></i>{{ form.currency.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.exchange_rate.id_for_label }}" class="block text-xs font-semibold text-gray-600 mb-1">
+                            <i class="fas fa-exchange-alt text-info-600 mr-1"></i>Rate
+                        </label>
+                        {{ form.exchange_rate }}
+                        {% if form.exchange_rate.errors %}
+                        <p class="mt-1 text-xs text-danger-600"><i class="fas fa-exclamation-circle mr-1"></i>{{ form.exchange_rate.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Date/receipt — shown only when paid -->
+                <div x-show="paid"
+                     x-transition:enter="transition ease-out duration-200"
+                     x-transition:enter-start="opacity-0 -translate-y-1"
+                     x-transition:enter-end="opacity-100 translate-y-0"
+                     x-transition:leave="transition ease-in duration-150"
+                     x-transition:leave-start="opacity-100 translate-y-0"
+                     x-transition:leave-end="opacity-0 -translate-y-1"
+                     class="grid grid-cols-2 gap-3 mb-3 pt-3 border-t border-warning-200"
+                     style="display:none">
+                    <div>
+                        <label for="{{ form.date_incurred.id_for_label }}" class="block text-xs font-semibold text-gray-600 mb-1">
+                            <i class="fas fa-calendar-alt text-danger-500 mr-1"></i>Date Incurred <span class="text-danger-500">*</span>
+                        </label>
+                        {{ form.date_incurred }}
+                        {% if form.date_incurred.errors %}
+                        <p class="mt-1 text-xs text-danger-600"><i class="fas fa-exclamation-circle mr-1"></i>{{ form.date_incurred.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="{{ form.receipt_number.id_for_label }}" class="block text-xs font-semibold text-gray-600 mb-1">
+                            <i class="fas fa-receipt text-warning-600 mr-1"></i>Receipt Number <span class="text-danger-500">*</span>
+                        </label>
+                        {{ form.receipt_number }}
+                        {% if form.receipt_number.errors %}
+                        <p class="mt-1 text-xs text-danger-600"><i class="fas fa-exclamation-circle mr-1"></i>{{ form.receipt_number.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between gap-2">
+                    <label for="{{ form.paid.id_for_label }}"
+                           class="flex items-center gap-2 cursor-pointer px-3 py-2 bg-success-50 hover:bg-success-100 border border-success-200 rounded-btn text-xs font-semibold text-success-700 transition-colors">
+                        <input type="checkbox"
+                               name="{{ form.paid.html_name }}"
+                               id="{{ form.paid.id_for_label }}"
+                               value="1"
+                               {% if form.paid.value %}checked{% endif %}
+                               @change="paid = $event.target.checked"
+                               class="w-4 h-4 text-success-600 border-gray-300 rounded focus:ring-success-500">
+                        <i class="fas fa-check-circle"></i>Mark as Paid
+                    </label>
+                    <div class="flex gap-2">
+                        {% if form.DELETE %}
+                        <label class="flex items-center gap-1 cursor-pointer px-3 py-2 bg-danger-50 hover:bg-danger-100 text-danger-600 rounded-btn border border-danger-200 text-xs font-medium">
+                            {{ form.DELETE }}<i class="fas fa-trash-alt ml-1"></i>Remove
+                        </label>
+                        {% endif %}
+                        <button type="button" class="remove-form-btn px-3 py-2 bg-danger-500 hover:bg-danger-600 text-white rounded-btn text-xs font-medium transition-colors">
+                            <i class="fas fa-times mr-1"></i>Delete
+                        </button>
+                    </div>
+                </div>
+                {% if form.paid.errors %}
+                <p class="mt-2 text-xs text-danger-600"><i class="fas fa-exclamation-circle mr-1"></i>{{ form.paid.errors.0 }}</p>
+                {% endif %}
+                {% if form.id %}{{ form.id }}{% endif %}
+            </div>
+            {% empty %}
+            <div id="no-expenses-message" class="text-center py-8 bg-gray-50 rounded-btn border-2 border-dashed border-gray-300">
+                <i class="fas fa-receipt text-gray-300 text-3xl mb-3"></i>
+                <p class="text-sm text-gray-500 font-medium">No expenses added yet</p>
+                <p class="text-xs text-gray-400 mt-1">Click "Add Expense" below to add import costs</p>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="mt-5 flex justify-between gap-3">
+            {% if order.status != 'RECEIVED' and order.status != 'COMPLETED' and order.status != 'CANCELLED' %}
+            <button type="button" id="add-expense-btn"
+                    class="inline-flex items-center gap-2 px-5 py-2.5 bg-success-600 text-white rounded-btn text-sm font-semibold hover:bg-success-700 shadow-card hover:shadow-elevated transition-all">
+                <i class="fas fa-plus"></i>Add Expense
+            </button>
+            <button type="submit" name="save_expenses" value="1"
+                    class="inline-flex items-center gap-2 px-5 py-2.5 bg-warning-600 text-white rounded-btn text-sm font-semibold hover:bg-warning-700 shadow-card hover:shadow-elevated transition-all">
+                <i class="fas fa-save"></i>Save Expenses
+            </button>
+            {% else %}
+            <div class="w-full text-center py-3 bg-gray-100 rounded-btn border border-gray-200 text-sm text-gray-500">
+                <i class="fas fa-lock mr-2"></i>Editing disabled
+            </div>
+            {% endif %}
+        </div>
+    </form>
+</div>

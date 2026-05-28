@@ -1402,33 +1402,58 @@ def dashboard(request):
     # Get current date and last 6 months
     end_date = timezone.now()
     start_date = end_date - timedelta(days=180)
-    
-    # Calculate metrics
+
+    # Calculate metrics — read from SalesTicket/SalesLine (modern models) and
+    # aggregate stock via ShopStock so variant products are counted correctly.
     from .utils import get_setting
+    from inventory.models import ShopStock, SalesTicket, SalesLine
     low_stock_threshold = get_setting('low_stock_threshold', 10)
+
+    # Per-inventory total quantity across all shops/variants.
+    stock_totals = dict(
+        ShopStock.objects
+        .values('inventory_item_id')
+        .annotate(t=Sum('quantity'))
+        .values_list('inventory_item_id', 't')
+    )
+    low_stock = 0
+    out_of_stock = 0
+    for inv_id in Inventory.objects.values_list('id', flat=True):
+        t = stock_totals.get(inv_id, 0) or 0
+        if t <= 0:
+            out_of_stock += 1
+        elif t <= low_stock_threshold:
+            low_stock += 1
+
     metrics = {
         'total_products': Inventory.objects.count(),
-        'total_sales': float(Sales.objects.aggregate(total=Sum('total_amount'))['total'] or 0),
-        'low_stock': Inventory.objects.filter(quantity_in_Stock__lte=low_stock_threshold).count(),
-        'out_of_stock': Inventory.objects.filter(quantity_in_Stock=0).count(),
+        'total_sales': float(
+            SalesTicket.objects.aggregate(total=Sum('total_incl_vat'))['total'] or 0
+        ),
+        'low_stock': low_stock,
+        'out_of_stock': out_of_stock,
     }
-    
-    # Get monthly sales data
-    monthly_sales = (Sales.objects
-        .filter(sale_date__range=(start_date, end_date))
-        .annotate(month=TruncMonth('sale_date'))
+
+    # Monthly sales data — bucket SalesTicket.created_at (the actual sale
+    # timestamp; the legacy 'sale_date' field doesn't exist on the new model).
+    monthly_sales = (SalesTicket.objects
+        .filter(created_at__range=(start_date, end_date))
+        .annotate(month=TruncMonth('created_at'))
         .values('month')
-        .annotate(total=Sum('total_amount'))
+        .annotate(total=Sum('total_incl_vat'))
         .order_by('month'))
-    
-    # Get top selling products
-    top_products = (Sales.objects
+
+    # Top selling products — group lines by product, sum SalesLine.line_total_incl_vat.
+    top_products = (SalesLine.objects
         .values('inventory_item__name')
-        .annotate(total_sales=Sum('total_amount'))
+        .annotate(total_sales=Sum('line_total_incl_vat'))
         .order_by('-total_sales')[:5])
-    
-    # Get recent sales
-    recent_sales = Sales.objects.select_related('inventory_item').order_by('-sale_date')[:10]
+
+    # Recent sales — modern POS receipt headers.
+    recent_sales = (SalesTicket.objects
+                    .select_related('customer', 'shop', 'cashier')
+                    .prefetch_related('lines__inventory_item')
+                    .order_by('-created_at')[:10])
 
     
     # Format data for charts
@@ -1496,29 +1521,46 @@ def get_monthly_sales_data():
 
 @login_required
 def inventory_category(request):
-    categories = Inventory_category.objects.all()
-    
-    # Calculate total stock value and items count for each category
-    category_stats = categories.annotate(
-        total_stock_value=Coalesce(
-            ExpressionWrapper(
-                F('inventory__quantity_in_Stock') * F('inventory__purchase_price'),
-                output_field=DecimalField(max_digits=10, decimal_places=2)
-            ),
-            0,
-            output_field=DecimalField(max_digits=10, decimal_places=2)
-        ),
-        items_count=Count('inventory', distinct=True)
+    """List categories with their product count + total stock value.
+
+    Stock value is aggregated over ShopStock so variant products (whose parent
+    Inventory.quantity_in_Stock is 0) are counted correctly. The ShopStock
+    sums are computed in a separate query and merged in Python — annotating
+    them directly on Inventory_category produces a row-per-shopstock-row
+    explosion (the joined queryset is no longer one-row-per-category).
+    """
+    from decimal import Decimal
+    from inventory.models import ShopStock
+
+    # Per-category product count via a dedicated annotate — distinct=True
+    # collapses the join back to one row per category.
+    categories = (
+        Inventory_category.objects
+        .annotate(items_count=Count('inventory', distinct=True))
+        .order_by('name')
     )
 
-    # Calculate total inventory items
-    total_inventory_items = Inventory.objects.count()
+    # Per-category stock value: aggregate ShopStock.quantity * purchase_price,
+    # grouped by inventory_item__category_id.
+    value_rows = (
+        ShopStock.objects
+        .values('inventory_item__category_id')
+        .annotate(value=Sum(
+            F('quantity') * F('inventory_item__purchase_price'),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        ))
+    )
+    value_by_cat = {r['inventory_item__category_id']: (r['value'] or Decimal('0'))
+                    for r in value_rows}
+
+    # Attach as a plain attribute the template can read.
+    for c in categories:
+        c.total_stock_value = value_by_cat.get(c.id, Decimal('0'))
 
     context = {
-        'categories': category_stats,
-        'total_inventory_items': total_inventory_items
+        'categories': categories,
+        'total_inventory_items': Inventory.objects.count(),
     }
-    
     return render(request, 'inventory/inventory_category.html', context)
 
 
@@ -2750,9 +2792,14 @@ def product_search_ajax(request):
         thumbnail_url = product.thumbnail.url if product.thumbnail else None
 
         if shop:
-            # Per-shop stock from ShopStock join table
-            shop_stock_row = ShopStock.get_or_create_for(shop, product, None)
-            qty_in_stock = int(shop_stock_row.quantity)
+            # Use per-shop stock only if a ShopStock row already exists.
+            # Fall back to global inventory so newly-set-up shops don't show 0.
+            stock_row = ShopStock.objects.filter(
+                shop=shop, inventory_item=product, variant=None
+            ).first()
+            qty_in_stock = int(stock_row.quantity) if stock_row else (
+                product.quantity_in_Stock if not product.has_variants else product.total_stock
+            )
         else:
             qty_in_stock = product.quantity_in_Stock if not product.has_variants else product.total_stock
 
@@ -2775,14 +2822,15 @@ def product_search_ajax(request):
             variants_data = []
             for variant in product.variants.filter(is_active=True):
                 if shop:
-                    v_stock_row = ShopStock.get_or_create_for(shop, product, variant)
-                    v_qty = int(v_stock_row.quantity)
+                    v_stock_row = ShopStock.objects.filter(
+                        shop=shop, inventory_item=product, variant=variant
+                    ).first()
+                    v_qty = int(v_stock_row.quantity) if v_stock_row else variant.quantity_in_stock
+                    reorder = v_stock_row.reorder_point if v_stock_row else 5
                 else:
+                    v_stock_row = None
                     v_qty = variant.quantity_in_stock
-
-                reorder = getattr(ShopStock.objects.filter(
-                    shop=shop, inventory_item=product, variant=variant
-                ).first(), 'reorder_point', 5) if shop else 5
+                    reorder = 5
 
                 attrs = []
                 for attr_val in variant.attribute_values.all():

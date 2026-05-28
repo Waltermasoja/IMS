@@ -89,6 +89,14 @@ class SiteSettings(models.Model):
                                          help_text="Decimal places for prices")
     tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0,
                                    help_text="Default tax/VAT rate (%)")
+    vat_enabled = models.BooleanField(
+        default=False,
+        help_text=(
+            "Master VAT switch. When OFF: tickets post Cr Revenue full incl-amount, "
+            "VAT lines and Output VAT Payable (2400) are bypassed. Flip ON only after "
+            "ZIMRA fiscalisation is in place."
+        ),
+    )
     financial_year_start = models.IntegerField(choices=FINANCIAL_YEAR_CHOICES, default=1,
                                                help_text="Month financial year begins")
 
@@ -728,9 +736,12 @@ class ShopStock(models.Model):
 
     @classmethod
     def get_or_create_for(cls, shop, inventory_item, variant=None):
+        # Seed from legacy field on first creation so the POS sees real stock
+        # before a formal per-shop migration has been run.
+        default_qty = variant.quantity_in_stock if variant else inventory_item.quantity_in_Stock
         row, _ = cls.objects.get_or_create(
             shop=shop, inventory_item=inventory_item, variant=variant,
-            defaults={'quantity': 0},
+            defaults={'quantity': default_qty},
         )
         return row
 
@@ -2118,4 +2129,53 @@ class StockingTrip(models.Model):
             'qty_sold': total_qty_sold,
             'sell_through_pct': sell_through,
         }
+
+
+class HistoricalRecord(models.Model):
+    """Read-only archive for pre-cutoff Excel rows that are not loaded into live tables.
+
+    Populated by the ExoticBlossom (and future) Excel importer when a row's date is
+    before the configured cutoff. Stores the source spreadsheet location plus the raw
+    parsed row as JSON so the operator can audit historical data without polluting
+    the GL, AR, layby, or stock tables.
+
+    NOT linked to any live records (Sales, ARInvoice, LaybyPlan, etc.) by FK — purely
+    informational. A simple list view at /history/ can render these grouped by sheet.
+    """
+
+    sheet_name = models.CharField(
+        max_length=100, db_index=True,
+        help_text="Source Excel sheet name (e.g. 'daily sales', 'credit clients').",
+    )
+    row_index = models.IntegerField(
+        help_text="1-based row number in the source sheet (matches Excel's row number).",
+    )
+    row_data = models.JSONField(
+        default=dict,
+        help_text="Raw parsed row as a dict of {column_name: cell_value}.",
+    )
+    record_date = models.DateField(
+        null=True, blank=True, db_index=True,
+        help_text="Best-effort date extracted from the row, for sorting/filtering.",
+    )
+    shop = models.ForeignKey(
+        'Shop', on_delete=models.PROTECT, related_name='historical_records',
+        null=True, blank=True,
+        help_text="Shop the row belongs to. NULL for corporate/multi-shop rows.",
+    )
+    source_workbook = models.CharField(
+        max_length=200, blank=True,
+        help_text="Source workbook filename for traceability.",
+    )
+    imported_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-record_date', 'sheet_name', 'row_index']
+        indexes = [
+            models.Index(fields=['sheet_name', 'record_date']),
+        ]
+
+    def __str__(self):
+        date_str = self.record_date.isoformat() if self.record_date else 'no-date'
+        return f'[{self.sheet_name} R{self.row_index}] {date_str}'
 

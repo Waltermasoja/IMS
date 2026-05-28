@@ -43,6 +43,7 @@ class Command(BaseCommand):
             {'code': '6200', 'name': 'Wages Expense', 'type': 'EXP'},
             {'code': '6300', 'name': 'Freight Expense', 'type': 'EXP'},
             {'code': '6400', 'name': 'Marketing Expense', 'type': 'EXP'},
+            {'code': '6500', 'name': 'Bad Debt Expense', 'type': 'EXP'},
             {'code': '6900', 'name': 'Other Expenses', 'type': 'EXP'},
         ]
 

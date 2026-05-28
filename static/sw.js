@@ -2,7 +2,7 @@
 // Scope: install & serve static assets offline; dynamic pages always go to network.
 // Sync of offline POS sales is deferred (internet assumed reliable per customer brief).
 
-const CACHE_NAME = 'ims-pro-static-v1';
+const CACHE_NAME = 'ims-pro-static-v2';
 const STATIC_ASSETS = [
   '/static/css/output.css',
   '/static/js/alpine.min.js',

@@ -3,57 +3,110 @@
 {% block title %}Point of Sale{% if current_shop %} — {{ current_shop.name }}{% endif %} - IMS Pro{% endblock %}
 
 {% block content %}
+<style>
+  .modern-select {
+    -webkit-appearance: none;
+    appearance: none;
+    background-color: #ffffff !important;
+    background-image: none;
+    padding-right: 2.75rem;
+  }
+  .modern-input {
+    -webkit-appearance: none;
+    appearance: none;
+    background-color: #ffffff !important;
+  }
+</style>
 <div x-data="posInterface()" x-init="init()">
   <form id="csrf-form" style="display:none">{% csrf_token %}</form>
 
   <!-- ─── Header ─────────────────────────────────────────────────────────── -->
-  <div class="bg-white rounded-2xl shadow-sm p-4 mb-4">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <h1 class="text-2xl font-bold text-gray-900">Point of Sale</h1>
-        <div class="flex items-center gap-2 mt-1">
-          <span class="text-xs text-gray-500">Shop:</span>
-          <div class="relative" x-data="{ open: false }">
-            <button @click="open = !open"
-                    class="flex items-center gap-1 px-2.5 py-1 bg-green-100 text-green-800 text-sm font-semibold rounded-full hover:bg-green-200 transition-colors">
-              <i class="fas fa-store text-xs"></i>
-              <span x-text="currentShopName"></span>
-              <i class="fas fa-chevron-down text-xs ml-1"></i>
-            </button>
-            <div x-show="open" @click.outside="open = false"
-                 class="absolute left-0 top-full mt-1 w-48 bg-white shadow-xl rounded-xl border border-gray-100 z-20 py-1"
-                 style="display:none">
-              {% for shop in shops %}
-              <button @click="switchShop({{ shop.pk }}, '{{ shop.name|escapejs }}'); open = false"
-                      class="w-full text-left px-4 py-2 text-sm hover:bg-green-50 {% if shop == current_shop %}font-semibold text-green-700{% else %}text-gray-700{% endif %}">
-                {{ shop.name }}
-              </button>
-              {% endfor %}
+  <div class="bg-white rounded-2xl shadow-sm px-4 py-3 mb-4 relative z-30">
+    <div class="flex items-center gap-3">
+
+      <!-- Left: title + shop context -->
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2">
+          <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0"></span>
+          <h1 class="text-base font-bold text-gray-900 truncate">Point of Sale</h1>
+        </div>
+        <p class="text-xs text-gray-400 mt-0.5 truncate">
+          <span class="font-medium text-gray-600" x-text="currentShopName || 'No shop selected'"></span>
+        </p>
+      </div>
+
+      <!-- Centre: shop switcher -->
+      <div class="relative flex-shrink-0" x-data="{ open: false }">
+        <button @click="open = !open"
+                class="inline-flex items-center gap-2 px-3 py-2 bg-green-50 border border-green-100 rounded-xl text-sm font-semibold text-green-800 hover:bg-green-100 transition-colors">
+          <i class="fas fa-store text-xs text-green-600"></i>
+          <span class="max-w-[120px] truncate hidden sm:inline" x-text="currentShopName || 'Select'"></span>
+          <i class="fas fa-chevron-down text-[10px] text-green-600 transition-transform duration-200"
+             :class="open ? 'rotate-180' : ''"></i>
+        </button>
+        <div x-show="open" @click.outside="open = false"
+             x-transition
+             class="absolute right-0 top-full mt-2 w-64 bg-white shadow-2xl rounded-2xl border border-gray-100 z-[200] p-1.5"
+             style="display:none">
+          <p class="px-3 pt-2 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Switch shop</p>
+          {% for shop in shops %}
+          <button @click="switchShop({{ shop.pk }}, '{{ shop.name|escapejs }}'); open = false"
+                  class="w-full text-left px-3 py-2.5 rounded-xl flex items-center justify-between gap-3 transition-colors {% if shop == current_shop %}bg-green-50 text-green-700{% else %}hover:bg-gray-50 text-gray-700{% endif %}">
+            <span class="min-w-0">
+              <span class="block text-sm font-semibold truncate">{{ shop.name }}</span>
+              <span class="block text-xs mt-0.5 {% if shop == current_shop %}text-green-600{% else %}text-gray-400{% endif %}">
+                {% if shop == current_shop %}Active{% else %}Switch here{% endif %}
+              </span>
+            </span>
+            {% if shop == current_shop %}
+            <span class="flex-shrink-0 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
+              <i class="fas fa-check text-white" style="font-size:8px"></i>
+            </span>
+            {% endif %}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Right: cash-up + user avatar -->
+      {% if user.profile.role == 'admin' or user.profile.role == 'manager' %}
+      <a x-show="currentShopId"
+         :href="'/inventory/cashup/' + currentShopId + '/'"
+         class="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 bg-amber-50 border border-amber-100 text-amber-700 text-xs font-semibold rounded-xl hover:bg-amber-100 transition-colors whitespace-nowrap">
+        <i class="fas fa-calculator text-xs"></i>
+        <span class="hidden sm:inline">Cash-Up</span>
+      </a>
+      {% endif %}
+
+      <div class="relative flex-shrink-0" x-data="{ open: false }">
+        <button @click="open = !open"
+                class="w-9 h-9 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-sm hover:shadow-md transition-shadow">
+          <span class="text-white font-bold text-sm">{{ user.username|slice:":1"|upper }}</span>
+        </button>
+        <div x-show="open" @click.outside="open = false"
+             x-transition
+             class="absolute right-0 top-full mt-2 w-52 bg-white shadow-2xl rounded-2xl border border-gray-100 z-[200] p-3"
+             style="display:none">
+          <div class="flex items-center gap-3 mb-2 pb-2 border-b border-gray-100">
+            <div class="w-9 h-9 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0">
+              <span class="text-white font-bold text-sm">{{ user.username|slice:":1"|upper }}</span>
+            </div>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-gray-900 truncate">{{ user.get_full_name|default:user.username }}</p>
+              <p class="text-xs text-gray-500">{{ user.profile.get_role_display }}</p>
             </div>
           </div>
+          <a href="{% url 'logout' %}" class="flex items-center gap-2 px-2 py-1.5 text-sm text-gray-600 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors">
+            <i class="fas fa-sign-out-alt text-xs"></i> Sign out
+          </a>
         </div>
       </div>
-      <div class="flex items-center gap-3">
-        {% if user.profile.role == 'admin' or user.profile.role == 'manager' %}
-        <a x-show="currentShopId"
-           :href="'/inventory/cashup/' + currentShopId + '/'"
-           class="flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded-lg hover:bg-amber-200 transition-colors whitespace-nowrap">
-          <i class="fas fa-calculator"></i> Cash-Up
-        </a>
-        {% endif %}
-        <div class="text-right">
-          <p class="text-sm font-semibold text-gray-900">{{ user.get_full_name|default:user.username }}</p>
-          <p class="text-xs text-gray-500">{{ user.profile.get_role_display }}</p>
-        </div>
-        <div class="w-9 h-9 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center flex-shrink-0">
-          <span class="text-white font-bold text-sm">{{ user.username|slice:":1"|upper }}</span>
-        </div>
-      </div>
+
     </div>
   </div>
 
   <!-- ─── Main grid ──────────────────────────────────────────────────────── -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pb-28 md:pb-0">
 
     <!-- LEFT: Product Search -->
     <div class="bg-white rounded-2xl shadow-sm p-5">
@@ -77,7 +130,7 @@
         </div>
       </div>
 
-      <div x-show="searchResults.length > 0" class="space-y-2 max-h-96 overflow-y-auto">
+      <div x-show="searchResults.length > 0" class="space-y-2">
         <template x-for="(product, idx) in searchResults" :key="product.id">
           <div @click="handleProductClick(product)"
                :class="focusIdx === idx ? 'ring-2 ring-green-400 bg-green-50' : ''"
@@ -102,6 +155,9 @@
                       <i class="fas fa-layer-group mr-1"></i><span x-text="product.variant_count + ' variants'"></span>
                     </span>
                   </template>
+                  <template x-if="product.is_vat_exempt">
+                    <span class="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-xs rounded font-medium whitespace-nowrap">ZERO-RATED</span>
+                  </template>
                 </div>
                 <p class="text-xs text-blue-600 font-mono" x-text="product.product_code"></p>
                 <p class="text-xs mt-0.5">
@@ -123,8 +179,8 @@
       </div>
     </div>
 
-    <!-- RIGHT: Cart & Checkout -->
-    <div class="bg-white rounded-2xl shadow-sm p-5 flex flex-col gap-3">
+    <!-- RIGHT: Cart & Checkout (tablet+ — mobile uses bottom-sheet below) -->
+    <div class="hidden md:flex bg-white rounded-2xl shadow-sm p-5 flex-col gap-3">
       <h2 class="text-base font-semibold text-gray-900">
         <i class="fas fa-shopping-cart text-green-500 mr-2"></i>Cart
         <span x-show="cart.length > 0"
@@ -133,9 +189,9 @@
       </h2>
 
       <!-- Cart items -->
-      <div class="space-y-2 max-h-64 overflow-y-auto flex-shrink-0">
+      <div class="space-y-2">
         <template x-for="(item, index) in cart" :key="item.cart_key">
-          <div class="p-3 bg-gray-50 rounded-xl">
+          <div class="p-3 bg-white border border-gray-200 rounded-xl shadow-sm">
             <div class="flex justify-between items-start">
               <div class="flex-1 min-w-0">
                 <p class="font-medium text-gray-900 text-sm truncate" x-text="item.name"></p>
@@ -155,17 +211,17 @@
                   </div>
                 </template>
               </div>
-              <button @click="removeFromCart(index)" class="text-red-400 hover:text-red-600 ml-2 flex-shrink-0">
-                <i class="fas fa-trash text-xs"></i>
+              <button @click="removeFromCart(index)" class="text-red-400 hover:text-red-600 ml-2 flex-shrink-0 p-2 -m-2" aria-label="Remove item">
+                <i class="fas fa-trash text-sm"></i>
               </button>
             </div>
             <div class="flex items-center justify-between mt-2">
               <div class="flex items-center space-x-2">
                 <button @click="updateQuantity(index, item.quantity - 1)"
-                        class="w-7 h-7 bg-gray-200 rounded-full hover:bg-gray-300 text-xs font-bold flex items-center justify-center">−</button>
-                <span class="w-8 text-center text-sm font-semibold" x-text="item.quantity"></span>
+                        class="w-10 h-10 bg-gray-200 rounded-full hover:bg-gray-300 text-base font-bold flex items-center justify-center" aria-label="Decrease quantity">−</button>
+                <span class="w-10 text-center text-base font-semibold" x-text="item.quantity"></span>
                 <button @click="updateQuantity(index, item.quantity + 1)"
-                        class="w-7 h-7 bg-gray-200 rounded-full hover:bg-gray-300 text-xs font-bold flex items-center justify-center">+</button>
+                        class="w-10 h-10 bg-gray-200 rounded-full hover:bg-gray-300 text-base font-bold flex items-center justify-center" aria-label="Increase quantity">+</button>
               </div>
               <p class="font-bold text-green-600 text-sm"
                  x-text="currencySymbol + (item.quantity * item.selling_price).toFixed(2)"></p>
@@ -187,7 +243,7 @@
             <div>
               <label class="block text-xs font-medium text-gray-600 mb-1">Sale Terms</label>
               <select x-model="terms" @change="onTermsChange()"
-                      class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none">
+                      class="modern-select shadow-sm w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none">
                 <option value="IMMEDIATE">Paid Now</option>
                 <option value="CREDIT">On Account</option>
                 <option value="LAYBY">Layby</option>
@@ -196,7 +252,7 @@
             <div>
               <label class="block text-xs font-medium text-gray-600 mb-1">Tender</label>
               <select x-model="tenderType"
-                      class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none">
+                      class="modern-select shadow-sm w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none">
                 <option value="CASH">Cash</option>
                 <option value="ECOCASH">EcoCash</option>
                 <option value="BANK_TRANSFER">Bank Transfer</option>
@@ -210,7 +266,7 @@
             <label class="block text-xs font-medium text-gray-600 mb-1"
                    x-text="tenderType === 'ECOCASH' ? 'EcoCash Transaction ID' : 'Bank Transfer Reference'"></label>
             <input type="text" x-model="tenderReference" placeholder="e.g. ECA123456 / REF00789"
-                   class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none font-mono">
+                   class="modern-input shadow-sm w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none font-mono">
           </div>
 
           <!-- Customer -->
@@ -222,14 +278,14 @@
             </label>
             <div class="flex gap-2">
               <select x-model="customerId" id="customer_select"
-                      class="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none">
+                      class="modern-select shadow-sm flex-1 px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none">
                 <option value="">— Walk-in / Select Customer —</option>
                 {% for c in customers %}
                 <option value="{{ c.id }}">{{ c.name }} ({{ c.phone }})</option>
                 {% endfor %}
               </select>
               <button type="button" @click.stop="openCustomerModal = true"
-                      class="px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 whitespace-nowrap flex-shrink-0">
+                      class="px-3 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 whitespace-nowrap flex-shrink-0">
                 + New
               </button>
             </div>
@@ -239,22 +295,23 @@
           <div x-show="terms === 'CREDIT'">
             <label class="block text-xs font-medium text-gray-600 mb-1">Due Date</label>
             <input type="date" x-model="dueDate"
-                   class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none">
+                   class="modern-input shadow-sm w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none">
           </div>
 
           <!-- Initial deposit (LAYBY) -->
           <div x-show="terms === 'LAYBY'">
             <label class="block text-xs font-medium text-gray-600 mb-1">Initial Deposit (<span x-text="currencySymbol"></span>)</label>
             <input type="number" min="0" step="0.01" x-model.number="initialDeposit" placeholder="0.00"
-                   class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none">
+                   class="modern-input shadow-sm w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none">
           </div>
 
           <!-- Discount -->
           <div>
             <label class="block text-xs font-medium text-gray-600 mb-1">Discount %</label>
             <input type="number" x-model.number="discountPercent" @input="calculateTotals()"
-                   min="0" max="{{ max_discount }}" step="0.5"
-                   class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:outline-none">
+                   min="0" max="{{ max_discount }}" step="0.5" inputmode="decimal"
+                   class="modern-input shadow-sm w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none">
+            <p class="text-xs text-gray-400 mt-0.5">Max {{ max_discount }}%</p>
           </div>
 
           <!-- Totals -->
@@ -304,6 +361,294 @@
       </template>
     </div>
   </div><!-- /grid -->
+
+  <!-- ─── Mobile: collapsed cart bar (cart has items, sheet closed) ──────── -->
+  <button x-show="cart.length > 0 && !cartSheetOpen"
+          x-transition:enter="transition ease-out duration-200"
+          x-transition:enter-start="translate-y-full"
+          x-transition:enter-end="translate-y-0"
+          @click="cartSheetOpen = true"
+          class="md:hidden fixed inset-x-0 bottom-0 z-40 w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-t-2xl overflow-hidden px-4 py-3 flex items-center justify-between gap-3"
+          style="display:none; border-top-left-radius: 1rem; border-top-right-radius: 1rem; box-shadow: 0 -8px 24px -6px rgba(16, 185, 129, 0.35), 0 -2px 8px -2px rgba(0,0,0,0.08);"
+          aria-label="Open cart">
+    <div class="flex items-center gap-3 min-w-0">
+      <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-shopping-cart"></i>
+      </div>
+      <div class="text-left min-w-0">
+        <p class="text-xs opacity-90" x-text="cart.length + ' item' + (cart.length === 1 ? '' : 's')"></p>
+        <p class="text-lg font-bold leading-tight" x-text="currencySymbol + total.toFixed(2)"></p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 flex-shrink-0 font-semibold text-sm">
+      <span>Review &amp; Pay</span>
+      <i class="fas fa-chevron-up"></i>
+    </div>
+  </button>
+
+  <!-- ─── Mobile: expanded cart sheet ────────────────────────────────────── -->
+  <div x-show="cartSheetOpen"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100"
+       x-transition:leave-end="opacity-0"
+       class="md:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+       @click.self="cartSheetOpen = false"
+       @keydown.escape.window="cartSheetOpen = false"
+       style="display:none">
+    <div x-show="cartSheetOpen"
+         x-transition:enter="transition ease-out duration-250"
+         x-transition:enter-start="translate-y-full"
+         x-transition:enter-end="translate-y-0"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="translate-y-0"
+         x-transition:leave-end="translate-y-full"
+         class="fixed inset-x-0 bottom-0 left-0 right-0 w-full max-h-[92vh] bg-white rounded-t-3xl overflow-hidden flex flex-col"
+         style="border-top-left-radius: 1.5rem; border-top-right-radius: 1.5rem; overflow: hidden; box-shadow: 0 -12px 40px -8px rgba(0,0,0,0.25), 0 -2px 12px -2px rgba(0,0,0,0.08);">
+      <!-- Drag handle -->
+      <div class="flex justify-center pt-2.5 pb-1">
+        <div class="w-10 h-1.5 bg-gray-300 rounded-full"></div>
+      </div>
+      <!-- Header -->
+      <div class="flex items-center justify-between px-5 pb-3 border-b border-gray-100">
+        <div class="flex items-center gap-2">
+          <i class="fas fa-shopping-cart text-green-500"></i>
+          <h2 class="text-base font-semibold text-gray-900">Cart</h2>
+          <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full"
+                x-text="cart.length + ' item' + (cart.length === 1 ? '' : 's')"></span>
+        </div>
+        <button @click="cartSheetOpen = false"
+                class="p-2 -m-2 text-gray-500 hover:text-gray-800 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                aria-label="Close cart">
+          <i class="fas fa-times text-lg"></i>
+        </button>
+      </div>
+
+      <!-- Scrollable body -->
+      <div class="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+        <!-- Cart items -->
+        <div class="space-y-2">
+          <template x-for="(item, index) in cart" :key="'sheet-' + item.cart_key">
+            <div class="p-3 bg-gray-50 rounded-xl">
+              <div class="flex justify-between items-start">
+                <div class="flex-1 min-w-0">
+                  <p class="font-medium text-gray-900 text-sm truncate" x-text="item.name"></p>
+                  <p class="text-xs font-mono text-gray-400" x-text="item.variant_id ? item.variant_sku : item.product_code"></p>
+                  <template x-if="item.variant_attributes && item.variant_attributes.length">
+                    <div class="flex flex-wrap gap-1 mt-1">
+                      <template x-for="attr in item.variant_attributes" :key="'sheet-attr-' + attr.type + attr.value">
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs"
+                              :class="attr.color_code ? 'bg-gray-100 text-gray-600' : 'bg-purple-100 text-purple-600'">
+                          <template x-if="attr.color_code">
+                            <span class="w-2 h-2 rounded-full mr-1 border border-gray-300"
+                                  :style="'background-color:' + attr.color_code"></span>
+                          </template>
+                          <span x-text="attr.value"></span>
+                        </span>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+                <button @click="removeFromCart(index)"
+                        class="text-red-400 hover:text-red-600 ml-2 flex-shrink-0 p-2 -m-2 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        aria-label="Remove item">
+                  <i class="fas fa-trash text-sm"></i>
+                </button>
+              </div>
+              <div class="flex items-center justify-between mt-2">
+                <div class="flex items-center space-x-2">
+                  <button @click="updateQuantity(index, item.quantity - 1)"
+                          class="w-11 h-11 bg-gray-200 rounded-full hover:bg-gray-300 text-base font-bold flex items-center justify-center"
+                          aria-label="Decrease quantity">−</button>
+                  <span class="w-10 text-center text-base font-semibold" x-text="item.quantity"></span>
+                  <button @click="updateQuantity(index, item.quantity + 1)"
+                          class="w-11 h-11 bg-gray-200 rounded-full hover:bg-gray-300 text-base font-bold flex items-center justify-center"
+                          aria-label="Increase quantity">+</button>
+                </div>
+                <p class="font-bold text-green-600 text-sm"
+                   x-text="currencySymbol + (item.quantity * item.selling_price).toFixed(2)"></p>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Sale options -->
+        <div class="space-y-3 border-t border-gray-100 pt-3">
+
+          <!-- Terms — inline pill selector, no dropdown needed -->
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-2">Sale Terms</label>
+            <div class="grid grid-cols-3 gap-1.5 p-1 bg-gray-100 rounded-xl">
+              <template x-for="option in termOptions" :key="'term-pill-' + option.value">
+                <button type="button"
+                        @click="selectTerms(option.value)"
+                        class="py-2 px-1 rounded-lg text-xs font-semibold transition-all"
+                        :class="terms === option.value
+                          ? 'bg-white text-green-700 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-700'">
+                  <span x-text="option.label"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <!-- Tender — inline pill selector -->
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-2">Tender</label>
+            <div class="grid grid-cols-4 gap-1.5 p-1 bg-gray-100 rounded-xl">
+              <template x-for="option in tenderOptions" :key="'tender-pill-' + option.value">
+                <button type="button"
+                        @click="selectTender(option.value)"
+                        class="py-2 px-1 rounded-lg text-xs font-semibold transition-all"
+                        :class="tenderType === option.value
+                          ? 'bg-white text-green-700 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-700'">
+                  <span x-text="option.label"></span>
+                </button>
+              </template>
+            </div>
+          </div>
+
+          <!-- Tender reference -->
+          <div x-show="tenderType === 'ECOCASH' || tenderType === 'BANK_TRANSFER'">
+            <label class="block text-xs font-medium text-gray-600 mb-1"
+                   x-text="tenderType === 'ECOCASH' ? 'EcoCash Transaction ID' : 'Bank Transfer Reference'"></label>
+            <input type="text" x-model="tenderReference" placeholder="e.g. ECA123456 / REF00789"
+                   class="modern-input shadow-sm w-full px-3 py-2 min-h-[44px] text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none font-mono">
+          </div>
+
+          <!-- Customer — type-to-search with suggestions -->
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">
+              Customer
+              <span x-show="terms !== 'IMMEDIATE'" class="text-red-500 ml-1">*required</span>
+              <span x-show="terms === 'IMMEDIATE'" class="text-gray-400 ml-1">(optional)</span>
+            </label>
+            <div class="flex gap-2">
+              <div class="relative flex-1" @click.outside="customerSuggestionsOpen = false">
+                <!-- Selected pill, shown when a customer is chosen -->
+                <template x-if="customerId">
+                  <div class="flex items-center gap-2 px-3 py-2 min-h-[44px] rounded-xl border border-green-200 bg-green-50">
+                    <span class="flex-1 text-sm font-semibold text-green-800 truncate" x-text="selectedCustomerOption().label"></span>
+                    <button type="button" @click="customerId = ''; customerSearch = ''; customerSuggestionsOpen = false"
+                            class="text-green-600 hover:text-red-500 flex-shrink-0 transition-colors">
+                      <i class="fas fa-times-circle text-sm"></i>
+                    </button>
+                  </div>
+                </template>
+                <!-- Search input, shown when no customer selected -->
+                <template x-if="!customerId">
+                  <div class="relative">
+                    <input type="text"
+                           x-model="customerSearch"
+                           @input="customerSuggestionsOpen = customerSearch.length > 0"
+                           @focus="customerSuggestionsOpen = customerSearch.length > 0"
+                           placeholder="Type to search customers…"
+                           autocomplete="off"
+                           class="modern-input w-full px-3 py-2 min-h-[44px] text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none">
+                    <span x-show="!customerSearch" class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
+                      <i class="fas fa-search"></i>
+                    </span>
+                  </div>
+                </template>
+                <!-- Suggestions list — opens upward -->
+                <div x-show="customerSuggestionsOpen && filteredCustomerOptions().length > 0"
+                     x-transition
+                     class="absolute left-0 right-0 bottom-full mb-2 rounded-2xl border border-gray-200 bg-white shadow-xl z-[300] overflow-hidden"
+                     style="display:none">
+                  <div class="max-h-48 overflow-y-auto p-1.5">
+                    <template x-for="option in filteredCustomerOptions()" :key="'csugg-' + option.value">
+                      <button type="button"
+                              @click="selectCustomer(option.value); customerSearch = option.label; customerSuggestionsOpen = false"
+                              class="w-full text-left px-3 py-2.5 rounded-xl hover:bg-green-50 transition-colors">
+                        <p class="text-sm font-medium text-gray-900 truncate" x-text="option.label"></p>
+                        <p class="text-xs text-gray-500 truncate" x-text="option.description"></p>
+                      </button>
+                    </template>
+                  </div>
+                </div>
+              </div>
+              <button type="button" @click.stop="openCustomerModal = true"
+                      class="px-3 min-h-[44px] bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 whitespace-nowrap flex-shrink-0">
+                + New
+              </button>
+            </div>
+          </div>
+
+          <!-- Due date (CREDIT) -->
+          <div x-show="terms === 'CREDIT'">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Due Date</label>
+            <input type="date" x-model="dueDate"
+                   class="modern-input shadow-sm w-full px-3 py-2 min-h-[44px] text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none">
+          </div>
+
+          <!-- Initial deposit (LAYBY) -->
+          <div x-show="terms === 'LAYBY'">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Initial Deposit (<span x-text="currencySymbol"></span>)</label>
+            <input type="number" min="0" step="0.01" x-model.number="initialDeposit" placeholder="0.00" inputmode="decimal"
+                   class="modern-input shadow-sm w-full px-3 py-2 min-h-[44px] text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none">
+          </div>
+
+          <!-- Discount -->
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Discount %</label>
+            <input type="number" x-model.number="discountPercent" @input="calculateTotals()"
+                   min="0" max="{{ max_discount }}" step="0.5" inputmode="decimal"
+                   class="modern-input shadow-sm w-full px-3 py-2 min-h-[44px] text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:outline-none">
+            <p class="text-xs text-gray-400 mt-0.5">Max {{ max_discount }}%</p>
+          </div>
+
+          <!-- Totals -->
+          <div class="border-t border-gray-100 pt-3 space-y-1 text-sm">
+            <div class="flex justify-between text-gray-600">
+              <span>Subtotal (excl VAT):</span>
+              <span x-text="currencySymbol + subtotalExcl.toFixed(2)"></span>
+            </div>
+            <div class="flex justify-between text-blue-700">
+              <span>VAT ({{ vat_rate }}%):</span>
+              <span x-text="currencySymbol + vatTotal.toFixed(2)"></span>
+            </div>
+            <div x-show="discountPercent > 0" class="flex justify-between text-red-600">
+              <span x-text="'Discount (' + discountPercent + '%):' "></span>
+              <span x-text="'−' + currencySymbol + discountAmount.toFixed(2)"></span>
+            </div>
+            <div class="flex justify-between font-bold text-base border-t border-gray-200 pt-2">
+              <span>Total:</span>
+              <span class="text-green-600" x-text="currencySymbol + total.toFixed(2)"></span>
+            </div>
+            <div x-show="terms === 'LAYBY' && initialDeposit > 0" class="flex justify-between text-indigo-700 text-xs">
+              <span>Deposit due now:</span>
+              <span x-text="currencySymbol + parseFloat(initialDeposit || 0).toFixed(2)"></span>
+            </div>
+          </div>
+
+          <!-- Error banner -->
+          <div x-show="errorMessage" class="p-3 bg-red-50 text-red-700 text-sm rounded-xl border border-red-200 flex items-start gap-2">
+            <i class="fas fa-exclamation-circle mt-0.5 flex-shrink-0"></i>
+            <span x-text="errorMessage"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sticky footer with primary CTA -->
+      <div class="border-t border-gray-100 px-5 py-3 bg-white">
+        <button @click="processCheckout()" :disabled="processing"
+                class="w-full min-h-[52px] py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-bold text-sm hover:from-green-600 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg transition-all">
+          <span x-show="!processing">
+            <i class="fas fa-check-circle mr-2"></i>
+            <span x-text="terms === 'LAYBY' ? 'Create Layby — ' : (terms === 'CREDIT' ? 'Record Credit Sale — ' : 'Complete Sale — ')"></span>
+            <span x-text="currencySymbol + total.toFixed(2)"></span>
+          </span>
+          <span x-show="processing" class="flex items-center justify-center gap-2">
+            <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            Processing…
+          </span>
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- ─── Variant Selector Modal ──────────────────────────────────────────── -->
   <div x-show="showVariantModal"
@@ -408,11 +753,11 @@
       </div>
       <div class="flex gap-2">
         <button @click="printReceipt()"
-                class="flex-1 py-2.5 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 text-sm font-medium transition-colors">
+                class="flex-1 min-h-[48px] py-2.5 bg-blue-100 text-blue-700 rounded-xl hover:bg-blue-200 text-sm font-medium transition-colors">
           <i class="fas fa-print mr-1"></i>Print
         </button>
         <button @click="newSale()"
-                class="flex-1 py-2.5 bg-green-100 text-green-700 rounded-xl hover:bg-green-200 text-sm font-medium transition-colors">
+                class="flex-1 min-h-[48px] py-2.5 bg-green-100 text-green-700 rounded-xl hover:bg-green-200 text-sm font-medium transition-colors">
           <i class="fas fa-plus mr-1"></i>New Sale
         </button>
       </div>
@@ -515,6 +860,28 @@ function posInterface() {
     showSuccessModal: false,
     lastTicket: null,
     errorMessage: '',
+    cartSheetOpen: false,
+    sheetDropdown: null,
+    customerSearch: '',
+    customerSuggestionsOpen: false,
+
+    termOptions: [
+      { value: 'IMMEDIATE', label: 'Paid now', description: 'Take payment and complete the sale' },
+      { value: 'CREDIT', label: 'On account', description: 'Record the sale against customer credit' },
+      { value: 'LAYBY', label: 'Layby', description: 'Take a deposit and reserve the items' },
+    ],
+    tenderOptions: [
+      { value: 'CASH', label: 'Cash', description: 'Customer pays in notes or coins' },
+      { value: 'ECOCASH', label: 'EcoCash', description: 'Use a mobile money reference' },
+      { value: 'BANK_TRANSFER', label: 'Bank transfer', description: 'Capture the transfer reference' },
+      { value: 'CARD', label: 'Card', description: 'Process with a debit or credit card' },
+    ],
+    customerOptions: [
+      { value: '', label: 'Walk-in customer', description: 'No customer selected' },
+      {% for c in customers %}
+      { value: '{{ c.id }}', label: '{{ c.name|escapejs }}', description: '{{ c.phone|default:"No phone number"|escapejs }}' },
+      {% endfor %}
+    ],
 
     newCustomer: { name: '', phone: '', email: '', credit_limit: 0, status: 'ACTIVE', opt_in_for_emails: false },
 
@@ -526,9 +893,55 @@ function posInterface() {
       this.currentShopId = shopId;
       this.currentShopName = shopName;
       this.cart = [];
+      this.cartSheetOpen = false;
+      this.closeSheetDropdowns();
       this.calculateTotals();
       this.searchResults = [];
       this.searchQuery = '';
+    },
+
+    toggleSheetDropdown(name) {
+      this.sheetDropdown = this.sheetDropdown === name ? null : name;
+    },
+
+    closeSheetDropdowns() {
+      this.sheetDropdown = null;
+    },
+
+    selectedTermOption() {
+      return this.termOptions.find(option => option.value === this.terms) || this.termOptions[0];
+    },
+
+    selectedTenderOption() {
+      return this.tenderOptions.find(option => option.value === this.tenderType) || this.tenderOptions[0];
+    },
+
+    selectedCustomerOption() {
+      return this.customerOptions.find(option => String(option.value) === String(this.customerId || '')) || this.customerOptions[0];
+    },
+
+    filteredCustomerOptions() {
+      const q = this.customerSearch.trim().toLowerCase();
+      if (!q) return this.customerOptions.slice(0, 8);
+      return this.customerOptions.filter(o =>
+        o.label.toLowerCase().includes(q) || o.description.toLowerCase().includes(q)
+      ).slice(0, 6);
+    },
+
+    selectTerms(value) {
+      this.terms = value;
+      this.onTermsChange();
+      this.closeSheetDropdowns();
+    },
+
+    selectTender(value) {
+      this.tenderType = value;
+      this.closeSheetDropdowns();
+    },
+
+    selectCustomer(value) {
+      this.customerId = String(value || '');
+      this.closeSheetDropdowns();
     },
 
     searchProducts() {
@@ -579,6 +992,7 @@ function posInterface() {
       }
       const cartKey = `${this.selectedProduct.id}-${variant.id}`;
       const existing = this.cart.findIndex(i => i.cart_key === cartKey);
+      const wasEmpty = this.cart.length === 0;
       if (existing >= 0) {
         this.updateQuantity(existing, this.cart[existing].quantity + 1);
       } else {
@@ -595,6 +1009,7 @@ function posInterface() {
           max_quantity: variant.quantity_in_stock,
         });
       }
+      if (wasEmpty) this.cartSheetOpen = true;
       this.calculateTotals();
       this.closeVariantModal();
       this.clearSearch();
@@ -603,6 +1018,7 @@ function posInterface() {
     addToCart(product) {
       const cartKey = String(product.id);
       const existing = this.cart.findIndex(i => i.cart_key === cartKey);
+      const wasEmpty = this.cart.length === 0;
       if (existing >= 0) {
         this.updateQuantity(existing, this.cart[existing].quantity + 1);
       } else {
@@ -619,6 +1035,7 @@ function posInterface() {
           max_quantity: product.quantity_in_stock,
         });
       }
+      if (wasEmpty) this.cartSheetOpen = true;
       this.calculateTotals();
       this.clearSearch();
     },
@@ -659,6 +1076,7 @@ function posInterface() {
 
     onTermsChange() {
       if (this.terms !== 'LAYBY') this.initialDeposit = 0;
+      this.closeSheetDropdowns();
     },
 
     processCheckout() {
@@ -707,10 +1125,14 @@ function posInterface() {
           if (data.success) {
             this.lastTicket = data;
             this.showSuccessModal = true;
+            this.cartSheetOpen = false;
+            this.closeSheetDropdowns();
             this.cart = [];
             this.discountPercent = 0;
             this.tenderReference = '';
             this.customerId = '';
+            this.customerSearch = '';
+            this.customerSuggestionsOpen = false;
             this.initialDeposit = 0;
             this.terms = 'IMMEDIATE';
             this.calculateTotals();
@@ -727,6 +1149,7 @@ function posInterface() {
     newSale() {
       this.showSuccessModal = false;
       this.lastTicket = null;
+      this.closeSheetDropdowns();
       this.clearSearch();
     },
 
@@ -758,7 +1181,15 @@ function posInterface() {
           opt.value = data.customer.id;
           opt.text = `${data.customer.name} (${data.customer.phone || ''})`;
           sel.add(opt);
+          this.customerOptions.push({
+            value: String(data.customer.id),
+            label: data.customer.name,
+            description: data.customer.phone || 'No phone number',
+          });
           this.customerId = String(data.customer.id);
+          this.customerSearch = data.customer.name;
+          this.customerSuggestionsOpen = false;
+          this.closeSheetDropdowns();
           this.openCustomerModal = false;
           this.newCustomer = { name: '', phone: '', email: '', credit_limit: 0, status: 'ACTIVE', opt_in_for_emails: false };
         })

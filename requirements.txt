@@ -35,3 +35,4 @@ urllib3==2.2.1
 whitenoise==6.8.2
 python-barcode==0.16.1
 weasyprint==62.3  # For PDF exports (D3)
+rapidfuzz==3.9.6  # For ExoticBlossom Excel import: daily-sales description matching

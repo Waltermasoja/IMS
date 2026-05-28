@@ -100,15 +100,15 @@
             <div class="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
                 <div class="flex items-center space-x-4">
                     <div class="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
-                        <i class="fas fa-box text-white"></i>
+                        <i class="fas fa-receipt text-white"></i>
                     </div>
                     <div>
-                        <p class="font-semibold text-gray-900">{{ sale.inventory_item.name }}</p>
-                        <p class="text-sm text-gray-500">Qty: {{ sale.quantity_sold }} • {{ sale.sale_date|date:"M d, Y" }}</p>
+                        <p class="font-semibold text-gray-900">{{ sale.receipt_number|default:"—" }}{% if sale.customer %} · {{ sale.customer.name }}{% endif %}</p>
+                        <p class="text-sm text-gray-500">{{ sale.lines.count }} item{{ sale.lines.count|pluralize }} • {{ sale.created_at|date:"M d, Y" }} • {{ sale.tender_type|default:"" }}</p>
                     </div>
                 </div>
                 <div class="text-right">
-                    <p class="font-bold text-green-600">${{ sale.total_amount|floatformat:2 }}</p>
+                    <p class="font-bold text-green-600">${{ sale.total_incl_vat|floatformat:2 }}</p>
                 </div>
             </div>
             {% empty %}

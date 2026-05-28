@@ -534,14 +534,13 @@ def accounting_dashboard(request):
     )['total'] or Decimal('0')
 
     # === INVENTORY VALUE ===
-    # Use physical inventory calculation (quantity * purchase_price)
-    # GL Account 1300 may not reflect accurate inventory value if receiving
-    # transactions haven't been posted to the GL
-    inventory_value = Inventory.objects.aggregate(
-        total=Sum(F('quantity_in_Stock') * F('purchase_price'))
+    # Use physical inventory calculation (quantity * purchase_price). Aggregate
+    # over ShopStock so variant items (which carry quantity on per-shop rows,
+    # not on Inventory.quantity_in_Stock) are counted correctly.
+    from inventory.models import ShopStock
+    inventory_value = ShopStock.objects.aggregate(
+        total=Sum(F('quantity') * F('inventory_item__purchase_price'))
     )['total'] or Decimal('0')
-
-        
 
     # === TOTAL ASSETS ===
     total_assets = cash_balance + ar_outstanding + inventory_value
@@ -561,11 +560,13 @@ def accounting_dashboard(request):
     month_start = datetime(now.year, now.month, 1)
     month_start = timezone.make_aware(month_start)
 
-    # This month's sales revenue
-    month_sales = Sales.objects.filter(
-        sale_date__gte=month_start,
-        posted_to_gl=True
-    ).aggregate(total=Sum('total_amount'))['total'] or Decimal('0')
+    # This month's sales revenue — use SalesTicket (the modern model the
+    # importer and new POS write to). Legacy Sales is empty after migration.
+    from inventory.models import SalesTicket
+    month_sales = SalesTicket.objects.filter(
+        created_at__gte=month_start,
+        posted_to_gl=True,
+    ).aggregate(total=Sum('total_incl_vat'))['total'] or Decimal('0')
 
     # This month's profit (simplified)
     try:
@@ -597,9 +598,25 @@ def accounting_dashboard(request):
     recent_cashbook = CashbookEntry.objects.all().order_by('-date', '-created_date')[:5]
     recent_ar_payments = ARPayment.objects.all().select_related('invoice__customer').order_by('-created_date')[:5]
 
-    # Quick stats
-    low_stock_count = Inventory.objects.filter(quantity_in_Stock__lte=10, quantity_in_Stock__gt=0).count()
-    out_of_stock_count = Inventory.objects.filter(quantity_in_Stock=0).count()
+    # Quick stats — aggregate stock per inventory item across ALL of its
+    # variants / shop rows so variant products aren't mis-flagged. The
+    # subquery sums ShopStock.quantity grouped by inventory_item; everything
+    # outside (no ShopStock rows) is treated as out-of-stock.
+    from inventory.models import ShopStock
+    stock_totals = dict(
+        ShopStock.objects
+        .values('inventory_item_id')
+        .annotate(t=Sum('quantity'))
+        .values_list('inventory_item_id', 't')
+    )
+    low_stock_count = 0
+    out_of_stock_count = 0
+    for inv_id in Inventory.objects.values_list('id', flat=True):
+        t = stock_totals.get(inv_id, 0) or 0
+        if t <= 0:
+            out_of_stock_count += 1
+        elif t <= 10:
+            low_stock_count += 1
 
     # === AP ALERTS ===
     today = timezone.now().date()

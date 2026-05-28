@@ -109,6 +109,15 @@ def post_ticket(ticket, user=None):
             )
             stock_row.quantity = max(0, stock_row.quantity - line.quantity)
             stock_row.save(update_fields=['quantity', 'last_updated'])
+
+            # Keep legacy field in sync so the stock sheet stays accurate.
+            if line.variant:
+                line.variant.quantity_in_stock = max(0, line.variant.quantity_in_stock - line.quantity)
+                line.variant.save(update_fields=['quantity_in_stock'])
+            else:
+                line.inventory_item.quantity_in_Stock = max(0, line.inventory_item.quantity_in_Stock - line.quantity)
+                line.inventory_item.save(update_fields=['quantity_in_Stock'])
+
             StockMovement.objects.create(
                 inventory_item=line.inventory_item,
                 movement_type='OUT',
