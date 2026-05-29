@@ -64,7 +64,10 @@ class RunContext:
     # ---------- Shared mutable collectors (phase-owned) ----------
     historical_counter: dict[str, int] = field(default_factory=dict)
     # qoh_meta key: (inventory_id, variant_id_or_None)
-    # value: {'Q': int, 'sold': int, 'fulfilled_layby': int, 'credit_lines': int}
+    # value: {'opening_qty_imported': int, 'sold': int, 'fulfilled_layby': int, 'credit_lines': int}
+    # NOTE: opening_qty_imported is the importer's BEST-EFFORT estimate of
+    # opening stock — NOT a verified physical count. The workbook column 'Q'
+    # is a per-row sequence number, not a quantity; do not confuse the two.
     qoh_meta: dict[tuple, dict[str, int]] = field(default_factory=dict)
     fuzzy_matcher: FuzzyMatcher | None = None
 
@@ -74,6 +77,11 @@ class RunContext:
     opening_ar_journal: list[dict] = field(default_factory=list)
     unmappable_expenses: list[dict] = field(default_factory=list)
     negative_qoh: list[dict] = field(default_factory=list)
+
+    # Plan A audit artefacts (Plan A demo polish)
+    stock_opening_audit: list[dict] = field(default_factory=list)
+    pricing_sanity: list[dict] = field(default_factory=list)
+    column_drift: list[dict] = field(default_factory=list)
 
     # ---------- Per-phase tally for the operator summary ----------
     counts: dict[str, int] = field(default_factory=dict)
@@ -87,6 +95,7 @@ class RunContext:
         key = (inventory_id, variant_id)
         slot = self.qoh_meta.get(key)
         if slot is None:
-            slot = {'Q': 0, 'sold': 0, 'fulfilled_layby': 0, 'credit_lines': 0}
+            slot = {'opening_qty_imported': 0, 'sold': 0,
+                    'fulfilled_layby': 0, 'credit_lines': 0}
             self.qoh_meta[key] = slot
         return slot

@@ -10,8 +10,14 @@ from collections import defaultdict
 from inventory.importers import LOG_PREFIX
 from inventory.importers.context import RunContext
 from inventory.importers.dry_run import ImportAborted
-from inventory.importers.excel_loader import load_all_product_sheets, load_stock_purchase
+from inventory.importers.excel_loader import (
+    load_all_product_sheets, load_stock_purchase,
+    validate_product_sheet_columns,
+)
 from inventory.importers.fuzzy import FuzzyMatcher
+from inventory.importers.stock_signals import (
+    derive_group_quantities, derive_pricing_sanity,
+)
 from inventory.models import (
     AttributeType, AttributeValue, Inventory, Inventory_category,
     ProductVariant, ShopStock,
@@ -141,9 +147,36 @@ def run(ctx: RunContext) -> None:
     ctx.bump('categories_seeded', len(category_lookup))
 
     # ── 3. Group rows by (label, description) ─────────────────────────────────
+    def _norm_size(s: str | None) -> str:
+        """Canonical size key — strip whitespace, upper-case so 'xl' / 'XL' / ' XL '
+        all collapse to one variant. Returned value is what we store as the
+        AttributeValue (so SKU generation produces deterministic, unique codes).
+        """
+        return (s or '').strip().upper()
+
+    # Normalise sizes IN-PLACE before grouping so the lot-once derivation in
+    # stock_signals can group by canonical size.
+    for row in all_rows:
+        row['size'] = _norm_size(row.get('size'))
+
     groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
     for row in all_rows:
         groups[(row['label'], row['description'])].append(row)
+
+    # ── 3b. Derive opening quantities per (label, description, size) using the
+    # tiered signal stack (stock_take_2026 → stock_take_2025 → lot_distributed
+    # → row_count) with a sanity cap on lot inference. The audit_rows list
+    # carries one entry per (label, desc, size) for stock_opening_audit.csv.
+    size_qty_map, stock_audit_rows = derive_group_quantities(groups)
+
+    # ── 3c. Pricing sanity probes (SALE vs Actual Price vs pur_price). Audit
+    # only — emitted to pricing_sanity.csv.
+    pricing_sanity_rows = derive_pricing_sanity(all_rows)
+    ctx.pricing_sanity.extend(pricing_sanity_rows)
+
+    # ── 3d. Column-drift validator — flags cells whose type doesn't match the
+    # expected schema (catches shifted columns / data-entry typos).
+    ctx.column_drift.extend(validate_product_sheet_columns(ctx.workbook_path))
 
     # ── 4. Iterate groups — one Inventory record per group ────────────────────
     # Counter keyed on the *truncated* prefix that ends up in product_code.
@@ -155,20 +188,8 @@ def run(ctx: RunContext) -> None:
     variants_created = 0
     shopstock_rows = 0
 
-    def _norm_size(s: str | None) -> str:
-        """Canonical size key — strip whitespace, upper-case so 'xl' / 'XL' / ' XL '
-        all collapse to one variant. Returned value is what we store as the
-        AttributeValue (so SKU generation produces deterministic, unique codes).
-        """
-        return (s or '').strip().upper()
-
     for (label, description), rows in groups.items():
-        # Normalise sizes IN-PLACE so all downstream logic (has_variants check,
-        # sized/unsized split, size_quantities aggregation) sees the canonical
-        # form. Mutating rows is safe here — they're freshly loaded per run.
-        for r in rows:
-            r['size'] = _norm_size(r.get('size'))
-
+        # (sizes are already normalised above)
         label_slug = _slugify(label) or 'item'
         desc_slug = _slugify(description) or 'product'
 
@@ -202,12 +223,15 @@ def run(ctx: RunContext) -> None:
         category_slug = _pick_first(rows, 'category')
         category = category_lookup.get(category_slug) if category_slug else None
 
-        # Inventory.quantity_in_Stock: sum of all Q for no-variant products;
-        # for variant products carry only the unsized-row stock on the parent.
+        # Inventory.quantity_in_Stock: sum of all derived qtys for no-variant
+        # products; for variant products carry only the unsized-row stock on
+        # the parent. Read from size_qty_map keyed on '' size for unsized.
         if not has_variants:
-            parent_q = sum(r['quantity'] for r in rows)
+            # No-variant product: all rows are unsized → one entry under ''
+            parent_q = size_qty_map.get((label, description, ''), 0)
         else:
-            parent_q = sum(r['quantity'] for r in unsized_rows)
+            # Variant product: unsized rows (if any) carry parent stock
+            parent_q = size_qty_map.get((label, description, ''), 0)
 
         # ── Create Inventory record ───────────────────────────────────────────
         inv = Inventory.objects.create(
@@ -238,7 +262,7 @@ def run(ctx: RunContext) -> None:
             ss.quantity = parent_q
             ss.save(update_fields=['quantity', 'last_updated'])
             shopstock_rows += 1
-            ctx.qoh_get(inv.id, None)['Q'] += parent_q
+            ctx.qoh_get(inv.id, None)['opening_qty_imported'] += parent_q
 
         # ── Fuzzy corpus entry for no-variant products ────────────────────────
         if not has_variants:
@@ -250,9 +274,13 @@ def run(ctx: RunContext) -> None:
             )
 
         # ── Variants — one per distinct size value ────────────────────────────
-        size_quantities: dict[str, int] = defaultdict(int)
+        # Use the derived size_qty_map (lot-aware) rather than raw row counts.
+        size_quantities: dict[str, int] = {}
         for r in sized_rows:
-            size_quantities[r['size']] += r['quantity']
+            sz = r['size']
+            if sz in size_quantities:
+                continue  # already accounted for via the map
+            size_quantities[sz] = size_qty_map.get((label, description, sz), 0)
 
         for size_str, qty in size_quantities.items():
             # Ensure the AttributeValue exists (seed_attributes pre-seeds
@@ -283,7 +311,7 @@ def run(ctx: RunContext) -> None:
             ss.save(update_fields=['quantity', 'last_updated'])
             shopstock_rows += 1
 
-            ctx.qoh_get(inv.id, var.id)['Q'] += qty
+            ctx.qoh_get(inv.id, var.id)['opening_qty_imported'] += qty
 
             # Register multiple corpus strings so fuzzy match tolerates partial
             # descriptions from daily-sales rows.
@@ -295,10 +323,31 @@ def run(ctx: RunContext) -> None:
                 inv.name,
             )
 
-    # ── 5. Flush phase counters into the shared tally ─────────────────────────
+    # ── 5. Backfill product_code into stock-opening audit rows (we couldn't
+    # do this in derive_group_quantities since codes are assigned per-group
+    # during this loop). Build a lookup from (label, description) → code.
+    code_by_group: dict[tuple[str, str], str] = {
+        (inv.label or '', inv.description): inv.product_code
+        for inv in Inventory.objects.filter(
+            label__in=[g[0] for g in groups.keys() if g[0]],
+        ) | Inventory.objects.filter(
+            label__isnull=True,
+            description__in=[g[1] for g in groups.keys() if not g[0]],
+        )
+    }
+    for audit_row in stock_audit_rows:
+        key = (audit_row['label'] or '', audit_row['description'])
+        audit_row['product_code'] = code_by_group.get(key, '')
+
+    ctx.stock_opening_audit.extend(stock_audit_rows)
+
+    # ── 6. Flush phase counters into the shared tally ─────────────────────────
     ctx.bump('products_created', products_created)
     ctx.bump('variants_created', variants_created)
     ctx.bump('shopstock_rows', shopstock_rows)
+    # Stock-confidence tier histogram surfaced in import_summary.txt
+    for ar in stock_audit_rows:
+        ctx.bump(f'stock_tier_{ar["tier"]}', 1)
 
     # ── 6. Post-condition: every ShopStock row for this shop must be >= 0 ─────
     neg_qs = ShopStock.objects.filter(shop=ctx.shop, quantity__lt=0)

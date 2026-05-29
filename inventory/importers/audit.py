@@ -66,7 +66,40 @@ def write_negative_qoh(out: Path, rows: list[dict]) -> int:
     return _write_csv(
         out / 'negative_qoh.csv',
         ['product_code', 'name', 'variant_size', 'shop_code',
-         'Q', 'sold', 'fulfilled_layby', 'credit_lines', 'qoh_calc'],
+         'opening_qty_imported', 'sold', 'fulfilled_layby',
+         'credit_lines', 'qoh_calc'],
+        rows,
+    )
+
+
+def write_stock_opening_audit(out: Path, rows: list[dict]) -> int:
+    """Per-(product, variant) opening-stock tier + evidence (Plan A audit)."""
+    return _write_csv(
+        out / 'stock_opening_audit.csv',
+        ['product_code', 'label', 'description', 'size',
+         'tier', 'confidence', 'opening_qty_imported',
+         'pur_price', 'total_pur_price', 'lot_units_raw',
+         'rows_in_lot', 'rows_for_this_size', 'lot_rejected_reason'],
+        rows,
+    )
+
+
+def write_pricing_sanity(out: Path, rows: list[dict]) -> int:
+    """Pricing oddities (LOSS / DEEP_DISCOUNT / MISSING_SELL) — audit only."""
+    return _write_csv(
+        out / 'pricing_sanity.csv',
+        ['flag', 'sheet', 'row', 'label', 'description',
+         'pur_price', 'selling_price', 'sale_realized', 'detail'],
+        rows,
+    )
+
+
+def write_column_drift(out: Path, rows: list[dict]) -> int:
+    """Rows whose cell types don't match the expected column schema."""
+    return _write_csv(
+        out / 'column_drift.csv',
+        ['sheet', 'row', 'column_index', 'column_name',
+         'expected_type', 'actual_value', 'actual_type'],
         rows,
     )
 
@@ -131,6 +164,31 @@ def write_summary_text(out: Path, summary: dict) -> None:
     for k, v in summary.get('counts', {}).items():
         lines.append(f'  {k:30s} {v}')
     lines.append('')
+
+    # Stock confidence block — Plan A polish.
+    sc = summary.get('stock_confidence') or {}
+    if sc:
+        lines.append('=== ShopStock confidence ===')
+        lines.append('ShopStock confidence: LOW')
+        lines.append('  Reason: workbook has no units-sold signal to validate against.')
+        lines.append('  Numbers are best-effort estimates from tiered signals (see')
+        lines.append('  stock_opening_audit.csv). REQUIRED before go-live: a physical')
+        lines.append('  stocktake via the Plan B `apply_stocktake` workflow.')
+        lines.append('')
+        lines.append(f'  Total (product, variant) rows estimated: {sc.get("total_variants_estimated", 0)}')
+        lines.append('')
+        lines.append('  Tier histogram (which signal was used per row):')
+        for tier, n in sorted(sc.get('tiers', {}).items()):
+            lines.append(f'    {tier:20s} {n}')
+        lines.append('')
+        lines.append('  Confidence histogram:')
+        for conf, n in sorted(sc.get('confidences', {}).items()):
+            lines.append(f'    {conf:20s} {n}')
+        lines.append('')
+        lines.append(f'  Pricing-sanity flags:  {sc.get("pricing_flags", 0)}  (see pricing_sanity.csv)')
+        lines.append(f'  Column-drift rows:     {sc.get("column_drift_rows", 0)}  (see column_drift.csv)')
+        lines.append('')
+
     if summary.get('errors'):
         lines.append('Errors:')
         for e in summary['errors']:
@@ -207,26 +265,32 @@ def write_ar_aging(out: Path, as_of) -> int:
 
 
 def write_shopstock(out: Path, qoh_meta: dict) -> int:
-    """Cross-check ShopStock against original Q minus accumulated drains.
+    """Cross-check ShopStock against `opening_qty_imported` minus accumulated drains.
 
-    `qoh_meta` is a dict keyed by (inventory_id, variant_id_or_None) with values
-    `{Q, sold, fulfilled_layby, credit_lines}` accumulated during the run.
+    `qoh_meta` is keyed by (inventory_id, variant_id_or_None) with values
+    `{opening_qty_imported, sold, fulfilled_layby, credit_lines}`.
+
+    NOTE: this is a CONSISTENCY check between two importer-derived numbers, NOT
+    a validation of physical truth. A zero delta means the importer's drains
+    matched the importer's opening estimate — it does NOT mean ShopStock is
+    physically correct. See stock_opening_audit.csv for confidence per product.
     """
     rows = []
     for stock in ShopStock.objects.select_related('shop', 'inventory_item', 'variant'):
         key = (stock.inventory_item_id, stock.variant_id)
         meta = qoh_meta.get(key, {})
-        Q = meta.get('Q', 0)
+        opening_qty_imported = meta.get('opening_qty_imported', 0)
         sold = meta.get('sold', 0)
         ful = meta.get('fulfilled_layby', 0)
         cr = meta.get('credit_lines', 0)
-        qoh_calc = Q - sold - ful - cr
+        qoh_calc = opening_qty_imported - sold - ful - cr
         rows.append({
             'product_code': stock.inventory_item.product_code,
             'name': stock.inventory_item.name[:80],
             'variant_size': (stock.variant.attribute_string if stock.variant else ''),
             'shop_code': stock.shop.code,
-            'Q': Q, 'sold': sold,
+            'opening_qty_imported': opening_qty_imported,
+            'sold': sold,
             'fulfilled_layby': ful, 'credit_lines': cr,
             'qoh_calc': qoh_calc,
             'shopstock_actual': stock.quantity,
@@ -235,7 +299,7 @@ def write_shopstock(out: Path, qoh_meta: dict) -> int:
     return _write_csv(
         out / 'shopstock_after_import.csv',
         ['product_code', 'name', 'variant_size', 'shop_code',
-         'Q', 'sold', 'fulfilled_layby', 'credit_lines',
+         'opening_qty_imported', 'sold', 'fulfilled_layby', 'credit_lines',
          'qoh_calc', 'shopstock_actual', 'delta'],
         rows,
     )

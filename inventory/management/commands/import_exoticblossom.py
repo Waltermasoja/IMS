@@ -263,6 +263,11 @@ class Command(BaseCommand):
         audit.write_opening_ar_journal(out_dir, ctx.opening_ar_journal)
         audit.write_historical_archive_summary(out_dir, ctx.historical_counter)
 
+        # Plan A polish: explicit stock-confidence + pricing + column-drift audits.
+        audit.write_stock_opening_audit(out_dir, ctx.stock_opening_audit)
+        audit.write_pricing_sanity(out_dir, ctx.pricing_sanity)
+        audit.write_column_drift(out_dir, ctx.column_drift)
+
         # Decimal counts aren't JSON-serialisable in audit's text writer; cast.
         summary = {
             'workbook': os.path.basename(ctx.workbook_path),
@@ -272,5 +277,19 @@ class Command(BaseCommand):
             'commit': commit,
             'counts': {k: str(v) for k, v in ctx.counts.items()},
             'errors': ctx.errors,
+            'stock_confidence': self._stock_confidence_block(ctx),
         }
         audit.write_summary_text(out_dir, summary)
+
+    def _stock_confidence_block(self, ctx: RunContext) -> dict:
+        """Aggregate stock-tier counts for the operator summary."""
+        from collections import Counter
+        tier_counts = Counter(r['tier'] for r in ctx.stock_opening_audit)
+        conf_counts = Counter(r['confidence'] for r in ctx.stock_opening_audit)
+        return {
+            'tiers': dict(tier_counts),
+            'confidences': dict(conf_counts),
+            'total_variants_estimated': len(ctx.stock_opening_audit),
+            'pricing_flags': len(ctx.pricing_sanity),
+            'column_drift_rows': len(ctx.column_drift),
+        }

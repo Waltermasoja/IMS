@@ -519,11 +519,11 @@ def run(ctx: RunContext) -> None:
     _var_cache: dict[int, ProductVariant | None] = {}
 
     for (inv_id, var_id), slot in ctx.qoh_meta.items():
-        Q = slot['Q']
+        opening_qty_imported = slot['opening_qty_imported']
         sold = slot['sold']
         ful = slot['fulfilled_layby']
         cr = slot['credit_lines']
-        qoh_calc = Q - sold - ful - cr
+        qoh_calc = opening_qty_imported - sold - ful - cr
         if qoh_calc >= 0:
             continue
 
@@ -545,7 +545,7 @@ def run(ctx: RunContext) -> None:
             'name': cached_inv.name,
             'variant_size': cached_var.attribute_string if cached_var else '',
             'shop_code': ctx.shop.code,
-            'Q': Q,
+            'opening_qty_imported': opening_qty_imported,
             'sold': sold,
             'fulfilled_layby': ful,
             'credit_lines': cr,

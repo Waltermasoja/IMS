@@ -144,6 +144,64 @@ def _derive_qty(pur_price, total_pur_price) -> int | None:
     return int((total_pur_price / pur_price).quantize(Decimal('1')))
 
 
+# Expected per-column types for the category sheets. Used by
+# validate_product_sheet_columns() to emit column_drift.csv.
+_PRODUCT_SHEET_SCHEMA = {
+    # column_index: (column_name, allowed types)
+    1:  ('SHOP',                 (str, type(None))),
+    2:  ('LABEL',                (str, type(None))),
+    3:  ('Q',                    (int, float, type(None))),
+    4:  ('size',                 (str, int, float, type(None))),
+    5:  ('Item',                 (str, type(None))),
+    7:  ('pur price',            (int, float, type(None))),
+    8:  ('total purchase price', (int, float, type(None))),
+    10: ('Indirect Cost / unit', (int, float, type(None))),
+    11: ('Total Unit Cost',      (int, float, type(None))),
+    14: ('Actual Price',         (int, float, type(None))),
+    15: ('SALE',                 (int, float, type(None))),
+    16: ('S/T JAN \'25',         (int, float, type(None))),
+    17: ('s/take jan2026',       (int, float, type(None))),
+}
+
+
+def validate_product_sheet_columns(workbook_path: str) -> list[dict]:
+    """Return rows whose cell types don't match the expected column schema.
+
+    One drift row per offending cell. Helps catch shifted columns (e.g. a row
+    where the description landed in the size column because someone inserted
+    a column mid-sheet).
+    """
+    drifts: list[dict] = []
+    wb = _open(workbook_path)
+    for sheet_name in _PRODUCT_SHEETS:
+        if sheet_name not in wb.sheetnames:
+            continue
+        ws = wb[sheet_name]
+        for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            # Skip rows that are entirely blank or look like section dividers.
+            if not row or all(c is None for c in row[:18]):
+                continue
+            desc = _clean_str(row[5]) if len(row) > 5 else ''
+            if not desc or _is_section_header(desc):
+                continue
+            for idx, (col_name, allowed) in _PRODUCT_SHEET_SCHEMA.items():
+                if idx >= len(row):
+                    continue
+                val = row[idx]
+                if not isinstance(val, allowed):
+                    drifts.append({
+                        'sheet': sheet_name,
+                        'row': i,
+                        'column_index': idx,
+                        'column_name': col_name,
+                        'expected_type': '|'.join(t.__name__ for t in allowed),
+                        'actual_value': repr(val)[:60],
+                        'actual_type': type(val).__name__,
+                    })
+    wb.close()
+    return drifts
+
+
 def load_product_sheet(workbook_path: str, sheet_name: str) -> list[dict]:
     """Return normalised product rows from one category sheet."""
     rows = []
@@ -165,17 +223,16 @@ def load_product_sheet(workbook_path: str, sheet_name: str) -> list[dict]:
 
         pur_price = _to_decimal(row[7]) if len(row) > 7 else None
         total_pur_price = _to_decimal(row[8]) if len(row) > 8 else None
-        # Per user decision: each row in the category sheets represents ONE
-        # physical item, so opening stock = number of rows. total_pur_price /
-        # pur_price gives the LOT total (same value repeated across rows) — we
-        # keep it on the row dict so audit reports can sanity-check, but it's
-        # not used as quantity.
-        quantity = 1
         # Skip rows that look like memos (no price, no description). Already
         # filtered above by description check; the price check is a tighter
         # guard against label/header rows.
         if pur_price is None and total_pur_price is None:
             continue
+
+        # Default opening-quantity per row is 1 (one physical item per row).
+        # stock_signals.derive_group_quantities() may override this per
+        # (label, description, size) using the lot-once or stock-take signals.
+        quantity = 1
 
         rows.append({
             'sheet':           sheet_name,
@@ -186,11 +243,15 @@ def load_product_sheet(workbook_path: str, sheet_name: str) -> list[dict]:
             'size':            _clean_str(row[4]),
             'description':     description,
             'purchase_price':  pur_price,
-            'indirect_cost':   _to_decimal(row[10]) if len(row) > 10 else None,
-            'total_unit_cost': _to_decimal(row[11]) if len(row) > 11 else None,
-            'selling_price':   _to_decimal(row[14]) if len(row) > 14 else None,
+            'total_pur_price': total_pur_price,                                   # col 8 — lot total (repeated)
+            'indirect_cost':   _to_decimal(row[10]) if len(row) > 10 else None,   # col 10
+            'total_unit_cost': _to_decimal(row[11]) if len(row) > 11 else None,   # col 11 — landed cost
+            'selling_price':   _to_decimal(row[14]) if len(row) > 14 else None,   # col 14 — Actual Price
+            'sale_realized':   _to_decimal(row[15]) if len(row) > 15 else None,   # col 15 — SALE (realised price)
+            'stock_take_2025': _clean_int(row[16])  if len(row) > 16 else None,   # col 16 — S/T JAN '25
+            'stock_take_2026': _clean_int(row[17])  if len(row) > 17 else None,   # col 17 — s/take jan2026
             'purchase_date':   None,           # date column is sheet-dependent / unreliable
-            'status':          _clean_str(row[17]) if len(row) > 17 else '',
+            'status':          '',
             'row_index':       i,
         })
 
