@@ -621,17 +621,23 @@ def _is_month_header(text: str) -> bool:
     return any(m in lower for m in _MONTH_NAMES) and len(text) < 40
 
 
-def _parse_month_header(text: str) -> date | None:
-    """Extract a first-of-month date from headers like 'JANUARY 2026..'."""
+def _parse_month_header(text: str, default_year: int | None = None) -> date | None:
+    """Extract a first-of-month date from headers like 'JANUARY 2026..'.
+
+    If the header omits the year (e.g. bare 'FEBRUARY '), fall back to
+    `default_year`. Callers should track the most-recent year-bearing header
+    and pass it in so successive bare month headers inherit the right year.
+    """
     lower = text.lower()
     month_no = next((idx for name, idx in _MONTH_INDEX.items() if name in lower), None)
     if month_no is None:
         return None
-    # Find a 4-digit year in the same string.
     year_match = re.search(r'\b(20\d{2})\b', text)
-    if not year_match:
-        return None
-    return date(int(year_match.group(1)), month_no, 1)
+    if year_match:
+        return date(int(year_match.group(1)), month_no, 1)
+    if default_year is not None:
+        return date(default_year, month_no, 1)
+    return None
 
 
 def load_cashbook(workbook_path: str) -> list[dict]:
@@ -645,6 +651,7 @@ def load_cashbook(workbook_path: str) -> list[dict]:
 
     ws = wb[sheet_name]
     current_date: date | None = None
+    current_year: int | None = None
 
     # Cashbook descriptions live in col[9]; payment amounts in col[10] (cash)
     # and col[11] (personal). Receipts side (cols 2-6) is empty in this workbook.
@@ -662,10 +669,14 @@ def load_cashbook(workbook_path: str) -> list[dict]:
             continue
 
         # Month-header rows update the running date and are NOT data rows.
+        # Bare month names ("FEBRUARY ", "MARCH") inherit the year from the
+        # most-recent year-bearing header so successive months don't all
+        # collapse onto the first month's date.
         if _is_month_header(description):
-            parsed = _parse_month_header(description)
+            parsed = _parse_month_header(description, default_year=current_year)
             if parsed is not None:
                 current_date = parsed
+                current_year = parsed.year
             continue
 
         if description.lower() in ('total', 'totals', 'balance', 'net',
