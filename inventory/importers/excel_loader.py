@@ -363,11 +363,15 @@ def load_daily_sales(workbook_path: str) -> list[dict]:
     ws = wb[sheet_name]
     current_date: date | None = None
 
+    from inventory.importers.patches import DAILY_SALES_DATE_OVERRIDES
+
     for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         if len(row) < 5:
             continue
 
         cell_date = _to_date(row[0])
+        if i in DAILY_SALES_DATE_OVERRIDES:
+            cell_date = DAILY_SALES_DATE_OVERRIDES[i]
         if cell_date is not None:
             current_date = cell_date
 
@@ -473,8 +477,13 @@ def load_credit_clients(workbook_path: str) -> list[dict]:
         if current_customer is None:
             continue
 
+        from inventory.importers.patches import CREDIT_CLIENTS_DATE_OVERRIDES
+
+        row_date = _to_date(row[2]) if len(row) > 2 else None
+        if i in CREDIT_CLIENTS_DATE_OVERRIDES:
+            row_date = CREDIT_CLIENTS_DATE_OVERRIDES[i]
         inv_row = {
-            'date':    _to_date(row[2])    if len(row) > 2 else None,
+            'date':    row_date,
             'inv_no':  _clean_str(row[3])  if len(row) > 3 else '',
             'amount':  _to_decimal(row[4]) if len(row) > 4 else None,
             'paid':    _to_decimal(row[5]) if len(row) > 5 else None,
