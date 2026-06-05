@@ -22,6 +22,9 @@ old_db.sqlite3
 /staticfiles/
 /media/
 
+# Local DB snapshots produced by dumpdata (large, regeneratable)
+/data/dumps/
+
 # Spurious files
 nul
 

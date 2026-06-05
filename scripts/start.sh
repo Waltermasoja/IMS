@@ -9,6 +9,11 @@ python manage.py migrate --noinput
 echo "Initializing GL accounts (idempotent)..."
 python manage.py init_gl_accounts || true
 
+echo "Seeding shops, importer user, and product attributes (idempotent)..."
+python manage.py create_initial_shops || true
+python manage.py seed_imported_history_user || true
+python manage.py seed_attributes || true
+
 echo "Collecting static files..."
 python manage.py collectstatic --noinput
 
