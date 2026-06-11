@@ -2198,3 +2198,174 @@ def export_sales_tickets_xlsx(request):
     response['Content-Disposition'] = f'attachment; filename="sales_tickets_{start_date}_{end_date}.xlsx"'
     wb.save(response)
     return response
+
+
+@login_required
+def export_ar_aging_xlsx(request):
+    """Excel export of AR aging — one row per outstanding invoice with bracket."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from datetime import date as date_cls
+
+    as_of_str = request.GET.get('as_of')
+    today = timezone.localdate()
+    try:
+        as_of = date_cls.fromisoformat(as_of_str) if as_of_str else today
+    except ValueError:
+        as_of = today
+
+    invoices = (ARInvoice.objects.exclude(status='PAID')
+                .select_related('customer')
+                .filter(invoice_date__lte=as_of)
+                .order_by('customer__name', 'invoice_date'))
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'AR Aging'
+    ws.append(['Customer', 'Invoice #', 'Invoice Date', 'Due Date', 'Total',
+               'Paid', 'Outstanding', 'Days', 'Bracket'])
+    for c in ws[1]:
+        c.font = Font(bold=True)
+
+    totals = {'0-30': Decimal('0'), '31-60': Decimal('0'),
+              '61-90': Decimal('0'), '90+': Decimal('0')}
+    for inv in invoices:
+        outstanding = inv.outstanding_amount
+        if outstanding <= 0:
+            continue
+        days = (as_of - inv.invoice_date).days
+        bracket = '0-30' if days <= 30 else '31-60' if days <= 60 else '61-90' if days <= 90 else '90+'
+        totals[bracket] += outstanding
+        ws.append([
+            inv.customer.name if inv.customer else '',
+            inv.invoice_number,
+            inv.invoice_date.isoformat(),
+            inv.due_date.isoformat() if inv.due_date else '',
+            float(inv.total_amount or 0),
+            float(inv.amount_paid or 0),
+            float(outstanding),
+            days,
+            bracket,
+        ])
+
+    ws.append([])
+    for bracket, amount in totals.items():
+        ws.append(['', '', '', '', '', f'{bracket} total', float(amount), '', ''])
+    ws.append(['', '', '', '', '', 'TOTAL', float(sum(totals.values())), '', ''])
+    for c in ws[ws.max_row]:
+        c.font = Font(bold=True)
+
+    for i, w in enumerate([28, 18, 12, 12, 12, 12, 14, 8, 10], 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="ar_aging_{as_of}.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def export_layby_register_xlsx(request):
+    """Excel export of layby plans with balances. ?include_closed=1 widens."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+
+    qs = LaybyPlan.objects.select_related('customer', 'shop').order_by('-created_date')
+    if not request.GET.get('include_closed'):
+        qs = qs.filter(status='ACTIVE')
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Layby Register'
+    ws.append(['Customer', 'Shop', 'Created', 'Due Date', 'Status',
+               'Total Price', 'Deposit', 'Paid', 'Balance'])
+    for c in ws[1]:
+        c.font = Font(bold=True)
+
+    total_balance = Decimal('0')
+    for plan in qs:
+        balance = (plan.total_price or 0) - (plan.amount_paid or 0)
+        total_balance += balance
+        ws.append([
+            plan.customer.name if plan.customer else '',
+            plan.shop.code if plan.shop else '',
+            plan.created_date.date().isoformat(),
+            plan.due_date.isoformat() if plan.due_date else '',
+            plan.status,
+            float(plan.total_price or 0),
+            float(plan.deposit_amount or 0),
+            float(plan.amount_paid or 0),
+            float(balance),
+        ])
+
+    ws.append(['', '', '', '', 'TOTAL', '', '', '', float(total_balance)])
+    for c in ws[ws.max_row]:
+        c.font = Font(bold=True)
+
+    for i, w in enumerate([28, 8, 12, 12, 12, 12, 10, 10, 12], 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename="layby_register.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def export_expense_ledger_xlsx(request):
+    """Excel export of expenses with GL account, for a period + optional shop."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from datetime import date as date_cls
+
+    start_str = request.GET.get('start_date')
+    end_str = request.GET.get('end_date')
+    shop_id = request.GET.get('shop_id') or None
+    today = timezone.localdate()
+    try:
+        start_date = date_cls.fromisoformat(start_str) if start_str else today.replace(day=1)
+        end_date = date_cls.fromisoformat(end_str) if end_str else today
+    except ValueError:
+        start_date, end_date = today.replace(day=1), today
+
+    qs = (Expense.objects.select_related('gl_account', 'shop', 'recorded_by')
+          .filter(date__gte=start_date, date__lte=end_date)
+          .order_by('date', 'id'))
+    if shop_id:
+        qs = qs.filter(shop_id=shop_id)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Expense Ledger'
+    ws.append(['Date', 'Shop', 'Category', 'Description', 'GL Code', 'GL Account',
+               'Payment Method', 'Amount', 'VAT', 'Recorded By'])
+    for c in ws[1]:
+        c.font = Font(bold=True)
+
+    total = Decimal('0')
+    for e in qs:
+        total += e.amount or 0
+        ws.append([
+            e.date.isoformat(),
+            e.shop.code if e.shop else '',
+            e.category,
+            e.description or '',
+            e.gl_account.code if e.gl_account else '',
+            e.gl_account.name if e.gl_account else '',
+            e.payment_method,
+            float(e.amount or 0),
+            float(e.vat_amount or 0),
+            e.recorded_by.username if e.recorded_by else '',
+        ])
+
+    ws.append(['', '', '', '', '', '', 'TOTAL', float(total), '', ''])
+    for c in ws[ws.max_row]:
+        c.font = Font(bold=True)
+
+    for i, w in enumerate([12, 8, 14, 40, 10, 25, 14, 12, 10, 16], 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="expense_ledger_{start_date}_{end_date}.xlsx"'
+    wb.save(response)
+    return response

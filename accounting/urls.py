@@ -65,4 +65,7 @@ urlpatterns = [
     path('exports/gl-detail.xlsx', views.export_gl_detail_xlsx, name='export_gl_detail_xlsx'),
     path('exports/trial-balance.xlsx', views.export_trial_balance_xlsx, name='export_trial_balance_xlsx'),
     path('exports/sales-tickets.xlsx', views.export_sales_tickets_xlsx, name='export_sales_tickets_xlsx'),
+    path('exports/ar-aging.xlsx', views.export_ar_aging_xlsx, name='export_ar_aging_xlsx'),
+    path('exports/layby-register.xlsx', views.export_layby_register_xlsx, name='export_layby_register_xlsx'),
+    path('exports/expense-ledger.xlsx', views.export_expense_ledger_xlsx, name='export_expense_ledger_xlsx'),
 ]
