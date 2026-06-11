@@ -26,13 +26,12 @@ if [ -n "$DJANGO_SUPERUSER_USERNAME" ] && [ -n "$DJANGO_SUPERUSER_PASSWORD" ]; t
 fi
 
 echo "Starting Gunicorn server..."
-# --timeout 300: inventory_list and similar pages do N+1 lookups for has_variants/
-# total_stock/variant_count across ~740 products; under prod latency a single
-# request can take ~10 minutes. Bumping the worker timeout prevents the 30s-kill
-# loop while the views are properly prefetched/annotated.
+# --timeout 120: safety margin over the default 30s for report pages that
+# aggregate over the full dataset; list views are annotated + paginated so
+# normal pages render in a few queries.
 # --workers 2: one stuck worker won't block all traffic.
 exec gunicorn inventorySystem.wsgi:application \
   --bind 0.0.0.0:${PORT:-8000} \
-  --timeout 300 \
+  --timeout 120 \
   --workers 2
 

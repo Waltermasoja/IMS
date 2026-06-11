@@ -41,15 +41,16 @@
         </div>
     </div>
 
-    <!-- Filters & Search -->
+    <!-- Filters & Search (server-side: list is paginated) -->
     <div class="bg-white rounded-2xl p-6 shadow-sm">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {% if active_filter %}<input type="hidden" name="filter" value="{{ active_filter }}">{% endif %}
             <!-- Search -->
             <div class="md:col-span-2">
                 <div class="relative">
-                    <input x-model="searchQuery" 
-                           type="text" 
-                           placeholder="Search by name, label, or description..." 
+                    <input name="q" value="{{ search_query }}"
+                           type="text"
+                           placeholder="Search by name, label, code, or description..."
                            class="w-full px-4 py-3 pl-11 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                     <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
                 </div>
@@ -57,15 +58,23 @@
 
             <!-- Category Filter -->
             <div>
-                <select x-model="filterCategory" 
+                <select name="category" onchange="this.form.submit()"
                         class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">All Categories</option>
                     {% for category in categories %}
-                    <option value="{{ category.id }}">{{ category.name }}</option>
+                    <option value="{{ category.id }}" {% if selected_category == category.id|stringformat:"s" %}selected{% endif %}>{{ category.name }}</option>
                     {% endfor %}
                 </select>
             </div>
-        </div>
+
+            <!-- Submit -->
+            <div>
+                <button type="submit"
+                        class="w-full px-4 py-3 bg-gray-900 text-white rounded-xl hover:bg-gray-700 transition-colors font-medium">
+                    <i class="fas fa-search mr-2"></i>Search
+                </button>
+            </div>
+        </form>
     </div>
 
     <!-- Inventory Table -->
@@ -74,7 +83,7 @@
         <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200">
             <div class="flex items-center space-x-4">
                 <span class="text-sm text-gray-600">
-                    {{ inventories|length }} products
+                    {{ page_obj.paginator.count }} products
                 </span>
             </div>
         </div>
@@ -123,7 +132,7 @@
                                     <p class="font-semibold text-gray-900">{{ inventory.name }}</p>
                                     {% if inventory.has_variants %}
                                     <span class="px-2 py-0.5 bg-blue-100 text-blue-600 text-xs font-medium rounded-full">
-                                        <i class="fas fa-layer-group mr-1"></i>{{ inventory.variant_count }} variants
+                                        <i class="fas fa-layer-group mr-1"></i>{{ inventory.variant_count_anno }} variants
                                     </span>
                                     {% endif %}
                                 </div>
@@ -147,8 +156,8 @@
                         </td>
                         <td class="px-6 py-4">
                             {% if inventory.has_variants %}
-                            <!-- Show total stock for variant products -->
-                            {% with total=inventory.total_stock %}
+                            <!-- Show total stock for variant products (annotated in view, no per-row query) -->
+                            {% with total=inventory.variant_stock_anno %}
                             {% if total == 0 %}
                             <span class="px-3 py-1 bg-red-50 text-red-600 text-xs font-semibold rounded-full">Out of Stock</span>
                             {% elif total <= 10 %}
@@ -242,13 +251,13 @@
                     <a href="{% url 'per_product' inventory.id %}" class="flex-1 min-w-0 block">
                         <div class="flex items-center gap-2 flex-wrap">
                             <p class="font-semibold text-gray-900 truncate">{{ inventory.name }}</p>
-                            {% if inventory.has_variants %}{% include 'ui/badge.html' with label=inventory.variant_count|stringformat:"s"|add:" variants" color="primary" size="sm" icon="fas fa-layer-group" %}{% endif %}
+                            {% if inventory.has_variants %}{% include 'ui/badge.html' with label=inventory.variant_count_anno|stringformat:"s"|add:" variants" color="primary" size="sm" icon="fas fa-layer-group" %}{% endif %}
                         </div>
                         <p class="text-xs text-primary-600 font-mono truncate">{{ inventory.product_code }}</p>
                     </a>
                     <!-- Stock + price stack -->
                     <div class="flex-shrink-0 text-right">
-                        {% with qty=inventory.total_stock %}
+                        {% with qty=inventory.variant_stock_anno %}
                         {% if inventory.has_variants %}
                             {% if qty == 0 %}<span class="px-2 py-0.5 bg-danger-50 text-danger-600 text-xs font-semibold rounded-pill">Out</span>
                             {% elif qty <= 10 %}<span class="px-2 py-0.5 bg-warning-50 text-warning-700 text-xs font-semibold rounded-pill">Low {{ qty }}</span>
@@ -300,6 +309,8 @@
             {% include 'ui/empty_state.html' with icon="fas fa-box-open" title="No products found" subtitle="Get started by adding your first product." cta_label="Add Product" cta_href=add_inv_url cta_icon="fas fa-plus" %}
         </div>
         {% endif %}
+
+        {% include 'ui/pagination.html' with page_obj=page_obj querystring=querystring %}
     </div>
 </div>
 

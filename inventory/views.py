@@ -44,7 +44,7 @@ from django.db.models import Q
 from django.utils import timezone
 from django.core.cache import cache
 from django.views.decorators.http import condition
-from django.db.models import Sum, Count, F, ExpressionWrapper, DecimalField, Q
+from django.db.models import Sum, Count, F, ExpressionWrapper, DecimalField, Q, OuterRef, Subquery, IntegerField
 from django.db.models.functions import TruncMonth, TruncDay, Coalesce, ExtractMonth
 from django.core.paginator import Paginator
 from django.utils import timezone
@@ -97,14 +97,42 @@ def _pos_receipt_number(prefix: str) -> str:
 
 @login_required
 def inventory_list(request):
-    inventories = Inventory.objects.all()
+    # Variant totals as subqueries: a plain Sum('variants__quantity_in_stock')
+    # would be multiplied by the sales_records join below, and the template's
+    # variant_count/total_stock properties fire one query per row otherwise.
+    variant_totals = (
+        ProductVariant.objects
+        .filter(product=OuterRef('pk'), is_active=True)
+        .order_by()
+        .values('product')
+        .annotate(cnt=Count('pk'), stock=Sum('quantity_in_stock'))
+    )
+
+    inventories = (
+        Inventory.objects.all()
+        .select_related('category')
+        .annotate(
+            total_sales_amount=Sum('sales_records__total_amount'),
+            latest_sale_date=Max('sales_records__sale_date'),
+            variant_count_anno=Coalesce(
+                Subquery(variant_totals.values('cnt')[:1], output_field=IntegerField()), 0),
+            variant_stock_anno=Coalesce(
+                Subquery(variant_totals.values('stock')[:1], output_field=IntegerField()), 0),
+        )
+    )
     categories = Inventory_category.objects.all()
 
-    # Renamed annotations to avoid conflicts with model properties
-    inventories = inventories.annotate(
-        total_sales_amount=Sum('sales_records__total_amount'),
-        latest_sale_date=Max('sales_records__sale_date'),
-    )
+    # Server-side search + category filter — the list is paginated, so
+    # client-side (Alpine) filtering can no longer see all rows.
+    query = request.GET.get('q', '').strip()
+    if query:
+        inventories = inventories.filter(
+            Q(name__icontains=query) | Q(label__icontains=query)
+            | Q(description__icontains=query) | Q(product_code__icontains=query)
+        )
+    category_id = request.GET.get('category', '').strip()
+    if category_id:
+        inventories = inventories.filter(category_id=category_id)
 
     # ?filter= drills in from dashboard stat cards into the same list view.
     filter_ = request.GET.get('filter')
@@ -115,10 +143,21 @@ def inventory_list(request):
     elif filter_ == 'out_of_stock':
         inventories = inventories.filter(quantity_in_Stock=0)
 
+    paginator = Paginator(inventories.order_by('name', 'pk'), 50)
+    page_obj = paginator.get_page(request.GET.get('page'))
+
+    # Preserve filters across page links.
+    params = request.GET.copy()
+    params.pop('page', None)
+
     context = {
-        'inventories': inventories,
+        'inventories': page_obj.object_list,
+        'page_obj': page_obj,
+        'querystring': params.urlencode(),
         'categories': categories,
         'active_filter': filter_,
+        'search_query': query,
+        'selected_category': category_id,
     }
     return render(request, 'inventory/inventory_list.html', context)
 
@@ -1036,28 +1075,44 @@ def checkout_ticket(request):
 @login_required
 def sales_summary(request):
     form = DateRangeForm(request.GET or None)
-    sales = Sales.objects.all().order_by('-sale_date')
+    sales = (Sales.objects.all()
+             .select_related('inventory_item', 'customer')
+             .order_by('-sale_date'))
 
     # If user is a sales person, show only their sales
     is_my_sales = False
     if hasattr(request.user, 'profile') and request.user.profile.is_sales_person:
         sales = sales.filter(recorded_by=request.user)
         is_my_sales = True
-    
+
     if form.is_valid():
         start_date = form.cleaned_data['start_date']
         end_date = form.cleaned_data['end_date']
         if start_date and end_date:
             sales = sales.filter(sale_date__date__range=[start_date, end_date])
 
-    # Calculate totals
-    total_amount = sum(sale.total_amount for sale in sales)
-    total_quantity_sold = sum(sale.quantity_sold for sale in sales)
-    total_returns = sum(sale.quantity_returned for sale in sales)
+    # Totals over the FULL filtered set in one aggregate query
+    # (the table itself is paginated below).
+    totals = sales.aggregate(
+        total_amount=Sum('total_amount'),
+        total_quantity_sold=Sum('quantity_sold'),
+        total_returns=Sum('quantity_returned'),
+    )
+    total_amount = totals['total_amount'] or 0
+    total_quantity_sold = totals['total_quantity_sold'] or 0
+    total_returns = totals['total_returns'] or 0
     net_quantity = total_quantity_sold - total_returns
 
+    paginator = Paginator(sales, 50)
+    page_obj = paginator.get_page(request.GET.get('page'))
+
+    params = request.GET.copy()
+    params.pop('page', None)
+
     context = {
-        'sales': sales,
+        'sales': page_obj.object_list,
+        'page_obj': page_obj,
+        'querystring': params.urlencode(),
         'form': form,
         'total_amount': total_amount,
         'total_quantity_sold': total_quantity_sold,
@@ -1065,7 +1120,7 @@ def sales_summary(request):
         'net_quantity': net_quantity,
         'is_my_sales': is_my_sales,
     }
-    
+
     return render(request, 'inventory/sales_summary.html', context)
 
 
@@ -4008,7 +4063,11 @@ def product_variants_list(request, pk):
         messages.error(request, "This product doesn't have variants enabled.")
         return redirect('per_product', pk=pk)
 
-    variants = product.variants.all().prefetch_related('attribute_values')
+    # select_related('product'): effective_*_price properties fall back to
+    # variant.product fields, which would otherwise lazy-load once per variant.
+    variants = (product.variants.all()
+                .select_related('product')
+                .prefetch_related('attribute_values__attribute_type'))
 
     context = {
         'product': product,

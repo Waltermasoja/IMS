@@ -1,0 +1,38 @@
+{% comment %}
+Reusable pagination bar.
+Usage: {% include 'ui/pagination.html' with page_obj=page_obj querystring=querystring %}
+- page_obj: a Django Paginator page
+- querystring: urlencoded GET params WITHOUT 'page' (so filters survive paging); optional
+{% endcomment %}
+{% if page_obj.paginator.num_pages > 1 %}
+<div class="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-gray-200">
+    <p class="text-sm text-gray-600">
+        Showing {{ page_obj.start_index }}&ndash;{{ page_obj.end_index }} of {{ page_obj.paginator.count }}
+    </p>
+    <div class="flex items-center gap-1">
+        {% if page_obj.has_previous %}
+        <a href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page=1"
+           class="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg" title="First page">
+            <i class="fas fa-angle-double-left"></i>
+        </a>
+        <a href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page_obj.previous_page_number }}"
+           class="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
+            <i class="fas fa-angle-left mr-1"></i>Prev
+        </a>
+        {% endif %}
+        <span class="px-3 py-2 text-sm font-medium text-gray-900">
+            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+        </span>
+        {% if page_obj.has_next %}
+        <a href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page_obj.next_page_number }}"
+           class="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
+            Next<i class="fas fa-angle-right ml-1"></i>
+        </a>
+        <a href="?{% if querystring %}{{ querystring }}&amp;{% endif %}page={{ page_obj.paginator.num_pages }}"
+           class="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg" title="Last page">
+            <i class="fas fa-angle-double-right"></i>
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
